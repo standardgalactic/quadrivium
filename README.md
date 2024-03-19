@@ -1,2 +1,3 @@
-# quadratrivium
+# Quadrivium
+
 Enteric Reservoir of Knowledge
