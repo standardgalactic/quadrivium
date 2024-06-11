@@ -1,0 +1,197 @@
+In the previous tutorial, episode 910, I hinted that rxinfer.jl could be used to handle real-time streaming data.
+In this tutorial, we're going to learn how to tap into an infinite stream of coin tosses
+and how to update our posterior distribution after each observation in real-time.
+How is this possible?
+Well, let's find out.
+Welcome to Darko.jl, where I explore the vast Julia wilderness and turn my discoveries into wholesome Julia tutorials.
+For this tutorial, I'm assuming that you've already watched the previous tutorial, episode 910, which introduces the rxinfer.jl package.
+Much of the code for this tutorial comes from a 2021 video uploaded onto the BiasLab YouTube channel.
+Their video appears to be a recording of an internal BiasLab video conference, but their video is available to the public.
+In their video, the lead developer for the rxinfer.jl package, Dimitri Bagayov, is leading a seminar on how to use the reactivemp.jl package.
+Their video is a little outdated since their video appears to have been recorded before rxinfer.jl was available.
+But much of the code in their video still works, so I've taken some of their code and modified it for the purpose of making my tutorial.
+I provided a link to the BiasLab video in the description below.
+For this tutorial, we're going to make a streaming version of the coin tossing simulation from episode 910.
+But in this tutorial, we're going to use rxinfer.jl to update the posterior after each coin toss.
+In the interest of time, I've prepared all of the Julia code in advance.
+You can find a copy of my code in my GitHub repository. There's a link to it in the description below.
+If you'd like to follow along, save a copy of this file in a tutorial folder on your computer.
+After saving the file, in VS Code, launch the Julia REPL by using ALT J then ALT O.
+Change the present working directory to your tutorial directory.
+Enter the package manager by using the closing square bracket.
+Activate the tutorial directory.
+Add the following packages, rxinfer and statsplots.
+Exit the package manager by hitting Backspace.
+For this tutorial, I'm going to dock my REPL next to my editor.
+Later in this tutorial, we're going to use the REPL to view some streaming data.
+In the editor, execute the code to load the packages.
+For this tutorial, we'll be using two Julia standard libraries, printf and random.
+We need printf for some outputting formats in the REPL.
+And we need random for the random seed.
+Using a random seed is optional.
+Okay, now that we have our packages loaded, let's generate some random streaming data.
+Like in the previous tutorial, we're going to simulate a coin tossing experiment,
+where we as the observer don't know if the coin is a fair coin or a biased coin.
+Like last time, the true success rate for this coin is 75%,
+meaning that as the number of coin tosses approaches infinity, the coin will land on heads 75% of the time.
+We're also going to assume that each coin toss is independent,
+and that the distribution of each coin toss is a Bernoulli distribution.
+True means heads, and false means tails.
+In the previous tutorial, we simulated 10 random coin tosses,
+and then we use that static data to feed our Bayesian model.
+In this tutorial, we're going to set up an infinite stream of coin tosses.
+And then we're going to use rxinferred.jl to update the posterior after each coin toss.
+There's a lot going on in this code, so let's break it down.
+The timer function is from rocket.jl.
+The timer function returns something called an observable.
+In reactive programming, an observable represents a collection of future messages,
+which can be data and or events.
+By default, the timer observable emits an infinite sequence of values.
+The first argument is the initial delay before emitting the first value.
+And the second argument is the minimum period of time between emissions of all subsequent values.
+The unit of measure is milliseconds.
+So an argument value of 1000 is 1 second.
+And an argument value of 500 is half a second.
+By default, the timer emits a sequence of ascending integers, starting with 0.
+But we can use the pipe operator along with the map function from JuliaBase
+to change those values to some other values.
+In this example, we're going to emit a sequence of booleans,
+randomly sampled from the Bernoulli distribution,
+which we can do by using this anonymous function.
+In order to see the values, we can use another pipe operator,
+followed by the tap function.
+The tap function is also from rocket.jl.
+The tap function performs a quote unquote side effect for every emission.
+In this example, we're using the tap function along with this anonymous function
+to print the boolean in the REPL.
+The add printf macro is from Julia's printf standard library.
+As a convenience, Julia provides access to the printf functions from C and C++,
+which offers a lot of different formatting options.
+This cryptic looking syntax means that we want to allocate five spaces
+when displaying the boolean value.
+Finally, we need to define a so-called actor.
+When using rocket.jl, an actor is an object that knows how to react
+on incoming messages delivered by the observable.
+In this example, y is our observation, and data is a new observation.
+So this actor will update our observation whenever it witnesses a new coin toss
+by using this anonymous function along with the updateBank function from reactivemp.jl.
+The updateBank function updates the data variable in the first argument
+with the value of the new observation in the second argument.
+This concludes the code for the data section.
+So, where's the data?
+Well, our data hasn't started streaming yet.
+Before we can start streaming our data, we need to define our Bayesian model.
+This model definition is similar to the model definition that we used in the last tutorial,
+but with some key differences.
+In the last tutorial, we used a prior belief of beta11.
+But here we're using data variables that are of type float64
+for the alpha parameter and the beta parameter for the beta distribution.
+That's because our prior belief will change with every new observation.
+So we need a model that can handle these updated values.
+The code for the likelihood is similar to the code that we used in the last tutorial.
+But in this model, there's no for loop.
+That's because this model is for a single coin toss,
+which is why we don't have the number of coin tosses as an argument in the function definition.
+Finally, we return the variables for the alpha parameter A, the beta parameter B,
+the success rate P, and the observation Y.
+In order to access these variables, we need to use the create underscore model function.
+The create underscore model function is from rxinfer.jl.
+The create underscore model function returns a tuple with two values.
+The first value is the factor graph of the model.
+The second value contains the variables returned from the modeled function definition.
+Now that we've defined our Bayesian model, we need to define a way to update this model in real time.
+The first thing we're going to do is to define some convenience functions to use later.
+This first convenience function defines how to display data in the REPL.
+The arguments M, M underscore A and M underscore B stand for marginal, marginal alpha, and marginal beta, respectively.
+Marginal refers to the marginal likelihood from Bayes' theorem.
+But for all practical purposes, we're really using the term marginal here to represent the updated posterior distribution after each observation.
+So marginal alpha is the updated alpha parameter, and marginal beta is the updated beta parameter.
+The first output displays the index number of the coin toss.
+The next output displays the mean value of the updated posterior.
+The next output displays the standard deviation of the updated posterior.
+The next output displays the value of the updated alpha parameter.
+And the last output displays the value of the updated beta parameter.
+The printf syntax %05i means display an integer using five spaces with zeros being used for empty spaces.
+The printf syntax %.3f means display a floating point number with three decimal places.
+The next convenience function will be used to save the updated posterior distributions in a vector of posterior distributions.
+This vector will be used to generate the animation of the posterior distributions over time.
+There's a lot going on in this code, so let's break it down.
+The argument p is the success rate for the coin,
+and the argument post underscore vector is the vector containing the posterior distributions over time.
+The buffer function is from rocket.jl.
+The buffer function captures the last incoming events.
+In order to access the values from the buffer, we need to use the subscribe bank function.
+The subscribe bank function is also from rocket.jl.
+The subscribe bank function attaches an actor to an observable.
+The get marginals function is from reactivemp.jl.
+The get marginals function calculates the updated posterior distribution.
+The take function is from rocket.jl.
+The take function takes the number of values specified in the arguments.
+The get values function is from rocket.jl.
+The get values function accesses the values in the buffer.
+The updated posterior distribution is stored in a member called data in the buffer,
+which we can access by using an index number followed by .data.
+So in summary, this code uses reactive programming to access the updated posterior distribution after each new observation.
+And then it pushes that updated posterior distribution into a vector.
+Finally, in order to be informed about any updates to the posterior distribution,
+we need to subscribe to these updates.
+In order to subscribe, we use the subscribe bank function again.
+Any time there's an update to the posterior, this code will pull the new alpha parameter value
+and the new beta parameter value by using the params function from the distributions.jl package.
+Then this code updates the parameter values in the prior distribution by using the update bank function.
+In order to see some information in the rebel, this code calls the display underscore toss convenience function that we defined earlier.
+And finally, this code pushes the updated posterior distribution into a vector containing a collection of posterior distributions after each observation.
+By calling the save underscore posterior convenience function that we defined earlier.
+So after all of that code, we are now ready for our streaming data.
+Before we can kick off our streaming data, we need to initialize a few variables.
+This code initializes an empty vector that will accept beta distributions that uses parameter values that are of type float64.
+And this code initializes the prior belief by using a beta one one distribution,
+which is the same initial prior belief that we used in the last tutorial.
+In order to kick off the data stream, we need to subscribe to it.
+Recall that we assigned the variable named data stream earlier to a timer that generates random coin tosses.
+And we assign the variable named actor to an object that will update our observation whenever it receives a message about a new coin toss.
+As soon as we execute this code, the data will begin streaming in the REPL.
+In this output, the first column is the coin toss.
+True means heads, and false means tails.
+The next column is the counter, which serves as the index number for each coin toss.
+The next column is the mean value for the posterior distribution that was updated after observing the coin toss in the first column of that row.
+The next column is the standard deviation value for the posterior distribution that was updated after observing the coin toss in the first column of that row.
+The next column is the alpha parameter value for the beta distribution, which is the updated posterior distribution.
+And the last column is the beta parameter for the beta distribution, which is the updated posterior distribution.
+I tried to stop the data stream when the number of coin tosses reached around 100.
+The way to stop the streaming data is by unsubscribing from it by using the unsubscribe bank function from racket.jl.
+As long as we're here, we should also unsubscribe from receiving any updates to the posterior.
+Even though nothing appears to happen, unsubscribing from the subscription will free up resources on our computer.
+Back in the REPL, we can scroll and see a history of the coin tosses and see the updated values for the posterior distribution that were calculated in real time.
+So as the number of coin tosses increases, the mean value approaches 75%, and the standard deviation decreases.
+After each head, the alpha parameter value increments by 1, and after each tail, the beta parameter value increments by 1.
+Although this data is interesting, it would be better if we could see the animation of how our belief about the success rate of this coin updated over time.
+This plotting recipe generates a plot for each posterior distribution that was calculated after each coin toss.
+The atAnimate macro is from the plots.jl package.
+In order to stitch the individual plots together into the animation, we use the GIF function from plots.jl.
+In this animation, we can see that after observing each coin toss, we updated our belief.
+Over time, the mean value of our posterior belief approaches the true success rate of 75%, and the standard deviation of our posterior belief gets smaller over time as we become more confident in our belief.
+Pretty cool, right?
+We covered a lot of code today, so let's break here and recap what we just saw.
+Today's demonstration was a proof of concept that shows that the rxinfer.jl package is capable of handling streaming data, and calculating updated posterior distributions in real time.
+With that said, there are some differences to keep in mind when writing code for streaming data, versus writing code for static data.
+When defining the Bayesian model for streaming data, be sure to define the prior distribution using data variables for the parameters, rather than using fixed values.
+That's because the model needs to be able to update the prior whenever there's a new observation.
+The model for streaming data is for a single observation, so there's no need to use a for loop when defining the likelihood.
+Also, when defining the model for streaming data, be sure to include a line to return the variables, so the variables can be accessed outside of the model.
+In order to access these variables, use the create underscore model function, which returns both a factor graph of the model, along with any variables from the model.
+Other than that, the other big difference is how to ingest streaming data.
+How this is done will vary depending on the situation.
+But conceptually, we need to subscribe to the streaming data, and we need to subscribe to any updates to the parameters resulting from each new observation.
+This is made possible thanks to reactive programming.
+In order to free up computer resources, we need to unsubscribe from any subscriptions.
+Everything else is optional.
+We may choose to view the data in the REPL, or we may choose to save some of the data for later use.
+If we save the data, we may choose to generate an animation or some other form of visualization.
+There are many possibilities for applying a Bayesian approach to streaming data, so I look forward to hearing about all of the clever ways that you choose to apply these concepts.
+If you made it this far, congratulations!
+If you enjoyed this video, and you feel like you learned something new, then please consider liking, commenting, sharing, and subscribing.
+If you'd like to support the educational work that I'm doing, then please consider using the super thanks button.
+For ongoing support, please consider joining and becoming a channel member.
+Channel members get ad-free early access to all of my new videos.
+Thanks for watching, and good luck on your Julia journey!
