@@ -1,0 +1,1991 @@
+All right. So let's dive right into it. Actually, let me say a few things. So I tried to make
+sure to leave ample time for questions and discussion. So the number of slides is not
+going to fill up four hours, God forbid. So I hope that you guys will interrupt me a lot.
+And we can leave a block of time at the end of each half of this tutorial to just have
+an open discussion about the topics. And I'm sure that there are people in here that know
+about some of the topics that I'm going to cover better than I do. And so I have no ego.
+You can interrupt me and tell me that I'm wrong. So I'm going to try to cover quite
+a broad scope of approximate inference ideas. And really, in some ways, in some parts I'll
+go into more depth, but some parts I'm going to cover more superficially just to give you
+kind of a bird's eye view of what the different possibilities are. All right. So here's the
+roadmap. I'm going to start with some basic principles of probability theory just to get
+everybody up to speed. Probably a lot of you are already familiar with that. Then I'll quickly
+raise the question, are people Bayesian at all? So to broach the question of approximate inference
+in the brain, we have to ask, is there any inference at all to a first approximation? And
+I'll talk about how there are some documented successes of Bayesian models of cognition,
+actually quite a few. But on the other hand, there are many documented failures. And one
+of the goals of this tutorial is to explain how some of those documented failures could
+be explained as a consequence of approximate inference algorithms. And then I'm going to
+talk about two broad families of approximate inference algorithms. In this first half I'll
+talk about Monte Carlo algorithms. And then in the second half of the tutorial, I'll talk
+about variational methods. And those are most familiar to neuroscientists in the form of
+free energy methods or algorithms that stem from the free energy principle. And then I'm
+going to talk about an extension or kind of a generalization of variational methods to
+the setting of what's called amortized inference. And I'll explain what that means. But basically
+it's the idea that you can learn a parameterized mapping from your data to your approximate
+posterior. And that allows this parameterized mapping to basically learn how to infer. So
+it's a kind of meta-learning for approximate inference. And then at the end I'm going to
+talk about this question, are we making things too complicated? Basically you'll see that
+in order to execute an approximate inference algorithm in a principled way in a neural circuit,
+things have to be set up in a very specific way, right? So you have to organize, you have
+to structure the neural circuit in a way that you can guarantee that it's actually implementing
+the specific mathematical operations you need to do these specific approximate inference
+algorithms. But maybe that's making things too complicated and we're putting too many
+demands on the brain. Maybe it's actually a lot simpler. You could take generic neural
+networks and you could specify conditions under which those generic neural networks
+will approximate correct inference. And so approximate inference then arises emergently
+from some more fundamental principles and we can talk about that. All right. So basic
+probability, the main two rules of probability that you need to know are the product rule
+and the sum rule. These are operations on joint probability distribution. So the product
+rule says that you can factorize a joint distribution over two variables that's called
+an A and B into the product of the conditional distribution and the marginal distribution.
+And one reason this factorization is useful is because I like to think about it in terms
+of a kind of a causal story. So one way to generate samples from this joint distribution
+is to first sample from one of the marginals and then sample from the conditional distribution.
+So it gives you a kind of recipe for sequentially sampling from the random variables to produce
+a sample from the joint distribution. Then the other important rule is the sum rule which
+tells you how to take the joint distribution and convert it into a marginal basically by
+summing over the variables that you want to marginalize over. And I'll mostly be talking
+about discrete variables just because it's easier to communicate. But if we're talking
+about continuous variables, you can just replace the summation signs with integrals.
+So most of what you need to know about probability, most of what you need to know about what I'm
+going to talk about today comes from these principles. So let's just give a concrete
+example. Let's imagine a joint distribution over two binary variables, rain or no rain,
+and wet and not wet. So as you might expect, you're more likely to get wet when it rains,
+but it's also possible to get wet when it doesn't rain. And it's also possible to not
+get wet when it rains. So if we wanted to know the joint distribution over getting wet and
+raining, you could factorize it into the probability of it raining and the conditional probability
+of it being wet given that there's rain. So that's what I mean by a causal story that
+you can factorize these joint distributions in a way that makes sense causally. Of course,
+you can factorize it the other way around too. You can factorize it into the marginal
+probability of getting wet times the conditional probability of rain given wet, and that might
+be less causally intuitive for people even though mathematically it's equivalent. And
+then you can also calculate the marginal probability of getting wet, which is just the probability
+of getting wet given it rain times the probability of it raining plus the probability of wet given
+no rain times the probability of no rain. So it's just basically summing over all the
+different ways that you could get wet. Okay. Any questions so far? This is all pretty elementary.
+Now, we can basically use those two rules. When you put them together, you get Bayes'
+Rule, and that's really going to be the central topic of what I'm going to talk about today.
+And I've relabeled the variables S and D to denote S being some latent variable, some
+state of the world, if you will, and D being your data. So we can ask, what is the conditional
+distribution, the posterior probability of the hidden state of the world given the data
+you've observed? And Bayes' Rule says that that's going to be equal to the product of
+the likelihood of the data under a hypothetical state times the prior probability of that
+state. And then in the denominator, there's this normalizing constant. Okay. So that's
+the posterior probability of hypothesis given data. And we're going to come back to why
+computing this is hard in practice and why you need approximations. But before we get
+there, let's just talk for a minute theoretically about why an idealized agent should be Bayes'
+in at all. There are a bunch of classical arguments about why you should be Bayes' in.
+And I'm not going to go into any of these in detail, but just so you're aware of them.
+One argument is called the Dutch book argument. And essentially what it says is that if you
+disobey the probability axioms, which entail that you're not going to be Bayesian, then
+someone else can exploit you for their own gain. They can basically turn you into a money
+pump. There's another decision-theoretic motivation for Bayes' Rule that's called the
+complete class theorems that I show below. And roughly speaking, this says that if you
+think about admissible decision rules, these are decision rules that aren't dominated by
+some other rule. Basically almost all of the decision rules you would think of are Bayesian.
+There are some classes of admissible decision rules that aren't Bayesian, but as a first
+pass, we can make that statement. So what that says is that if you want a good decision
+rule, you should use Bayesian decision theory. And then there's another motivation that's
+based on a generalization of logic to probability, and that's known as Cox's theorem. And the
+basic idea here is that if we assign scalar plausibilities to hypotheses that satisfy
+a set of intuitive axioms, so basically they're real-valued and consistent with Boolean algebra,
+then it turns out that the plausibilities have to be isomorphic to probabilities. So
+we can derive these real-valued numbers that quantify the plausibility of some statement
+in Boolean logic, and it turns out that if we want them to satisfy the intuitive axioms
+of logic, then they have to be isomorphic to probability. And if you want to learn more
+about any of these arguments, I highly recommend this book by E.T. Jaynes called Probability
+Theory of the Logic of Science. But none of these arguments are going to be important
+for what I want to talk about today. All right. So now let's talk about the empirical side,
+which is our people, Bayesian. Some of you may be familiar with this famous paper from
+Tom Griffiths and Josh Tenenbaum, where they ask people to make predictions about every
+day temporal events. Like, suppose that I told you that some cake has been baking for
+20 minutes, what do you think is the total time that it has to be baked for? And they
+did this for a whole bunch of different things, like lengths of poems, movie grosses, movie
+run times. Some of these are debatable to what extent they're actually intuitive, like
+pharaohs. But the point here is that they could use ecological data on the prior probabilities
+and combine that with a likelihood function, which they derived from first principles,
+and show that basically people's judgments about these forecasts are basically very closely
+aligned with Bayes' optimal predictions. And that motivated many other studies to look
+at psychological prediction from a Bayesian perspective. And you'll see many studies with
+titles like this, like motion illusions as optimal percepts, irrational analysis of the
+selection task as optimal data selection. There's a huge number of studies that have
+the word optimal in their title, and they're referring to applications of Bayesian inference
+to cognition, going from visual perception all the way up to high level cognition.
+But at the same time, I'm sure many of you are aware that there's another perspective,
+which says that people are really bad at all sorts of things, including Bayes' rule, that
+they violate the principles of decision theory and probability theory in many different ways.
+And that's led to the view that people aren't actually following the rules of probability.
+What they're doing is using a bunch of heuristics that can serve them well under certain circumstances,
+but can also lead them systematically astray. So that's kind of the hardcore version of
+that argument is that we shouldn't even try to match people to the Bayesian norm, because
+they're doing something fundamentally different at a psychological level.
+So what I'm going to talk about today is motivated by the challenge. Can we bridge this gap without
+throwing out the whole apparatus of Bayesian inference, but still trying to explain why
+people screw up in some systematic ways? And the basic argument here is that one reason
+why people may look Bayesian in aggregate, but still make systematic errors is that basically
+you can't be Bayesian. You can't be a perfect Bayesian for even moderately large problems,
+the computational complexity is too large. So you have to make approximations. And classically,
+if you look at papers on Bayesian inference and psychology, they kind of swept that part
+under the regularity. They say like, all right, here's this generative model, and here's
+the posterior. And then we do, you know, MCMC, blah, blah, blah. Don't worry about that.
+It doesn't matter, because any possible algorithm for approximating the posterior will give
+the same answer. But that's never going to explain the deviations from Bayes' rule. If
+you run the computational algorithms that basically closely approximate the true posterior,
+what we want to do here is ask whether we can explain deviations from Bayesian inference
+in terms of the approximations that people use. And so we'll look at a bunch of different
+possible approximations and think about the specific deviations that those predict. And
+as we'll see, and hopefully maybe we can discuss this, sometimes it's not entirely
+straightforward what predictions to make. And also there's this other scary possibility
+that the space of approximations is so vast, there's not a clear way to discipline it.
+And then throughout this tutorial, I'm going to talk about ways in which we can ground
+these algorithms in biologically plausible neural circuits. And for some of these algorithms,
+those ideas are better developed than others. Okay. So I've already said that people need
+to use approximations because of computational interactability. So what exactly are people
+optimizing? How do they choose a good approximation? Or if they choose a particular family of approximation,
+how do they choose the precision with which they approximate the posterior? And that leads
+us to an important concept that's sometimes called computational rationality or resource
+rationality. And the idea is that because of finite cognitive resources, you're going
+to choose an approximation algorithm that balances the cost of executing that approximate
+inference algorithm and the benefits of higher precision, for example, by running it longer
+or with more samples or however we choose to parameterize that. And this leads to the
+idea that although you can possibly arbitrarily improve your performance with longer run times,
+finite run times are going to be optimal given some cost on computation time. That could
+be an opportunity cost or an energetic cost. And that's diagramed here. This is a diagram
+that Eric Horvitz made. So the idea here is that the value of the result in some cost
+to your world is increasing probably monotonically, but the cost of delaying your action to run
+the computation is also increasing probably monotonically. And so the net value of action
+is going to be non-monotonic. So that gives you kind of an intuition for why you'd want
+to use approximation algorithms. And we'll come back to this framework for trying to make
+some specific predictions about particular experimental paradigms.
+Okay. So a lot has been said about representation and manipulation of probabilities in the brain.
+And I'm not going to go exhaustively through all of that. What I want to do is focus on
+neural inference implementations that are scalable in the sense that they can be applied
+to very large, potentially very large problems. And I'll talk in a moment about some classical
+ideas about inference in the brain, which don't appear to be scalable, or they might
+be scalable, but you have to make some more elaborate assumptions. So for example, probabilistic
+population codes is probably one of the best known ideas about representation of probability
+distributions in the brain, but it can, at least in its classical implementation, it
+runs into scalability issues. Okay. So here's what a probabilistic population
+code looks like. The basic idea is quite simple. So there's some stimulus that's generated
+by the world, and then that stimulus gets translated by the brain into some pattern of spikes.
+That's represented by R. So there's some spike generating process. That could be some Poisson
+distribution defined over some set of tuning curves. So I'm showing you an example here
+for orientation where you have a bunch of these bell shaped, these orientation tuned
+neurons, and then each of those neurons is going to generate spikes according to some
+Poisson process. And then a downstream decoder can look at those spikes and try to read out
+what the orientation value is as encoded by that set of spikes. And an important idea
+in probabilistic population codes is that the gain of this population code is directly
+related to the variance of the posterior. So when the gain is lower, which is shown on
+the bottom there, so that this hill of activity is pushed down, then the decoded variable
+is going to have a broader distribution. So in essence, you'll have more uncertainty
+about that variable. And they argued that this was possible because variables like
+contrast, which we know affect uncertainty, affect population codes at least in visual
+cortex in this way. Now, it's important to keep in mind here that we're talking about
+decoding a single scalar variable. What do we do when we want to encode lots of different
+things? How do we encode them and how do we decode them? And in general, the number
+of parameters that we would require to specify a multivariate distribution is going to scale
+exponentially with the number of its variables. So we would need a vast number of neurons
+to explain even a modestly large, a modestly high dimensional distribution. So that suggests
+that this particular implementation would not be scalable. And there's also other constraints
+when you want to use probabilistic population codes, depending on how you want to do decoding,
+there are constraints on the characteristics of neural tuning curves and noise. So I think
+it's still debatable to what extent you can use probabilistic population codes to do scalable
+inference, but at least it suggests that naively implemented, they're not going to be scalable.
+Okay. Are there any questions so far? Okay. So now we'll jump into approximate inference.
+So I'm going to start with Monte Carlo methods, because I think they're quite easy to understand,
+even if the process by which the samples themselves are generated could be rather complicated.
+Okay. So the basic idea is the following. Suppose that I'm able to generate a bunch of samples
+from the distribution of interest, the posterior. And that's what I'm showing you over there.
+So the S sub k, the k indexes the samples that are generated from this distribution.
+So now I can approximate that distribution basically by putting a delta function on each
+of those samples. That's what that indicator I variable denotes. And basically just placing
+a delta function at each of the samples, and that's going to give me a discrete approximation
+of this distribution. And in general, I'll denote the approximate distributions by q.
+Okay. And so we can contrast this kind of sampling based representation, which is fundamentally
+discrete with parametric representations, which might try to represent the distribution
+with a set of parameters like of Gaussian with some mean invariance. And that'll be
+relevant when we come back to thinking about variational methods.
+So the basic idea is very simple. It'll get a little bit more complicated as we go along
+and start to think about how the samples are generated. But for now, we can already start
+to say some things about applying this model to cognition. So for example, one motivation
+for thinking about sampling based methods is to understand behavioral variability. Why
+do people seem to be random to some extent in their behaviors, for example, in their
+decisions? Well, Monte Carlo methods provide one answer, which is that if you're taking
+a small number of samples, your posterior distribution now is going to be a random variable.
+And so the randomness in your sampler is going to induce randomness in your decision behavior.
+So imagine, for example, that the decision theoretically optimal action is to select
+this stimulus that has the highest probability under the posterior. So this is sometimes
+called the maximum a posteriori or map estimate. Now, I don't have direct access to the true
+posterior. I only have access to this approximate posterior queue. So I'm going to run the
+sampler, generate queue, and then select S greedily that maximizes queue. So you can
+unpack queue to get this expression at the bottom. Now, in the limit, if you only took
+a single sample, your decisions are going to be exactly probability matching the posterior.
+In other words, you're going to choose stimulus S with probability equal to the, it's probably
+under the posterior distribution. So that's called posterior probability matching. And
+as you get more samples, you're going to get closer and closer to true maximization. And
+then somewhere in between for a small number of samples, you're going to, you're going
+to look sort of like you're doing quasi probability matching. So why do we think that people are
+only taking a small number of samples? Well, this comes back to computational rationality.
+I don't know, Wagey is here. So he's going to tell me, he's going to tell me the way
+it's supposed to be. All right. Okay. So why only take a small number of samples? So
+let's go back to computational rationality. There's a cost of time. And there's the benefit
+of increasing the number of samples. So what we need to do is combine these two sources
+of information to calculate the expected utility per unit time. And depending upon the relative
+costs and benefits of samples, you're going to get this function that's non-monotonic.
+So the optimal number of samples to take could be quite small. And this was worked out in
+great detail by Ed Wuhl in this paper, which is very interesting, but also I think somewhat
+arbitrary because it doesn't really give us a recipe for pinning down exactly what the
+costs and benefits of sampling are. And I think that's one of the issues that's always
+bothered me in thinking about these algorithms in the brain is because we don't know exactly
+what the cost of sampling are. And so we can draw these curves, but they're somewhat disconnected
+from reality. But we can still make a kind of general argument about why we want to use
+a smaller number of samples because a large number of samples are going to be too costly.
+And you see this phenomenon of probability matching in many different domains. So I'll
+just give you a few examples. So this goes back actually to the early days of signal
+detection theory. So this study by Tanner, Swets and Green, they changed the prior probability
+of the signal at different levels. And then they looked at the probability of an individual
+reporting signal present. And they found that it increases linearly with the base rate of
+the signal. So that is not really compatible with kind of the signal detection theory under
+perfect inference unless you posit some noise that's scaling with your posterior uncertainty.
+And this kind of sampling-based approximation of the posterior could give one route to producing
+that kind of posterior probability matching behavior. So these are low-level auditory
+signal detection tasks, but you also see this in high-level tasks. So this was a study
+by Noah Goodman and colleagues where they were looking at Boolean concept learning. And
+I won't go into the details of that study, but suffice it to say that they developed
+this Bayesian model that fit people's behavior pretty well. But one of the interesting observations
+that they made was that the probability of observing a particular report in their group
+of subjects scaled with the posterior probability of that hypothesis. So people look Bayesian
+on aggregate, but the question is why do people show this linear relationship between posterior
+probability under the model and the probability of generating the answer? If they were being
+decision-theoretically optimal, they should just report the hypothesis with highest probability.
+And you see this also in other tasks. So Ed Will and colleagues reanalyzed data from that
+optimal predictions paper that I showed you before and showed that basically the same story
+arises that on aggregate people look Bayesian, but it doesn't seem to be consistent with the
+decision-theoretically optimal policy under perfect inference. You also see this in children.
+So this was an experiment that Stephanie Denison and Allison Gottmick's lab did where they were
+looking at causal inference in children. They had this machine where you could put blocks into
+the machine and it would make some sound. They had different colored blocks, red and blue blocks.
+And what they manipulated were the proportion of red and blue blocks in these buckets. And they
+were looking at children's inferences about which of the blocks they thought was responsible for
+producing the sound that the machine produced. And they again found this phenomenon that children
+probability match. So the probability that children reported a particular color was scaling
+roughly linearly with the probability of that block or chip. Now, so far I've been talking
+about the number of samples as kind of a static object in the sense that we pick some number of
+samples and generate a response by drawing that number of samples. But it could also be the case
+that the number of samples is adaptively selected. And this was something that was studied by
+Jess Hamrick. It's a little bit blurry, sorry. So they were looking at physical predictions.
+So they would show subjects this trajectory of a ball that's bouncing around a frame and it
+was following Newtonian mechanics. And they would ask their subjects whether or not they
+thought that it would go into some particular target area. And they looked at people's answers
+as a function of how many bounces that ball made, or sorry, how many bounces that ball was going
+to make, respectively. So they wouldn't show the complete trajectory. They'd show part of the
+trajectory. And then the idea was that subjects would have to simulate the rest of the trajectory
+to make a prediction. And they used, Hamrick and colleagues calculated the optimal number of
+samples to take under some linear cost model for sampling. And what they found was that it
+predicted this pattern where the more uncertain you are, the more samples you should take. And that
+was consistent with subjects' responses. So people seemed to take a longer, have a longer
+response time when they were making predictions, when there were more bounces. And this comes
+out of the model because when there are more bounces, there's going to be a higher level of
+uncertainty. They're assuming here that when there's a bounce, there's going to be an increased
+level of noise. So this was an interesting way of using response times to make inferences about
+the number of samples that people are taking. Okay. I'm going to move on to discussions of
+sampling in the brain. But before I do that, are there any questions? Yeah. This one. Yeah, I
+mean, well, it depends on their utility function. But yeah, you would expect, you'd basically be
+looking for a step function if everybody has the same priors and the same utility function. And then
+that there is no noise, basically, in their decision process. So one hypothesis here, we don't
+know exactly, but one hypothesis is that the noise is coming from a sampling process, that they're
+doing some kind of sampling from the posterior. There are other sources of noise too, right? So you
+can have noise, you could have an exact posterior, but you have the extra noise in your decision
+process, or you could have extra noise in at the at the level of perception as well. And in some
+sense, I'd imagine that we need to take into account all those sources of noise. Actually, so
+Jan Drugowicz did has a very nice paper where he looked at this and he made the argument that most
+of the noise that accounts for sub optimality in perceptual decision tasks comes from computational
+noise as opposed to the sensory noise. So that he tried to exactly quantify what the specific
+other questions. Yeah. Yeah. Yeah. So I should have explained that in a little bit more detail. So
+the model that they used to make these predictions is called the noisy Newtonian model. And the idea
+here is that the the trajectory of the ball is just following regular Newtonian mechanics. But in
+addition, there's there's some noise that get there's some noise that's added when the ball hits
+other objects. Yeah, well, the question is what is it that's making it harder? How do you model the
+hardness? And so one way to do that basically is to assume that there's more uncertainty when
+there's bounces? Yeah. Yeah, well, it depends on exactly what the the so basically, if the if
+the posterior probability of some chip being the correct cause is greater than 50%. If we're talking
+about two alternative force choice, then it should be it should be a step function, right,
+because the map estimate is going to be a deterministic mapping from the from the posterior to
+the decision. Well, I haven't gotten to the specific, I'm going to talk about that in a moment,
+the specific ways that you might generate samples. Right now, I'm making the naive assumption that
+you could just generate samples from the posterior. And the interesting variable here is how many
+samples you you generate. So if you generate a small number of samples, then you're going to
+produce matching behavior. Right. And we'll get into more specific predictions of particular
+sample generating algorithms. Yeah.
+Well, there are different sources of noise, right? So you could have noise and perception. It's
+also totally possible that you have that that things look like noise. But that's because of
+model mispecification. So Zach Pitko and Weiji have this paper on called not noisy, just wrong,
+in which they draw out the implications of that idea. So we have to we have to be very careful
+about parsing these different sources of noise. That's what makes it so so hard, right? So it's
+possible that people are doing exact inference, but with the wrong model, and that could appear to us
+the experimenters as looking like something like probability matching, possibly, depending on what
+the model mispecification is. Right. Right. But if you're doing if you're doing noisy, well, this
+is now. So if you're doing, for example, noisy rollouts, if your policy has a stochastic element,
+for example, then then your rollouts will be noisy and your about your the resulting value
+function is going to be noisy, right? Yeah. Oh, sorry. Yeah. Good. Good. Good. Yes. Okay. Well, the last
+question was about planning, which I haven't really talked about. But the idea that that you could
+have determinant, you the question was, would you have this kind of probability matching if you had
+deterministic planning? Is that right? Okay. Or something like that. Yeah. But I was talking, my
+response was that that many modern planets have some stochastic, many modern planners have some
+stochastic element in that that might produce probability matching. But but in that regime,
+we're not actually talking about inference anymore. We're talking about we're talking about planning.
+Okay. So another reason why sampling algorithms have been interesting is because they seem to,
+they for the same reason that they can explain behavioral variable, they may be hold the
+promise of explaining neural variability. So we know that neurons are highly variable. And maybe
+that variability is just kind of an endogenous property of those of the spike generating process,
+but maybe it serves some functional purpose. And that's that's really the line of argument that
+neural sampling theories try to articulate. So in the simplest version of such theories,
+each neuron represents a particular random variable, and sampling represents sample from that
+distribution distribution over that random variable. And then you have to set up the neural
+circuit in such a way that it that it collectively samples from the correct and joint distribution
+over these variables. So so and I'll get into some specific instantiations of that in a minute,
+but before but it might be useful first to just try to think about what happens when you have
+neural sampling, assuming that we can perfectly generate samples from the posterior distribution.
+So I'm going to be referring to right in this first part to some analyses that were done by
+Orban and colleagues to examine this hypothesis. Now in order to do this, you have to start by
+postulating some internal models, some probabilistic model. And what they did was they were looking
+at V1 neurons and they deposited a simple linear Gaussian model for image patches where each image
+patch was generated by some linear combination of basis functions multiplied by a contrast,
+the global contrast variable, and then corrupted by Gaussian noise. And so that's schematized on
+the left here where you're going to take a little patch of this image and you have these
+gobores that represent the basis functions and then you have different levels of activation for
+each of those basis functions. And so the inference problem is now to infer the posterior
+probability over the activations of those basis functions given the sensory input,
+which is the image, the image patch rather. So this is a very simple model, but you already
+can use it to make a bunch of interesting predictions. So one argument that they made,
+and this is similar to the arguments that have been made about behavioral variability,
+is that if you have higher uncertainty, you're going to have higher variability. And they
+showed this by looking at the final factor, which is the standard deviation over the mean,
+for low contrast and high contrast images. And what this shows is that the variance,
+the final factor is higher under low contrast and high contrast. And that's consistent with
+this idea that if you have more uncertainty, your sampler is going to have the samples that
+are generated by your sampler are going to be more variable. And so you're going to have a
+higher final factor. Another corollary of this is that stimulus onset should quench
+neural variability. And that is true. So if you compare spontaneous activity to evoked
+activities, evoked in response to some image, you typically see higher variability for
+spontaneous activity compared to evoked activity. And this follows from the fact that when you
+don't see any image at all, you're going to have the highest uncertainty. And so you're going to
+have the highest variability. You can actually go one step further than this. And the reason that
+actually the spontaneous activity should match the average evoked activity for natural images.
+And the reason this is true is if we go back to the sum rule, the marginal probability of the
+activations is going to be the sum of all the conditional probability of these activations,
+conditional on the image, multiplied by the prior probability of the image. And if you think that
+the images that they're showing in these experiments are drawn from the distribution of natural images,
+then this relationship between the marginal probability of the activations and the conditional
+probability of the activation should hold. But if you take some other distribution, like if you
+just show images of gratings, which aren't drawn from the natural image distribution, then that
+relationship will no longer hold. So the way that they went about analyzing this is by using a
+divergence measure, the Kolbach-Liebler divergence. And this is actually something that's going to
+come back when we talk about variational inference. But right now, this is just a data analysis tool.
+So they're computing the divergence between the distribution of a spontaneous activity and the
+distribution of evoked activity for either the marginal distribution of evoked activity for
+either gratings or natural images. And what they find is that the divergence is much larger when
+you look at the non-natural images compared to the natural images. And that's consistent with the
+claim that the divergence should be small or, in principle, actually zero if you're looking at
+samples from the, if you're looking at measurements from this evoked distribution for natural images.
+Does that make sense to everybody? Okay. All right. Feel free to interrupt me as I go.
+So we can also look at implications for perceptual decision-making. This is work that Ralf Heffner
+did. So we're again going to use a simple generative model for V1 neurons. But here,
+we're also going to add this decision variable that's generated conditional on the V1 activities.
+And the reasoning here is that if you have variability in your beliefs, that's going to
+produce variability in your choice behavior. And there should be a particular structure in the
+relationship between these two things. And that's shown here. So they were interested in looking
+specifically at noise correlations. So this is the case where no stimulus is present. But you
+can measure the trial by trial correlations between neurons with different preferred
+orientations on these no stimulus trials. And what they find is that neurons with similar
+preferred orientations show some correlation of activity. And it also depends on whether those
+orientations lead to the same decision or a different decision. So these two things will
+obviously be related. But essentially, you put a decision boundary in this orientation space. And
+now, neurons that are on either side of this decision boundary, they'll basically co-variate
+together more strongly than across that decision boundary. And they'll do that in a way that's
+parametrically dependent on the difference in their preferred orientation. And so the reasoning
+here is that you get these noise correlations because of the sampling process that when you
+observe an image, you're going to get draws from this belief distribution. And the hypothetical
+neurons that prefer similar orientations are going to tend to be co-active because they have
+similar probability under the posterior. So let's come to the question now of generating
+samples. So I've so far assumed naively that we could just somehow magically generate samples
+from the posterior. But that's actually the hard part. How do we get samples from the posterior
+if the posterior is itself intractable? And I'm going to talk about two broad approaches to
+solving this problem. One is Markov chain Monte Carlo, and the other is important sampling in
+its dynamical variant, which is called particle filtering. So the basic idea of MCMC is that we
+can, even though we can't directly sample from the posterior, we can sample from some dynamical
+system whose equilibrium distribution is the posterior. So that's schematized here. We're
+going to set up a Markov chain that's parameterized by some transition distribution over the hidden
+state or stimulus. And what makes it Markovian is because it only depends on the last sample that
+was drawn from that distribution. And if you set this up right, then you can guarantee that this
+chain is eventually going to converge to an equilibrium where samples are drawn from the
+target distribution. And it turns out actually there are pretty straightforward ways to set up
+chains with this property. I'll come back to that in a moment. But for now, I just want to
+highlight two conceptual properties of MCMC. So what is that? In general, MCMC is going to be
+autocorrelated. For most implementations of MCMC, there's going to be autocorrelation. We're going
+to try to draw out some of the implications of that autocorrelation. So samples are going to
+tend to be similar if they're generated at similar points in time. And then the other is ergodicity.
+So asymptotically, if you run this long enough, it's going to be independent of your starting
+point. So initialization doesn't really matter. However, again, if we return to this computational
+rationality idea that we're only drawing a limited number of samples, because of autocorrelation,
+you're going to show dependence on the starting point. And that's going to have some important
+implications that we'll talk about. So the classic MCMC algorithm is called the Metropolis
+Hastings algorithm. And the way it works is as follows. So again, I'm using k to index samples,
+but now k is basically indexing time, a temporal sequence of draws from this Markov chain.
+So what we're going to do is at time k, we're going to sample from some proposed new state,
+s prime, from this distribution phi. And phi can basically be anything,
+but there are some practical constraints on how we specify phi. And then we're going to accept or
+reject this proposal based on this acceptance rule. So if the proposal, or actually let me back up
+for a second. So if we look at this ratio, we're comparing the joint probability of this new sample
+compared to the joint probability of the old sample. And then we're multiplying it by,
+oh sorry, this should be a conditional distribution in that ratio. So we want to look at,
+we have to compensate for the fact that it was drawn from this proposal distribution.
+And in the simplest case, if that proposal distribution is symmetric, then those phi
+terms cancel out. And we're just doing a ratio comparison of the joint distribution for the
+proposed sample relative to the previous sample. So if the proposed sample increases the joint
+probability, then you're going to accept it deterministically. But you could also accept it
+with some probability if it decreases the joint probability. So it has this flavor of
+stochastically exploring the posterior and sometimes transitioning to states that have lower
+probability. Now, Gibbs sampling is a special case of metropolis hastings where the proposal
+distribution is the conditional distribution. So I'm going to pick one of the variables,
+and this applies to the case where the state is multi-dimensional. So I'm going to pick one of
+the variables in the state, condition on all the others, and sample from that conditional
+distribution. And it turns out that when you do that, all the proposals are going to be accepted.
+And there are different variations of this. So you can do, for example, blocked Gibbs
+where you sample from a bunch of these variables at the same time conditioning on all the others.
+Okay. So that's kind of a very quick overview of MCMC, broadly speaking,
+and some specific implementations of MCMC. Now I want to talk about applications to
+perception and cognition. The place, I think, where this has been most successful
+is in understanding perceptual multistability. Because that's an instance where there's very
+clear stochasticity in the perceptual phenomenology, and it seems seductive to think that that might
+arise from variability in the sampling process. And it's particularly important to use these
+kinds of dynamical sampling algorithms to explain the dynamics of the perceptual phenomenology.
+So there's a lot of different ways to create multistable percepts. I'm going to focus on
+binocular rivalry. That's where you show two different images to the eyes. And in general,
+what people experience is seeing one of the images dominant at a particular time, and then
+there's stochastic switches between the dominant images.
+So a number of years ago, we developed a sampling-based model of perceptual
+multistability, particularly in application to binocular rivalry. And the basic idea was
+not too dissimilar from the image models that I showed you before. So we're going to posit that
+these two images, one for each eye, but the brain is trying to infer the true latent image that
+generated the sensory inputs. It also has this outlier process that basically allows it to
+determine whether particular pixels are corrupted so that they're giving incorrect
+input, so it can kind of ignore the sensory input at those locations in the visual field.
+And the way that we model perceptual switches is we set some threshold on the number of node
+switches that would determine that a particular stimulus is dominant. So the idea is that the
+sampling process is operating at the level of pixels, so one node per pixel, but the subject's
+report is going to depend on some conglomeration of those nodes being consistent with each other.
+This is a somewhat arbitrary assumption, but as we'll see in a second, there's some interesting
+implications when you actually look at the individual nodes themselves. So I'm showing you
+here on the top right an example dynamics of this model. The critical explanatory part of this model
+comes from the fact that the posterior is going to be multimodal for these, when the binocular
+images are different. And so the distribution is going to migrate from one mode to the other
+and back and forth forever, and at equilibrium, it should be exhibiting that behavior.
+One of the classic ways that people have quantified binocular rivalries looking at the
+distribution of dominance durations, and people have spent a lot of time arguing about whether
+this distribution is gamma distributed or log normal distributed, you can sort of, to a first
+approximation, capture some of those quantitatively with this model, but I think that's kind of the
+least interesting aspect of binocular rivalry. There's much more interesting aspects of binocular
+rivalry when you look at some of the other dynamical phenomena that come out of that.
+So one really interesting phenomenon is called traveling waves. These were experiments where
+what they did was they showed these different gradings to the two eyes, and the gradings
+were organized in an annulus. So at any given time, your eye only saw one of those gradings,
+sorry, your perception, you perceived only one of those gradings, but what they did was
+they would transiently increase the contrast of the grading that was currently not dominant.
+And what the effect that had was kind of like lighting a fuse, so you would see
+that contrast enhanced part of the grading would now become dominant, and then it would start to
+travel around the annulus and make the whole annulus dominant that wasn't dominant before,
+but there would be this sequential structure, and you could reveal that by measuring people's
+judgments about what was the dominant percept at particular locations on the annulus relative to
+where that contrast was enhanced, and you see this parametric effect of distance
+on the propagation time. And in fact, you can make that propagation time longer by introducing a
+gap in the annulus as though the inference had to kind of jump over this gap. And you can model
+this with the model that I described to you when you impose this annular topology
+on the underlying latent image. So this is a nice example of where the switches are not
+unitary in the sense that you don't always see the whole image switch. Sometimes you see just
+parts of the image switch, and that has a dynamic that you can capture with MCMC applied to these
+graphical models. Another example of this is piecemeal rivalry. So if you make a stimulus really big,
+then it turns out that people have more time spent in this kind of patchy zone where
+the one image might be dominant in one part of the visual field, but not in the other part
+of the visual field. And you're going to require more node switches until you achieve a stable
+percept. So this is appealing to the idea that if for bigger images you have to basically
+do more computation before you have a large scale shift in the percept.
+Another interesting aspect of rivalry which can be captured by this kind of model is fusion.
+So it turns out that you don't always experience rivalry. So sometimes you have
+alternations between, sorry, sometimes the two stimuli fuse together into a unified percept,
+and you can get this in a few different ways. So for example, if you decrease the contrast
+of the images, then you get more fusion, or if you make them more similar to each other,
+like gratings that different orientation, if you make the orientation more similar,
+then you're more likely to get fusion. And this again appeals to this idea that the
+multi-stability arises because of this multimodal posterior, and when you reduce the contrast or you
+make the images more similar in some feature space, then you're going to be basically reducing the
+multimodality of the posterior. And under some circumstances, you might get a single mode.
+All right. So to summarize this last section, I've argued that multi-stability can arise
+from sampling for a multimodal posterior. And sampling can explain a lot of different aspects
+of this perceptual multi-stability. So domination, traveling waves, piecemeal rivalry, and fusion.
+So now I want to shift gears a little bit and talk about the application of these models to
+high-level cognition. Before I do that, any questions or comments?
+Okay. Yes.
+So you're talking about, because there are other approximate algorithms that do learn something
+about an actual multimodal posterior, right? So there's a certain range of rational approximations.
+Yeah.
+We also have the updates, and we think they're like, this is very big.
+Yeah.
+And I'm looking at, is the right side of it just be a specific sound place,
+as opposed to any approximate method that has an effect on the map?
+Yeah. That's a really interesting question. So Peter Diane actually had a model in 1998 or 1999
+of rivalry, which was based on a variational inference algorithm. But to get the switching
+behavior, he needed to introduce a fatigue process. And that's often how in the biophysical models
+of rivalry, they introduced some kind of fatigue process to get the switching behavior. Now,
+I can't speak for all possible variational models. In fact, one of the things that I'm going to talk
+about in the second half of the tutorial is it's very hard to pin down the commitments of
+variational methods without making some more assumptions. So for example, you could have
+sample-based variational approximations, and you could even have optimization of those sample-based
+approximations operate via some kind of stochastic search. So at that point, are we even talking
+about something that's different, distinguishable from MCMC algorithms? Yeah.
+You mean you're talking about which generative model or maybe I'm not following. Yeah.
+Not just which generative model, but the variable test represents. Right.
+Is orientation the same thing as the weight of the basic functions?
+Yeah.
+Well, what do you mean by the same thing? Obviously, it's not the same thing, but
+the question is, can we deduce that similar inference operations are acting upon weights
+and orientations? Yes, I think so, right? Because there's no way to
+make predictions from an approximate inference algorithm unless you first specify the generative
+model that it's operating over, right? And actually even what the basic representational
+primitives are, right? That's what makes it so hard because if the model makes the wrong
+prediction, is that because the inference algorithm was wrong or because the probability
+model was wrong or because we just represented the problem in totally the wrong way or we measured
+things wrong, there's all sorts of failure modes. And that's what makes this so hard to do, right?
+And so I'm kind of giving you the most optimistic reading of these phenomena,
+but everything is up for debate. I totally accept that. Yeah.
+I guess I'm saying the same thing, that's the very original question. Yeah, I guess when I think
+about it, I don't know, but I think it's what I think you would have let you do in the follow-up.
+So, say that one more time. In the follow-up work, I guess I was, as I did, I think deep,
+like deep, garland, in particular, visual cortex about all of it. And then when you say,
+did you put recurrence in the narrative page before this, and then from the switching between
+the gap of all three models, the addition of the gap between the recurrence and the
+gap difference before the network, you could also actually do it. Yeah, that's interesting. Sorry,
+I broke my promise that I was going to repeat the question. So this, the question was,
+could you get multistability in a feedforward neural network with recur, well, it's not feedforward
+anymore. Feedforward plus recurrence using something like a convolutional neural network
+of the story that Jim DeCarlo's lab uses. I mean, yes, like we know from, you know,
+all of these models that I'm talking about, we're long predated by more biophysical models for
+modeling rivalry that are based on dynamical systems. So you can construct dynamical systems
+that show oscillations, right? That's essentially what it comes down to. So this doesn't exclude any
+of those, of those kinds of formalizations, but at some level, what I'm arguing here is that
+there's an interpretation of the stochasticity, or at least apparent stochasticity that comes
+from those models that's consistent with a probabilistic inference or an approximate
+inference interpretation. So we can construct, if you take the model that I just described,
+you can write it down as a recurrent neural network. In fact, I'm going to talk about that
+a little bit later when I discuss neural circuits. So it actually is at the circuit level very similar
+to what those kinds of models would look like. But the advantage of looking at it through the
+lens of probabilistic inference is that we can have this interpretation that it's sampling from
+this distribution over latent variables. Okay. So I'm going to go on and talk about
+application of these ideas to high-level cognition, but specifically to understanding
+biases in probabilistic reasoning.
+Everything okay out there?
+All right. So consider the following three questions. I ask you, what is the probability
+of dying from disease? Or what is the probability of dying from heart disease, cancer, stroke,
+or any other disease? Or what's the probability of dying from pneumonia, diabetes, cirrhosis,
+or any other disease? So all of these morbid questions have the same answer,
+because all we've done differently in these different questions is unpacked some particular
+disjunctive hypothesis into the conjunction of a bunch of, sorry, the disjunction of a
+bunch of sub-hypothesis. So the question here is, even though these all have the same answer,
+why is it that framing them differently leads to different responses?
+And let me explain to you what the responses are. So there's two dominant patterns that
+happen here. When you unpack a hypothesis into typical sub-hypothesis,
+then you get what's called sub-additivity. So that's shown in this green example. So
+heart disease, cancer, and stroke are all typical fatal diseases or typical diseases.
+And the idea here is that intuitively, if I ask you what's the probability of dying from disease,
+what you're going to do is enumerate as many diseases as you can think of and evaluate whether
+you, the probability of dying from each one of those diseases, but because you're resource limited,
+you're not going to enumerate all possible ways of dying. And so you're only going to enumerate
+a small number of them. And as a consequence, you're going to underestimate the marginal
+probability. And if I unpack those, if I unpack that into a few examples, then I can alleviate
+that underestimation of the marginal probability. It turns out that the opposite thing happens
+when I unpack them into a typical example. So then you get super-additivity, where now
+when I evaluate the sum of the probabilities that you apply to each of these sub-hypothesis,
+that turns out to be less than the marginal probability. So why does this happen? Let me try
+to give you some intuitions for this. So what I'm showing you here, the big circle is all the ways
+that a person could die, and the little circle is all the ways that they can die by disease.
+And so the goal here is to evaluate the area of that little circle as a proportion of the big
+circle. So let's suppose that I seeded you with an unpacked example, like heart attack. So heart
+attack would be typical, smallpox would be atypical. Now in a Metropolis Hastings algorithm,
+I'm going to then generate some proposal distribution. So suppose that I proposed skydiving accident.
+So if you generated a typical example, then you're more likely to prefer the typical example
+compared to skydiving, because it has higher probability. But if I seeded you with the atypical
+example, then you're more likely to, you're at least relatively more likely to accept the
+skydiving accident proposal and move into this low probability region of the hypoxia space.
+So the predictions here come from two things. One has to do with anchoring. So the initialization
+of the Markov chain, you're going to be biased towards the initial state of the Markov chain
+when you only generate a small number of samples. And there's this idea that if you're in a low
+probability region of the state space, you're more likely to accept other low probability proposals.
+And so this model can predict both sub-additivity and super-additivity, but only when the number
+of samples is small. So we're running this Markov chain and looking at the relationship between
+the marginal probability and the sum of these probabilities of the sub-hypotheses.
+And so negative means that there's a super additive effect and positive values on the Y axis
+indicates that there's a sub-additive effect. So we've tried to pursue this experimentally
+in the following somewhat weird experimental paradigm where we ask people to make judgments
+about hidden objects in a scene. So we'll tell people, suppose I'm looking at a table, what's
+the probability of objects like, if I'll show you an example, a chair, computer, a curtain, or any other
+object beginning with the letter C. So you have to evaluate the probability of this
+disjunctive hypothesis, and we can manipulate how we unpack that disjunctive hypothesis.
+And the reason we chose the scene inferences is that we can take advantages of a dataset
+of object co-occurrence frequencies that Michelle Green collected and fit a probabilistic model
+to this dataset, and that gives us basically the probabilistic model from which we can compute
+the conditional distributions that we need to make predictions.
+So we gave people a bunch of these different questions with different unpackings, and we fit
+this MCMC algorithm with two free parameters. So one is the number of latent objects in the
+scene, and the other is the number of samples. And we can show that, first of all, we can get
+sub-additivity and super-additivity effects depending on whether the unpacking was typical
+or atypical, and the model fits this quite well. You might think that 230 samples is somewhat large,
+given what I was saying before about samples being costly, but on the other hand, I would
+reiterate that we don't actually know how many, we don't know what the utility function is,
+or the cost function over samples is, and so we don't know what is the optimal number of samples
+ex ante. So in order to make some stronger claim about that, we would need to really understand
+that cost function better. I'm going to skip this. Basically, the point of the second experiment was
+just to show that using the same parameters, we can get predictions for finer-grained,
+we can make finer-grained predictions for different kinds of unpackings.
+So let's come back to this question of how many samples, and let's just start from the generic
+assumption that sampling is costly. We don't know exactly how many samples people are going to take,
+but we know that they should take fewer samples when we make the sampling more costly.
+So for example, we can place people under time pressure, and we expect that that's going to
+amplify sub-additivity and super-additivity, and that is indeed the case. So if you divide people
+based on fast and slow response, people's response is based on whether they're fast or slow.
+Under fast responses, you do see stronger sub-additivity and super-additivity effects,
+and that's consistent with the idea that they're drawing fewer samples under time pressure
+when they respond quickly. And a similar argument can be made about cognitive load. So when we put
+people under cognitive load, so they have to do a secondary task while doing this task,
+that should amplify the effects. In fact, actually, we found that this increased
+super-additivity but didn't really have a substantial effect on sub-additivity, and it turns out that
+these two effects turn out to be asymmetric as a function of the number of samples, and that
+could potentially explain this asymmetry. So super-additivity is more sensitive to the number
+of samples than sub-additivity. So you can apply the same logic to a range of other
+biases that have been documented in the probabilistic reasoning literature. So I'll give you a few
+examples here. So there's anchoring and adjustment, self-generation effect, the dud alternatives
+effect, the weak evidence effect, and the crowd within. And all these can be explained in terms
+of resource-limited sampling based on this Markov chain Monte Carlo algorithm.
+So the basic intuition underlying super-additivity is that you essentially get stuck in low
+probability regions of the hypothesis space, and this can also explain dud alternative and
+weak evidence effects. So here's what the weak evidence effect is. So if I present positive
+evidence in favor of a weak cause, then that will actually lead to the outcome being judged to be
+lower probability. So for example, I ask, what is the probability that a person died of disease
+given that her great aunt has diabetes? So this slightly increases the probability of the outcome,
+but what also happens is that it causes the initialization of an atypical example, and this
+produces an overall underestimation of the probability, and essentially this is a version
+of super-additivity. Another interesting version of super-additivity is the dud alternative effect.
+So this is where the judge probability of a focal outcome is higher when impossible
+alternatives are presented. So for example, what is the probability that a person died
+due to disease as opposed to a skydiving accident? And this is essentially super-additivity in the
+complement space. So now P not A, so the probability of not dying due to disease is underestimated
+because of initialization as an atypical example. So it's sort of the flip side of super-additivity.
+You can also explain anchoring and adjustment phenomena. So the idea that there's a bias towards
+prime hypotheses, and this is reduced when subjects take more time. So there are classic
+experiments by Kahneman Tversky that showed, for example, if I tell you, if I ask you, what are
+the last four digits of your social security number? And then I ask you a question like,
+what year was Gandhi born? And it turns out that if your social security number is lower,
+you're going to have estimates of Gandhi's birth that are lower. So it's a totally irrelevant
+anchor, but if you think that it somehow infiltrates your hypothesis set, then it will pull estimates
+down. And specifically because you're anchoring, you show this because of the autocorrelation
+and the small number of samples, which means that you'll be sensitive to the initialization.
+Another interesting observation about this is that you can reduce autocorrelation
+by thinning the Markov chain. So if I introduce larger time gaps between subsequent measurements,
+then I'm going to reduce autocorrelation, and that's going to reduce the error. So the estimation
+error for a given number of samples is going to go down if I thin it more aggressively,
+but of course, that means that I need to draw more samples. And there's some evidence for this
+from Edvill and Hal Pashler who showed that you can get people's estimates to be more accurate
+if you ask them the same question multiple times separated by longer gaps. And another
+observation related to this is that, of course, there's much less autocorrelation between people
+than within people. And so if you average answers between people, you're going to get a lower error
+compared to if you average answers within a person because of this autocorrelation.
+Okay, so to summarize this last part, we've seen before that you can explain low-level
+perceptual phenomena, but you can also explain a lot of high-level probabilistic reasoning
+phenomena using the same basic ideas about autocorrelation and a generation of a small
+number of samples. And the small number of samples constrained derives again from
+this idea of computational rationality. This one?
+Yeah, so the question that you're asking, and what is the probability that you can see is
+kind of, I mean, so if it's crazy in that way, right, it's more likely, it's actually more likely
+that someone dies due to disease that's just out of here. But the question, is the new question
+you're really trying to answer is the probability that there's a probability that there's a
+hypothesis that you are considering skydiving, right? Because that's still in the hypothesis
+space, right? You're still able to generate hypotheses outside of the disease region of that
+space. Right, but the way this one comes to bring is as it's like, what is the probability that
+a person died due to disease versus skydiving? And it's, yes, it's more likely that a person dies
+due to disease, right? And so, as a result, like, that if you're going to get people who
+saw the higher end of this, it's more likely that you have to die due to disease.
+Right.
+Well, so we're making the assumption here that potentially you could be generating samples
+both in the focal space and in the complement space. So you could be evaluating both hypotheses
+simultaneously.
+Well, again, the question I'm trying to ask is, since I didn't have that question right,
+instead of saying that you accidentally replaced that with something or a new part
+answer, would you expect to answer whether, is the question that you're asking, like,
+the answer to those two questions still the same?
+No.
+Because it's more likely that you will be dying due to the part answer that you decided.
+But in this question, you're actually being, like,
+maybe we can take this offline. Okay.
+Any other questions before we talk about, go back to neural sampling?
+Yeah.
+So, sorry, I couldn't hear that. Can you say again?
+Yes.
+Yeah.
+Yeah.
+What are the two market processes?
+What evidence is there that this should be the case?
+Well, I mean, we can model angering effects by assuming that this prime initializes the
+second Markov chain. I wouldn't even go so far as to say that there's a Markov chain for the
+social security number, right? You have no uncertainty about your social security number,
+right? That does seem a little bit outlandish, right? Why would people use this clearly irrelevant
+number to initialize their Markov chain, right? And I think that that is a puzzle,
+right? You'd think that people would be smarter than to, they'd have some kind of relevance
+filter. And maybe they do, but there might be still some sort of subtler source of bias there.
+And in fact, when I talk about amortized inference, one of the goals of modeling amortized inference
+is to explain the origins of these anchoring effects in a sort of a more principled way.
+Like right now, we're just making the simple assumption that I tell you something and you just
+stick it into your sample set, but maybe there's something more subtle going on,
+like maybe you're learning how to map from examples to an initialization or something like that.
+Are there other questions? Yeah.
+Yeah. Yeah, more or less. I mean, there are different choices we could make about how we
+map from the samples to reports, right? So you could collect a bunch of samples
+and then report some summary statistics of those samples, possibly you have some utility function
+that you are optimizing with respect to that sample based approximation, or maybe you're even just
+reporting, you know, samples as they come in one at a time. So those two are very different. One is
+like you generate a hundred samples. Yeah. Like within a second you just pick. Yeah.
+Well, there's some in between zone here, right? Because if you generate a small number of samples,
+then it's going to be something in between saying the first thing that popped into your head and
+you know, optimizing some utility function with respect to the sample set.
+Well, I've tried to make the argument that at least as far as applications of the data I've
+talked about, it's consistent with using a small number of samples, right? You get probability
+matching specifically when you have a small number of samples, not when you have a large
+number of samples. Because in general, if you have an accurate sample or you're going to
+converge to the true posterior in the limit, and so you're not going to show any of these
+biases at all. Now, another possibility is that you don't have an accurate sampler. You have,
+you take a large number of samples from a bad sampler that doesn't have the right
+asymptotic properties. And that is a conceivable hypothesis, but I haven't seen any,
+I haven't seen any examples of that really investigated.
+Yes, that's right. Or some, depending on what the nature of the problem is,
+sometimes you could do things like take a running average of the samples,
+and you don't need to keep them in memory. But that depends on the specifics of the problem.
+Yeah?
+Right.
+Well, I should, so the question is, you know, are these, are those neural effects only going to
+happen at equilibrium? And I mean, I don't, maybe someone here knows the answer to this,
+but I would suspect, my intuition is that you wouldn't only see these effects at equilibrium.
+So you would, even if the marker chain hasn't reached equilibrium, you would still see,
+for example, differences between spontaneous and evoked activity.
+I mean, I guess it depends on how far away from equilibrium we're talking about,
+right? But all other things being equal, that's my intuition.
+Yeah, that's a good question.
+Yeah, that's, yeah, that's an interesting question. I don't know the answer to that.
+Yeah.
+Yeah, the question is, if we're, if we're taking into account the cost of sampling,
+do we pre-compute the cost of sampling, I'm sorry, how many samples we're going to take,
+or is it some, do we have some kind of any time algorithm that can determine when to
+stop sampling? I think that's a super interesting question. I don't know of any
+evidence that specifically answers that question. I think,
+Yeah, yeah, right. So I think, so one thing that I think we can say is that there is some
+evidence from Jess Hamrick and Falk Leader, where they make the argument that there's
+some adaptive level of sampling. So the number of samples is not fixed. It depends on the
+the cost-benefit ratio. But what I don't know is whether any evidence specifically
+suggests that people are determining on the fly whether to stop sampling or determining
+a fixed number of samples at the beginning. Okay, so we'll keep going. So let's go back
+to neural dynamics of sampling. And now, now, so before we were talking about neural sampling in
+a very generic way by just generating samples from the posterior, but now I want to talk about
+neural, the specific dynamical properties of that sampling as instantiating an MCMC algorithm.
+And actually, if you go back to the kinds of models that I was showing you before to model
+vernacular rivalry, so those are technically Markov random fields, you can write down,
+you can write down the dynamics of Gibbs sampling in a way that looks a lot like the dynamics of
+neurons arranged in sort of a generic network. So a Markov random field can always be expressed
+as this probability that's an exponential of a negative energy function. And the energy function
+for a simple Ising model is going to be this bilinear function of these binary states. So
+we're now imagining the states as being a collection of binary random variables. And
+we have this weight matrix that determines the symmetric connections between those neurons.
+Obviously, there's aspects of this that are biologically impossible like the symmetry,
+but we're going to just put that aside for a moment. And now we're going to say,
+now we're going to define a transition function, which is the transition function used by Gibbs
+sampling, where we condition on all the neurons except one and sample from the conditional
+distribution of that one neuron, conditional on all the other ones, and you get a rule which
+will be familiar to many of you, which is you take the sum weighted activations, the inputs to
+that neuron, and then you pass it through a logistic sigmoid and draw a sample from that
+Bernoulli distribution. So this is basically like a discrete time analog of a linear nonlinear
+Poisson process. But you can interpret this as sampling from this Markov random field's
+probability distribution. And if you clamp any of those states, then those act as data. Those
+are the visible units, and then the other units are the hidden units. And I'll mention just one
+other thing about this that some of you may already know that this is very closely related to
+hot field networks. So hot field networks are basically like the zero temperature limit of this
+model. Okay. So if we just start with some of the summary statistics that people have
+quantified about neural variability, for example, in V1, you can set up this kind of network to
+emulate some aspects of the known properties of V1 neurons. So for example, you can get skewed
+inter-spike interval distributions and a coefficient of variation that's close to one.
+But those are not really unique properties of this particular kind of network, but I'd refer
+you to Lars Brussing's paper, which was kind of the first paper to really take seriously
+this neural dynamics as a sampling idea and look at how you could take that basic network
+architecture that I just showed you and make it more biologically plausible, for example, by
+introducing refractory periods and things like that. There's other evidence, for example,
+of multistability in the hippocampus where you get things like flickering between
+different place field maps or place fields that seem to be poorly correlated with each other
+across repeated entries into the same environment. And by analogy with how we understood
+perceptual multistability, it's tempting to interpret these kinds of phenomena as
+multistability in the neural representation of space. But I think a lot more work has to
+be done to really make that argument plausible. Right now it's just kind of suggestive evidence.
+Now, gib sampling is very convenient in the sense that it's easy to imagine how a neural
+circuit could implement gib sampling, but it's not very efficient. And it's not very efficient
+in the following sense. So gib sampling is known to often give rise to random walk behaviors.
+In essence, what that means is that the network is going to get stuck in local optima because
+it's doing these local changes in a very undirected way. So it's kind of exploring randomly in some
+region of the space. And it's not going to move very quickly along the energy function.
+I mean, it eventually will generate samples that occupy low energy states, but it could take a
+really long time. And that's why statisticians and even before them physicists had developed
+techniques for more efficient sampling from probability distributions where, and this
+specifically applies to cases where the probability distribution is differentiable.
+And so we can basically take advantage of gradient information in the energy function
+to follow, to do a directed stochastic sampling of that distribution. So we kind of move along
+low energy regions of that distribution. And this is sometimes when it's Hamiltonian,
+Monte Carlo. And the basic idea is that you can implement this by introducing an auxiliary
+variable and alternate between sampling from the auxiliary variable and sampling from the
+variable, the state variable. And Lawrence Acheson and Maté Lengel have developed a specific
+neural implementation of this. And maybe Maté will talk about this in his keynote talk.
+And the way that they do this is that they have excitatory neurons that represent the
+latent variables, the state variables. And then you have inhibitory neurons which represent
+the auxiliary variables. And these are reciprocally connected. And they both receive input from the
+stimulus, they receive stimulus input. And if you set this up correctly so that
+these two variables are basically drawing, the dynamics of these variables depend on the gradient
+of the log probability distribution, then you can show that this exactly implements Hamiltonian,
+Monte Carlo and is much more efficient than the kinds of Gibbs sampling algorithms that I showed
+you before. And it also produces some interesting emergent properties. So for example, you can get
+oscillations from this because of the reciprocal inhibition. And you can also get balanced
+excitation inhibition, which is arguably a hallmark of cortical activity.
+Another interesting idea is to apply MCMC not to activities of neurons but to actually synaptic
+plasticity. So one thing that we know about dendrites is that the volume of dendritic spines
+varies continuously over time and possibly stochastically. So if you image some synapse
+at any given time, there's going to be highly variable configuration of dendritic spines.
+And new spines are continuously being formed and existing ones are also continuously being
+eliminated. And one interpretation of this is that this variability arises from some kind
+of sampling based inference over the synaptic strength, so over the parameters of the graphical
+model. And this was explored in more detail by Kaplan and Wilkin-Mason colleagues. And I'm not
+going to go into detail, but I'll just refer you to this paper if you're interested in learning
+more. And they basically showed how you could set up synaptic plasticity rules that stochastically
+sample from the distribution of synaptic strengths. And then you can interpret this as a MCMC algorithm.
+Yeah.
+All right. Yeah. So let's go back to this graphical model as an example. Okay. So
+this assumes that we know W, this weight matrix, but we don't know S, the state variable. So we're
+trying to infer the state variable conditional on knowing what the underlying parameters of the
+graphical model are, W, right? But you could also have uncertainty about W itself, right? And we can
+write down, so typically what we would do is we would treat this as a point estimation problem
+and we'd write down plasticity rules that estimate a single value for W. That's the standard way
+that it's usually done, but we could alternatively treat this as a probability estimation problem
+and try to infer the whole posterior distribution over W. And that's kind of the logic of this
+synaptic sampling idea. That distribution is going to be intractable, but we can stochastically
+sample it via MCMC in the same way or analogous to the way that we would sample the state variable.
+Okay. So to summarize so far, MCMC can account for many aspects of neural and cognitive dynamics.
+One general concern here is that it's slow, right? It's going to take a while to
+generate all of those samples. And I think this goes back to your question, or one of
+your guys' questions about, you know, is this possible for generating samples at the time
+scale that we're looking at activity? So I think that's an important question
+and one that the subsequent section is going to address. So I'll mention one other thing,
+which is it's not really well designed for tasks that require online inference. So
+suppose that data are streaming, they're coming in a stream and you need to update your
+posterior online, you don't want to have to be rerunning the Markov chain over and over again
+at every time step, right? So that seems highly implausible. So that motivates a different class
+of algorithms based on important sampling. So here's the basic idea of important sampling.
+So instead of distributing samples in time, like MCMC algorithms, we're going to distribute them in
+space. So imagine we're going to draw a whole bunch of samples simultaneously. But again,
+the problem comes back to bite us, which is how do you actually generate those samples? So we're
+going to assume that you can sample from some other distribution phi, which is easy to sample from.
+And then what we're going to do is construct a weighted set of delta functions from those samples
+and the weights are going to depend on both the generative model and this proposal distribution
+phi. And that specific functional form of the weights is given here. So in the numerator,
+it's just the joint probability of the samples in the data. And then the denominator is phi,
+the probably that phi puts on those samples, and that's to compensate for the fact that
+you're sampling from the wrong distribution. And you'll notice that if we assume that you're
+sampling from your prior, then this simplifies so that the weights are just normalized likelihoods.
+And this idea has been exploited to formalize a particular neural implementation of important
+sampling that she and Griffiths developed. And the idea here is that we have a bunch of stimulus
+tuned neurons. And the tuning functions of these neurons basically correspond, are directly
+encoding the likelihood function. And then these neurons are being recruited with probability
+proportional to the prior. So that would imply that the distribution of preferred stimuli
+should correspond to the prior. And then basically what you can do is very simply just take the
+activations of these stimulus tuned neurons that are recruited with probability proportional to
+the prior. And once you normalize them appropriately, you can get the correct posterior probability
+of this, asymptotically at least. So they apply this to the oblique effect, which is defining that
+sensitivity to orientation is greater for cardinal orientations than for oblique orientations.
+And there is a normative explanation for this ecological explanation, which is that
+if you look at natural images, cardinal orientations are much more frequent than oblique
+orientations. And so it makes sense that you would want to represent those with higher probability.
+And the way that they implement this in their model is assuming that the distribution of
+neurons tuned to particular orientations follows this ecological distribution,
+this ecological prior, so that you have more neurons that are tuned to cardinal orientations
+than oblique orientations. And that seems to be consistent with the data on neural tuning curves
+in V1. So let's talk now about particle filtering, which is the online version of
+important sampling. So the idea here is that I'm getting data, one data point at a time,
+and I can recursively update my importance weights using the following simple formula.
+So I'm just recomputing my importance weights by multiplying this new likelihood with the previous
+importance weight, and then renormalizing. And this has an interesting property, but I have
+to tell you one more thing about particle filtering, which will make this make more sense,
+which is that if you do this, you may find yourself in a situation where many of the particles
+are conditionally unlikely. They have really low importance weights. So effectively,
+they're not doing any work for you in the posterior. So ideally, you'd like to get rid of them
+by deleting them and resampling the particles according to their importance weights. So the
+idea is that I'm going to keep a particle around in proportion to its importance weight,
+and then continue updating the particles that have survived that resampling step.
+And so that's going to get rid of conditionally unlikely particles. But the problem is that
+what it also means is that if some particle now becomes conditionally likely later on for
+later evidence, you're not going to have that particle around anymore. And so you're not going
+to be able to have the correct interpretation for that later evidence. And that leads to,
+so this is essentially a kind of order effect. And you see this
+behaviorally in what are known as garden paths. So this is most commonly
+studied in linguistics. And this is the situation where initially promising hypotheses are invalidated
+by later data. So humans are getting stuck with their initial hypothesis and fail data
+in for the correct hypothesis. And as I said, this could be accounted for by some kind of
+resampling step in the particle filter. So here are a few examples of garden paths in linguistics.
+These are sentences you read them in. At first, you don't quite get them, and you have to kind
+of go back and figure out what they mean. So the old man, the boat. Yeah, the horse race past the
+barn fell. The horse that race past the barn fell, right? So if you think about what's going on here,
+the problem is that the first part of the sentence suggested a particular syntactic
+interpretation that was invalidated by the later part of the sentence. And Roger Levy and colleagues
+have formalized this in a particular parsing, stochastic parsing model. So the idea is that
+the particle filter is now doing inference over parse trees. But because of resampling,
+it's going to delete some of these parse trees. So he uses this example of the woman
+brought the sandwich from the kitchen tripped. We can focus our attention on two interpretations,
+a main verb construction and a reduced relative construction. So initially,
+the main verb construction is favored by the initial data. But then by the end of the sentence,
+the reduced relative construction is favored. But the problem is that if you've deleted the
+reduced relative construction because it was conditionally unlikely, then you have trouble
+parsing the sentence and you have to go back. Now, the idea of garden paths is actually
+more general than just linguistic. So we've studied this in concept learning, so specifically a
+number of concept learning. And one of the reasons I want to tell you about this series of studies
+is because we were interested in what kinds of algorithms are really scalable to more complex
+compositional hypothesis spaces that have a much vaster hypothesis space than what I've been telling
+you about. So we used a sequential version of the number game, and I'll explain to you what that is.
+And we explored whether putting people under cognitive load would exacerbate
+garden path effects. So we were also trying to look at this kind of computational rationality
+interpretation to see if reduction of resource availability will have an effect on garden paths.
+So here's how the sequential number game works. So I'm going to give you a number,
+and you're going to have to tell me which other numbers between 1 and 100 belong to the same
+number concept. In other words, I'm generating samples from some concept like numbers between
+1 and 10, or even numbers, or odd numbers, or powers of two. But I can also generate from
+compositional number concepts, like even numbers between 20 and 40. So the way this works is I'm
+showing these numbers sequentially, and then subjects on each trial are going to give you
+this, the extension of that, the hypothetical extension of that number concept. And the critical
+thing that we did here was this order manipulation, where we took the same set of numbers, but we
+changed where in the sequence the number 31 appeared. And the reason this was relevant is because
+intuitively, when you see 31 early, then you favor the hypothesis numbers between 20 and 40.
+But if you see the number 31 late, then you favor the hypothesis multiples of three.
+So here's what the data looked like. Oh yeah, and I forgot to mention that we put
+some of our subjects we put under distraction, so they had to execute a working memory task
+simultaneously while doing this task. And so I'm comparing distractor and no distractor
+across with whether the number 31 came early or it came late. And so you can see that when the
+let's just look at the no distractor conditions first. So the people favored the,
+sorry, let's just look at early versus late under no distractor. So people favor the numbers
+between 30 and 40 concept when the distractor came early, but they favored this concept of,
+they had some kind of mixture of the concepts of multiples of three and numbers between 30 and 40
+when the distractor came late. And I should have mentioned that what I'm showing you here are the
+responses at the very last trial, okay, so they've seen the entire sequence of numbers at that point.
+So you can see now that there is an order effect consistent with the intuition that I just gave
+you and that that order effect is exacerbated particularly in the late condition when I put
+people under cognitive load with this distractor. And we can capture this with this particle filtering
+model by assuming that there's this resampling step and also that when you're under distraction,
+you have fewer particles available to represent this hypothesis space.
+Similar to how she and Griffiths implemented important sampling in a neural circuit,
+Hwang and Rao have developed a neural implementation of particle filtering.
+I'm not going to go into much detail about this, but essentially it's a similar idea except that
+because we're now talking about updating dynamically, what they've done is implemented
+this forward transition model for a dynamical system in the recurrent connections and then
+the feedforward connections correspond to the observation model. So the feedforward connections
+are providing the likelihood function and the recurrent connections are providing the dynamics
+of the prior. And then they show that you can, that this kind of model can generate stochastic
+samples that can capture things like multimodal distributions, but it's still an open question
+whether this kind of model will produce the kinds of garden path effects that we saw in
+the cognitive studies. So there's still a gap between the cognitive studies and what we understand
+about the neural implementation. So to summarize so far, particle filtering offers a psychologically
+and newly plausible mechanism for online approximate inference. So it fixes some of the problems that
+MCMC had in the sense that you can distribute samples in space, you can sample online,
+so it's more temporally efficient, but it also creates some problems that MCMC
+didn't have as much of an issue with. For example, it gets, it's more vulnerable to getting stuck
+in poor optima compared to MCMC because it can't really do a local search. However, we can augment
+important sampling particle filtering algorithms with what's called rejuvenation, which essentially
+is a hybridization of MCMC and important sampling where we apply MCMC transition functions
+to the samples in a particle filter, and that can ameliorate this problem. So it kind of combines
+the strengths of these two approaches. All right, so the last thing that I want to talk about just
+briefly before we take a break is combining spatial and temporal codes. So we've talked about
+spatial codes like important sampling and particle filtering and probabilistic population codes,
+and we also talked about temporal codes like MCMC, and these have complementary strengths and
+weaknesses, so the spatial codes are fast but inflexible in the sense that they, they can't
+really be, that they may have, they may struggle with more complex distributions even though they
+have the speed advantage, whereas temporal codes can be more flexibly applied to a broader range
+of distributions, but they're slow. So can we combine the relative advantages of these approaches?
+So Christina Savin and Sophie Deneuve have developed one particular answer to this question
+where they assume that samplers are distributed both in space across neurons and across time,
+so the underlying signal is kind of multiplexed spatial temporally, and then they have a linear
+readout which decodes this spatial temporal information into the, into an inference about
+the latent signal, and you can learn those decoding weights, and they've demonstrated how this could
+lead to dramatic efficiency gains because now you're basically sampling in effect with multiple
+parallel chains, so you can approximate this, the posterior inner fraction of a time that you'd
+require from a single chain. So there are interesting psychological implications of this
+parallel sampling as well. So for example, if you ask someone to do something like
+repeatedly estimate a constant time interval, so you're presenting stimulus events at some
+constant time interval, you see, in people's estimates, you see a power law autocorrelation
+function, so it has this functional formula that I've drawn here where k is the lag between samples,
+and there's some interesting work by Xu, Sanborn, and Chater that showed that this kind of power law
+autocorrelation function could arise from sampling multiple chains simultaneously, but they had the
+additional twist which is that they allowed the different chains to be at different temperatures,
+so they actually had this whole hierarchy of temperatures from cold chains that are low
+temperature to hot chains at high temperature, so the hot chains at high temperature are sampling
+much more broadly, but are exploring low energy parts of the state space, whereas the cold chains
+tend to focus on the only the, sorry, the hot chains are exploring high energy parts of the
+state space, and the cold chains are exploring low energy parts of the state space, but you can
+develop a Metropolis Hastings algorithm that can propose swaps between the chains, and that
+has the effect of basically propagating exploratory samples from the hot chains into the cold chains,
+and this kind of complicated machinery which was originally developed by physicists and sometimes
+known as the replica method can produce these kinds of power law autocorrelation functions,
+as well as a number of interesting dynamical properties of human sample generation, so
+it's at least suggestive evidence that maybe this idea of multiple parallel chains has some face
+validity. Alright, so interim conclusions from this section that we can combine spatial and
+temporal codes via multiple chains, this is, I think this is still pretty speculative, like we
+don't, I don't think we have any direct evidence of multiple chains, even at different temperatures
+happening in the brain, but that would be really cool if someone could find evidence for that,
+and there's some provisional evidence that mental sampling uses these multiple chains,
+so in the last few minutes I just wanted to bring up a few other considerations, so one
+thing that I haven't talked about is energy efficiency, so one argument for sampling could
+be that instead of representing a complete parametric distribution that could be quite
+complicated, we generate only a small number of samples, and that could lead to energy efficiency
+gains, and we all know that the brain is, seems to be much more energy efficient than
+conventional computers, so could this help us build low-energy neuromorphic devices, for example,
+and then there's another question which we broached before, which is parsing sources of
+variability, so there's not only going to be variability due to sampling, there's also going
+to be variability due to noisy perception, model misfascification, noisy decisions, and so on,
+and so, so really to make strong inferences about any of this stuff, we need to have a better handle
+on what the different sources of variability are, so I'll stop there and see if you guys have any
+questions or comments, yeah, can you speak louder please, yeah, no, I haven't heard of any applications
+of that, yeah, all right, I think it sounds like people are anxious to get to the coffee break,
+so why don't we do that and we'll reconvene in half an hour, all right, so we've talked about
+Monte Carlo algorithms, and now we're going to talk about variational methods, all right, so here's
+the basic idea of variational inference, the idea is to convert an inference problem into an optimization
+problem, and what I mean by that is that we can think about a set of distributions or parameterized
+distributions, and we want to pick the distribution in that set that comes closest to the true posterior,
+and usually closeness here is measured in terms of Kolbach-Liebler divergence,
+I'll come back later to other forms of divergences, but this is kind of the canonical
+divergence measure between probability distributions, and so the optimization problem is the following,
+so we're going to try to find the approximate posterior queue within some restricted variational
+family that minimizes the divergence with the true posterior, and now the problem though is,
+well there's a few different problems, so first of all this optimization is intractable
+because it requires that we have access to the true posterior, how do we compute the divergence
+if we don't know what the true posterior is, there's also a question which we'll come back to
+shortly, which is how do you choose the restriction on the variational family so that this optimization
+problem is tractable, so it turns out that you can reformulate this in a different way by using
+the following identity, so the log marginal likelihood that's log p of d can be decomposed
+into the sum of the divergence term and this other functional f, which is the variational
+free energy, and the variational free energy has the property that it is tractable to compute,
+well it is tractable subject to some constraints which I'll mention in a second, but the important
+thing is it doesn't require access to the direct posterior, it only requires access to the
+unnormalized posterior, so the joint distribution, the product of the prior and the likelihood,
+and in general basically all the approximate inference algorithms we've talked about
+assume that you can compute the product of the prior and the likelihood for any particular
+sample, the free energy here also requires that you be able to compute this expectation
+under the approximate distribution queue and that's what's going to require some further
+restrictions on the form that that distribution takes, so assuming you can compute that expectation
+and solve this optimization problem minimizing the free energy is going to produce the same
+approximate posterior as minimizing the Kale divergence, but it's tractable because it doesn't
+require access to the true posterior. These first two slides, variational inference is often
+the hardest form of approximate inference for people to get, so you should stop me at any point
+if things are unclear. So how do we, what kind of restrictions do we need to place on the variational
+family to make this optimization tractable, so there's a few different possibilities.
+The most common kind of the classical restriction is called the mean field approximation and it
+goes, has a long history in physics and statistical physics and so the idea here is that the posterior
+factorizes across dimensions of the state space, so we're going to enforce that the posterior
+can be decomposed into the product of a bunch of dimension-specific posterior distributions
+and you should keep in mind that in general that's not going to be the case, in general
+the posterior is not going to factorize in this way, but the advantage of factorizing the posterior
+in this way is that now we only need to take expectations with respect to each individual
+dimension as opposed to the whole joint configuration space and that renders computing
+the free energy tractable and it also renders, it also allows us to derive a coordinate descent
+optimization procedure where we can iteratively minimize the free energy with respect to each
+of these dimensions and then just keep iterating that and that will be guaranteed to reach a
+local minimum of the free energy. The problem of globally optimizing free energy is not tractable
+for most distributional assumptions. Okay, but there are other choices of restrictions on the
+variational family, so for example I could impose a certain functional form on the distribution,
+like I could posit that the variational approximation is a weighted sum of delta functions
+and then the parameters that I want to optimize are both the positions of those delta functions,
+so what are the states and then the weights and it turns out you can do this in a computationally
+tractable way and it turns out the optimal weights are just the normalized joint probabilities
+and this has an interesting connection to important sampling, so the important sampling
+stochastically constructs this Monte Carlo approximation and weights the samples. Here
+we're asking, suppose that I give you K samples, what is the best possible approximation that you
+could come up with for minimizing the KL divergence with the approximate posterior
+and this variational particle approximation gives the answer to that question
+and it can be deterministically constructed, but it can also be stochastically constructed,
+so for example in high-dimensional spaces you might want to stochastically search for the
+particles and so then it blends together some of the Monte Carlo algorithms that we were talking
+about before and the variational algorithms that, so combining kind of stochastic sampling and
+optimization perspectives on approximate influence. Questions so far?
+There's one more important restriction that will be important for some of the empirical
+modeling which is called the Laplace approximation, so the idea is that if your state space is
+continuous, it could be continuous and multi-dimensional, we can approximate the posterior
+as a Gaussian around the mode and one reason that this makes sense, at least in some situations,
+is that there's something called the Bayesian central limit theorem which says that for continuous
+spaces under some regularity assumptions, as you get more data, the posterior will be increasingly
+Gaussian around the mode and eventually will actually collapse to a point at the mode and so
+this motivates or sort of justifies the use of Laplace approximations and the use of a Gaussian
+approximation around the mode of the distribution. Now there's some mathematical tricks here that
+we don't need to worry too much about but basically if you take a second order Taylor series
+expansion to approximate the log joint probability as a quadratic function around the mode then we
+can actually calculate the free energy analytically so it looks something like this, so here's this
+non-Gaussian distribution but we're approximating it as a Gaussian around the mode and using this
+Taylor series expansion we can calculate the free energy and actually optimize this Gaussian
+approximation term. Okay so why am I telling you all this stuff? Well because that's all the setup
+that you need to understand one of the most influential ideas about variational approximations
+in the brain which is predictive coding. So it turns out that if you make a mean field assumption
+combined with a Laplace approximation, combined with the Taylor series expansion, then you can
+with all those those dominoes stacked in place then you can actually derive
+rules for inference in the approximate inference in the brain that have at least at a conceptual
+level a pleasingly simple form. In practice it's more complicated in this I'm simplifying but
+this formulation is going to be sufficient to get the gist of the idea. So if we can approximate
+the posterior Gaussian and we can use the Taylor series so we can compute gradients of that of
+the free energy then you can write down changes in your expectations as proportional to precision
+weighted prediction errors. So the thing in parentheses is your prediction error, it's the
+discrepancy between the observed data and your expectation and then lambda is the precision,
+this is like the reliability of the data and it's importantly you can stack this hierarchically so
+the data could actually be the the data might actually be expectations generated by one level
+of the hierarchy and so you can you can organize this whole predictive coding machinery hierarchically
+and and the idea is that you're one there are feedforward there's a feedforward pathway that's
+propagating prediction errors and then there's a feedback pathway that's propagating the predictions
+the expectations and those expectations are getting updated according to this rule. So that's
+pleasingly simple at least in this abstract form but I just wanted to pause for a second and emphasize
+that to get to this kind of formulation you have to have a lot of assumptions in place and it's a
+common misconception that predictive coding and the free energy principle go hand in hand and that's
+not true that the predictive coding algorithm is not a generic consequence of free energy
+minimization of variational methods so it depends on the restriction on the variational family it
+depends on the particular way that you're approximating the free energy using a Taylor series
+expansion and it depends on the idea that you're doing some kind of gradient descent on the free
+energy in this continuous parameter space. So you need a whole bunch of assumptions in place
+that's important to keep in mind. So that's that's the kind of the technical part about
+predictive coding and free energy principle and and I encourage you guys to also go to this debate
+between Carl Friston and Jeff Beck which I'm sure will be something to watch and oh is that you had
+something to add yeah yeah yeah right I mean well Friston has derived versions of this for
+dynamical models and I just didn't want to make it too complicated here but yeah but the same
+sort of idea applies here he comes up he has this like generalized coordinate system for doing the
+predictive the the plus approximation but why do you why do you bring that up or you just wanted
+to add that that's another restriction yeah right right oh I see yeah so I actually I was
+sort of sneakily hoping to avoid this but since you bring it up I'll mention it which is that
+another important thing that comes up a lot in discussions of free energy is active inference
+oh yeah I'll try to repeat the question the question was what happens when you when policies
+interact with inference basically roughly speaking so that that's the focus of a lot of
+work from Carl Friston and others on what if you can take actions to reduce free energy
+that that's that's what's called active inference and that will have some interplay with this
+predictive coding machinery because now now your policy is going to have an effect on
+on the prediction or through the policy is actually going to be designed to reduce those
+prediction errors but I the reason I didn't want to talk about this in this context was because
+I'm trying to stay as pristine as possible and only talk about approximate inference and not
+action selection but of course in any kind of real agent you have to think about those things
+jointly and and actually um Friston deliberately blurs the boundary between those so so so one
+of the more controversial claims of the free energy principle which I'm sure is going to come under
+debate uh at this debate is um whether you can take uh decision theory and basically just turn
+that all all aspects of decision theory into a probabilistic inference problem so instead of
+doing the normal decision theoretic thing where you have a separation between utilities or rewards
+and beliefs so you basically convert the utilities into probability functions and then
+set if you set that up right then optimizing the free energy is it can be expressed isomorphically
+to optimizing expected utility um and the motivation for doing that is that now you can have kind of
+one algorithm to rule them all in the brain and not have like separate decision and belief components
+right and there's an empirical question to what extent that is actually an accurate description
+of how the brain works yeah well there is optimization in the in the same sense that
+there's optimization here which is that inference the variational methods treat inference as an
+optimization problem right yeah so you can but but the thing is that if you um if you have a good
+approximation of the posterior then that's the same as saying that you have optimized the divergence
+between your approximation and your and the true posterior right the the difference algorithm
+algorithmically is whether you write it down explicitly as an optimization
+algorithm right so so Monte Carlo algorithms usually are not interpreted as optimizing some
+divergence functional um but but it is the case that asymptotically they are optimizing that because
+asymptotically they'll converge to the true posterior and that's going to minimize the
+kale divergence it's just that at each step of the sampler they're not optimizing that the divergence
+so that's the difference between um Monte Carlo methods and these kinds of particle approximations
+variational particle approximations where the variational particle approximation is choosing
+the samples to minimize this divergence at each at each step of the algorithm whereas um
+most samplers are not doing that any other questions all right so so if we kind of take
+this at face value the the theory part now we can talk a little bit about the empirical evidence
+for this and i i think that this is the most compelling part of this whole um the the whole
+set of claims here is is the evidence for predictive coding um now one thing to keep
+in mind is that um there are a bunch of different variations on the idea of predictive coding out
+there not all of them are interpreted in this variational way um so there's a classic paper by
+rau and ballard um where they they first developed some of these predictive well they didn't invent
+predictive coding but they were the first to apply the idea of predictive coding to this higher
+cortical hierarchy um and um but they were not they were not analyzing it as a variational
+approximation that came that was mostly due to carl friston um nonetheless the same intuitions
+apply here which is that um uh the the basic kind of theme that we'll see here is that if you have
+a prediction um that that predicts some pattern of data or or at higher levels some some the if
+you have a higher level prediction that that um anticipates some some pattern of spiking at a
+higher level of the cortical hierarchy then the um prediction can basically suppress the evoked
+response um so a classic example of this from rau and ballard is the end stopping effect um
+so if you have a receptive field uh in v one that that responds to line segments um if you
+extend the line beyond the receptive field that has the effect of suppressing the response
+um to uh to that of that neuron to that um line segment and the way that rau and ballard explain
+this is that um once you extend the line now a higher level um a higher level receptive field
+like in v two can detect a lot a line a longer line segment more visual structure and can it
+basically explain away the um uh explain away the the the smaller line segment so in in essence
+the line the line segment activates some higher level hypothesis which then explains away the
+lower level hypothesis that that there's just a small line segment in that section of the visual
+field and that explains why you get the suppression of the um the response if because the according
+to this predictive coding idea the v one neurons the feed forward pathways are only um reporting
+the prediction error not the prediction itself or the or the stimulus itself uh and one piece of
+evidence that they argue in favor of this interpretation is that it should depend on feedback
+and there is evidence that if you inactivate the feedback pathway to v one then um you can get rid
+of this suppressive effect this end stopping effect um and they model that by basically removing the
+feedback pathways in their model um so that's consistent with this general idea of predictive
+coding there's a number of other examples that I'd like to go through um so here's here this is one
+of my favorite examples predictive coding of shape so this is an f mi study and they they were looking
+at the bold signal in both um v one and the lateral occipital con uh complex loc and they took the same
+set of line segments um but arranged them in different ways um or I can't remember actually
+the same set of lines with similar similar arrangements of line segments but but the idea
+is that in one case in the random case you just kind of screw these little straws around so that
+they don't really um they don't really uh show a coherent physical shape or you can arrange them so
+that they show a coherent two-dimensional shape or you can arrange them so that they show a coherent
+three-dimensional shape um and what they found was that the bold signal in v one was going down
+as you have more visual structure from random to 2d to 3d and the loc signal was going up
+so this is again consistent with this idea that um as you create more structure the higher levels
+of cortex like loc are encoding that structure passing that prediction back down and then suppressing
+the um evoked response in lower level of regions that are reporting prediction errors
+this manifests in a number of different ways so um one way that's been studied quite extensively
+is expectation suppression um so here's an example um from Chris Summerfield and Tobias Egnar
+where they were looking at the fusiform face area with an area that's selective for faces
+and looking at the effects of expectation on the signal in that area so they had a paradigm in which
+faces or how is it how stimulus stimuli would appear with some probability
+so they were parametrically manipulating the the degree of face expectation and they found that
+the the neural response to ffa was going down as the face expectation was going up in contrast
+um the response to houses uh was going up um as face expectation was going up and so this is all
+consistent with this idea that um the ffa is responding not just to the bottom up representation
+of faces but to unexpected faces um uh you can also see this in repetition suppression so
+repetition suppression is the widely observed phenomenon that if you present um a stimulus
+repeatedly on subsequent presentations the the response is going to be lower and what and what
+the study found was that um repetition suppression is stronger when repetition is expected so if you
+compare cases where stimuli were were alternating or stimuli were repeating um you see a bigger
+repetition suppression effect um um when in the repetition repetition condition because now um
+um the um basically because of the same predictive coding idea that that you're gonna
+you're gonna get stronger suppression with higher predictions
+one interesting twist in all of this is that um we've been talking about the mean amplitude of
+the bold signal but there's also information that's contained in the patterns of activity so
+and this turns out to uh these these signals turn out to carry different information so
+it's true that expectation as we've been talking about suppresses bold responses in v1
+but it also seems to increase classifier accuracy um in that area um if you train a
+classifier on the patterns of activity in that area you can read out things like orientation or
+contrast um and um expectation increases the ability to decode those variables even though
+it suppresses the bold response the mean amplitude from v1 yeah v1 um so one we've already seen how
+there's a distinction between feedback and feedforward pathways
+and um we also know that these pathways have a distinct laminar structure so um
+so prediction errors the feedforward pathways are in the superficial layer of cortex and the feedback
+pathways are in the deeper layer of cortex so we predict that um that that we would see um
+prediction error signals being preferentially signaled by the superficial layers of cortex
+and then the predictions being preferentially signaled by the feedback right in the deep layers of
+cortex and recently there's been an exciting development in um MRI technology where we can
+start to make statements about the different lamina um from fmi data and basically this this
+involves trying to unmix the contributions of different lamina to the bold signal uh and you
+you can do this if you have a an unmixing matrix um it's in effect deconvolved the
+the laminar contributions of the bold signal um and I'll show you the results of one study
+that looked at this where um they they were looking at these kinesa triangle stimuli
+so I'm sure all of you see this uh that in the left stimulus it looks like there's a triangle
+that's occluding these circles um whereas in the right stimulus if you if you basically break up
+that triangle then it looks more like a bunch of pac men that are oriented in different directions
+so you don't see the the occluder even though the the underlying segments are there they've
+just been rearranged um and the reason that they use these stimuli is because in the in the left
+kinesa stimulus the idea is that you're going to have a strong prediction that there's some
+um surface at this region of the visual field even though there's no actual contrast difference
+to indicate a surface there it's all based on um these essentially gestalt principles for inferring
+the the occluding shape and so what they found when they when they now try to measure
+the different laminar contributions to to this bold signal for these different stimuli
+they were looking at um they they they broke this up based on whether a particular voxel
+had a receptive field centered on the illusory triangle or on one of the inducers and what
+they found was that um if you look at the regions with receptive fields centered on the illusory
+triangle um you you get a difference between the illusory figure and the no illusory figures
+of the kinesa and the control stimulus um in the deep uh layers of cortex which is consistent
+with this top these top down expectations whereas if you look at the voxels that have
+receptive field centered on the inducer you get um the opposite effect so greater for
+no illusory than illusory in the superficial layers um which are which are hypothesized to
+convey the bottom up prediction error so this seems um like pretty good provisional evidence for
+this predictive coding effect that you can see signatures of these feedback and feedback predictions
+and feed forward prediction errors um in the um lamina as decoded by fmri. Yeah.
+Yeah.
+Yeah that's a super good question you know to be honest I was trying to
+educate myself about the laminar fmri as I was preparing this tutorial and so I'm not I'm not an
+expert on this at all maybe someone here can speak to that I don't know Sam do you know anything about
+this yeah no um so uh yeah I really don't know what the limits of the technology is it's still
+pretty new and people are I think are developing better methods for it yeah um all right so why
+don't we keep going unless there are other questions yeah yeah well um the they have
+similar in the sense that there's prediction errors that are being coded right but but they're
+quite different in the sense that the the classical story about dopamine and temporal
+difference errors is that um they're encoding errors in the value function whereas um here
+we're talking about errors in a in a network of beliefs right so um yeah well so so first
+has an entirely different story about what dopamine is doing um that um that basically tonic
+dopamine signals aren't conveying this precision variable that we were talking about um the lambda
+term um and he so he he doesn't really buy the idea at all that that dopamine is conveying td
+errors because he doesn't buy the idea that the brain is doing td learning right the planning
+as inference idea subsumes td learning into some other algorithm that that's basically all about
+basically he's trying to transform the problem of learning values into a problem of um of
+inference into an inference problem optimizing free energy so I guess the upshot is that they
+have some superficial similarities in the sense that they use prediction errors to to do updating
+but the um what the the thing that they're updating is rather different
+okay um so there is a there is a puzzle here which is that so so far we've been talking about
+examples where predictive coding posits the neural responses to expected stimuli should be
+suppressed but at the same time there are lots of studies that report increased neural responses
+to expected stimuli so how can we resolve this tension um and the answer or one proposed answer
+is that um expectation in attention may have some overlapping functionality but the but
+they're really at a computational level two distinct things happening here so one has to do with
+the the defects of expectation on the prediction errors
+so expectations will suppress the prediction errors but um expectation can also have an
+effect on the precision um and this requires us to have a a little bit more um principal
+distinction between expectation and attention um so so the argument from free energy um according
+to free energy theories is that attention basically corresponds to precision so when
+you are tending to some stimulus or some region of space then you're going to increase your your
+precision um and so and that's going to have this kind of multiplicative or gain modulatory
+effect on the prediction errors and to to make this a little bit more explicit let's look at this
+diagram um from this uh book chapter by peter cook um so the idea is this follows so um let's
+imagine that we have this uh predicted stimulus appearing or an unpredicted stimulus appearance
+so the prediction error is going to be bigger uh for the unpredicted stimulus than for the
+predicted stimulus um but we can also make this distinction between whether um the um
+stimulus was attended or not attended so imagine that i'm getting some attentional queue which
+tells me whether to pay attention to the to the upcoming stimulus um and i'm going to have
+higher precision when i'm paying attention and lower precision when i'm not paying attention
+and then when you multiply these two things together according to the predictive coding idea
+then you get this precision weighted prediction error and you see this interaction effect emerge
+so um for unattended stimuli uh you get someone really doesn't like attention and precision
+but um uh so for unattended stimuli you get higher responses for unpredicted than
+predicted stimuli and that's that's basically the the standard predictive coding story but if
+you're attending then you can get higher um responses higher uh higher precision weighted
+prediction errors for predicted than for unpredicted stimuli so it the pattern basically
+reverses itself um and this was studied in the in the following way so imagine so there's a task
+where um you get a prediction queue which says um which tells you the likely position where a
+stimulus is going to appear and then you in addition get an attention queue which tells you
+whether to pay attention to the stimulus in a particular location um so you can for example
+get stimuli that are attended but unpredicted um or stimuli that are predicted but unattended
+okay um and when you do this you can see this this um crossover interaction uh in the in the bold
+signal amplitude in v1 um so you see that when it's unattended you get bigger responses for
+unpredicted than for predicted stimuli and then this flips around uh for attention consistent
+with that uh simulation of attention weighted uh prediction errors that I showed you before
+um any questions about that okay
+um now I've been a little bit vague about how exactly attention affects precision
+so there there's broadly speaking there's two ways you could do this there's two ways that you
+can increase signal to noise ratio so you can reduce noise or increase signal um and there's
+some evidence for both of these possibilities so so for example um uh across if you look across
+subjects in one there's one study um where they looked at um the um the amplitude the mean amplitude
+of the bold signal in v1 and related that to uh a performance measure and showed that um individuals
+with higher amplitude bold signals um showed greater performance on a psychophysical task so
+that would be consistent with this signal amplification interpretation um and then there's
+another possibility is that there's a noise suppression interpretation which is consistent
+with some electrophysiology data from Cohen and Mansell um where they they found that um the variance
+was lower um for stimuli that that were attended compared to stimuli that were unattended so these
+are two possibilities and they're not mutually exclusive so you could have lower variance and
+higher signal um to produce these attention modulations all right so to summarize the the
+stories this far um um variational inference offers a path for scalable algorithms um and
+if you look in the machine learning literature there's um there's been a trend sort of away
+from Monte Carlo methods which are often considered to be too slow towards variational methods um
+and even towards uh what are called amortized variational methods which i'm going to talk about
+a little later so familiar algorithms like the variational autoencoder basically run on those
+kinds of um those kinds of approximations um now the the predictive coding analysis shows that you
+can implement um variational inference in a neuro neurobiologically plausible circuit um
+but just keep in mind that this requires a bunch of assumptions um so if those assumptions break
+like for example if you can't impose a Gaussian assumption then you have to do something else
+um uh now there's a challenge here so what is the psychological evidence for for any of this um
+one of the problems is that if we can't impose any constraints on the variational family it's
+virtually unfalsifiable and we already sort of saw this in a few examples um like um so the the
+predictive coding framework imposes some very strong assumptions and that's what makes it a
+falsifiable claim about neural activity um but it's a little bit less clear what kind of falsifiable
+claims we can make about human behavior on the basis of those assumptions um nonetheless i'm
+going to try to give you two examples which i think maybe make the case for um psychological
+evidence in favor variational approximation so the first has to do with order effects and factorized
+approximations and the second has to do with um kind of mental graph surgery and causal inference
+all right so um many of you may be familiar with um blocking effects
+i'm using this notation where a and b correspond to q's and the plus and minus is correspond to
+rewards or or absences of rewards um so the four blocking paradigm works as follows so
+i present a q with reward and i do that a bunch of times and then in the second phase i present
+that that same q but in compound with a novel q b and i also reward that compound and then i test
+with um with that novel q so i want to see how much um how much association with the reward has
+been acquired for that novel q and i compare that to a case where the novel q was got the same
+amount of reinforcement but um was not was never reinforced in compound with a and in general what
+you find is that you get more response to uh more reward expectation for b when it was trained by
+itself compared to when it was trained in compound with a another q that was already reward predictive
+and there's a there's a classical explanation of this that comes from the rescorla wagner model
+and the idea is that you use prediction errors to update your estimates and those prediction
+errors are basically um distributed among all the q's so that's the principle of q competition
+so in the first phase you learn that a predicts reward and now in the second phase um because the
+the assumption is that the the reward expectations for a and b summit to produce the expectation
+for that compound and since a already perfectly predicts the reward there's no prediction error
+the reward is totally expected and so there's no updating of b's associative strength beyond zero
+and that's why you get this blocking effect unfortunately that explanation doesn't work
+for backward blocking which is just the same thing except we reverse the order of the phases so now
+we first reinforce a b and compound and then we reinforce a by itself um and then again you see
+that the um the response to b reinforced by itself is is um stronger than the the response
+to be reinforced and compound so that the error the the error driven updating idea no longer works
+here um because um b is not even present during the second phase so how can anything be learned
+about b if b is not even present um models like the rescorla wagner model require that
+you can only they assume that learning can only happen for q's that are present not for apps and
+queues and that kind of inspired a bunch of ad hoc modifications of the rescorla wagner model
+to accommodate that like you know introduction of apps and learning for apps and queues but with
+the sign flip but it was all quite ad hoc there's another important constraint i'll shortly explain
+how to explain both forward and backward blocking but there there's a there's another important
+constraint which is that forward blocking is reliably stronger than backward blocking so how
+can we explain that um so to start to explain just the forward and black forward and backward
+blocking phenomenon by themselves let's think about this as an estimation problem
+so think about this rat in the classical conditioning context and the rat has the
+following linear Gaussian generative model of the world that assumes that the reward or punishments
+as as in the case may be arise from a linear combination of the available queues plus some
+Gaussian noise and so those the weights on that linear combination the x denotes queues and the
+and the w denotes the weights those weights are basically a measure of the associative strength
+to some q and then the inference problem is to basically invert this generative modeling for the
+posterior over over w conditional on the history of queues and outcomes and if you make this these
+linear Gaussian assumptions then the posterior is also going to be Gaussian and you can parameterize
+it by some mean and covariance and it turns out that you can actually update these parameters
+recursively so trial by trial and you can do this analytically using the common filter so a classic
+tool from signal processing and what's neat about this is that the common filter looks a lot like
+those for the Wagner model in the sense that the the weights are updated in proportion to the prediction
+errors but one thing that happens is that you get this extra kind of the learning rates are now
+endogenized into the model and they depend on the covariance structure and so the critical novelty
+here is that you can allocate credit or blame to queues that are absent provided that they have some
+positive or negative covariance with present queues and we're going to use that to explain
+backward blocking but first let that the explanation of forward blocking is essentially the same as
+the explanation for in the risk for the Wagner model that there's no prediction error on those
+on those compound trials and so there's no updating so how do we think about backward
+blocking so let's look at this graphically so let's imagine that you start with a prior over
+weights that's isotropic and Gaussian so that's showing on the left and then your likelihood
+function encodes the fact that there's basically a constraint line so if you get a single unit of
+reward then the queue the two queues have to summit to produce that single unit of reward
+so the weights on those queues can never always have to add up to one and that's what the constraint
+line basically visualizes graphically but there's this kind of blurry boundary around the the
+constraint line because there's noise in the observation so you don't need to exactly satisfy
+the constraint you have to just be near the constraint line so according to baseral we
+can get the posterior by just multiplying these two things together and renormalizing
+and you get this posterior which is kind of this warped ellipse around the around the constraint
+line and the important implication here is that this is a Gaussian with negative covariance
+between the queues what that means is that when one queue goes up when the weight the associated
+weight of one queue goes up the the associated weight of the other queue has to go down and
+that's in order to satisfy approximately the this constraint line and that's what explains
+backward blocking because if we go back to this this blocking at the backward blocking experiment
+so during the compound queue phase you learn that there's this negative covariance between the queues
+and then in the when you reward a by itself you're not only increasing the weight for a but
+you're also decreasing the weight for b because of this negative covariance and that produces
+backward blocking now the problem though is that this doesn't explain the asymmetry between forward
+and backward blocking why is forward blocking stronger than backward blocking and so this is
+where the variational ideas come into play so remember that the covariance terms are critical
+for explaining backward blocking if we assume that the posterior factorizes then backward
+blocking goes away completely is that clear everyone right because the factorization means
+that you can't by definition you can't represent the covariance structure but forward blocking
+doesn't depend on forward blocking doesn't depend on the covariance terms at all right all it requires
+is the fact that you don't get you you don't get positive prediction errors when the queues are
+reinforced in compound now this is not entirely satisfactory because why isn't that you get some
+backward blocking so there is a backward blocking effect it's just not as strong as the forward
+blocking effect so there's a way actually to to get partial backward blocking this was an idea
+that was developed by Nathaniel Daw and Aaron Corville where you assume that the covariance
+matrix is reduced rank so in effect you're you're restricting its ability to represent the full
+distribution the full posterior covariance but it can sort of partially represent partially
+capture some of the covariance structure and that is what what that does in effect is downweights
+the covariance terms and that's that's illustrated in the simulation here so you get you get the
+forward and backward blocking effects but the backward blocking effect is much weaker than
+the forward blocking effect so there's an interesting neural circuit view to this
+which is which was thought out by Shom Kakade and Peter Deann
+where you can interpret the common filter you can interpret the you can implement the common
+filter in the in a particular kind of neural network where the sensory cortex I'm giving
+kind of the neurobiological gloss on this that wasn't in the original paper but let's imagine
+that that cortex is conveying the cues and then there's a there's a downstream region
+with recurrence that effectively implements a kind of whitening transform so when you run these
+recurrent dynamics you're going to extract a new representation of the stimuli of the cues
+that are effectively constituted kind of orthogonal basis and then what you can do
+is do normal associative sort of vanilla associative learning between this
+transformed representation and the outcomes so it's an interesting division of labor where
+you have this kind of re-representation step and a basic associative learning step and that
+and when you put those two things together you can get you can implement the common filter using
+that machinery now that's assuming that that it can perfectly implement the common filter if
+you assume that there's the same number of units in the hidden layer as there are in the input
+layer so every cue gets its own kind of unique re-representation in this hidden layer but if
+you restricted the dimensionality of the hidden layer or if you put some regularizer so that it
+was limited in in its in its expressivity then it would no longer be able to represent the full
+posterior covariance and that's in effect a way to implement this kind of reduced rank
+transformation so you constrain the representational flexibility of this hidden layer
+and that's that's what i'm showing here okay now this is all conjectural there's no there's no
+direct evidence that this is what's happening in backward blocking unfortunately there's very
+actually very few studies of backward blocking in animals so this is kind of an open question whether
+this is a good story or not any questions so far yeah well can you can you elaborate a little bit
+the question was about mutual information but what about mutual information
+right well the covariance is expressing mutual information i mean that that's
+there's there's going to be a correspondence between the covariance between cues and their
+mutual inflammation i don't know if that helps at all yeah yeah okay well we can we can talk about
+it more later if you want all right so if everyone if there are no other questions about this part
+i'm going to talk about the causal graft surgery as another case study in how variational approximations
+might come into play in approximately in like explaining psychological phenomenon
+so here the idea is that if you have some if i give you some causal network and you have to
+make some inferences about that network doing exact inferences in that network might be very
+difficult but it might be easier if i could basically do some surgery on the graph like cut
+some of the connections or delete some of the variables so that now i'm doing inference in a
+simpler graph and then we can ask the question which is in essence a variational question
+which simplified graph is closest with from drawn from some some restricted family of simplifications
+closest and kale divergence to the true posterior over the graphs and Thomas Eichhardt and Noah
+Goodman have used this idea to explain a number of seemingly irrational behaviors in the causal
+inference literature so i'll give you an example which is a neglect of alternative causes so there's
+an empirical finding which is that you neglect alternative causes more in predictive inference
+tasks compared to diagnostic inference so so the difference in between predictive and diagnostic
+inference tasks is illustrated here you have the same set of variables but in the predictive
+inference task you're trying to reason from cause to effect and in diagnostic inferences you're
+trying to reason from effect to cause right so why is it that people seem to neglect alternative
+causes more in predictive inference tasks so what Eichhardt and Goodman showed was that
+the sub model in which which is ignored so if you have this alternative cause if you ignore
+that alternative cause that doesn't have as bad of an effect on your inferences
+in the predictive inference tasks compared to the diagnostic inference tasks in the diagnostic
+inference tasks you could do catastrophically bad if you ignore the alternative cause but you
+could still predict pretty well if you ignored the alternative cause and they quantified this in
+terms of the the kale divergence and so this is one idea about this is one example of where you
+could take ideas about variational inference and show that that people might be adopting certain
+restrictions on their variational family now I don't want to get into the details of this but
+I thought it's worth mentioning which is that there's a there's a world beyond free energy
+I know that that sounds heretical
+so the kale divergence is only one possible measure of divergence between the true posterior
+and its approximation there's a wider family which is known as the alpha divergence family
+and remember that you know I'm kind of going back and forth between talking about free energy
+minimization and kale minimization because in essence they're doing the same thing in variational
+inference so understanding this equation is not important that what's more interesting
+is the kind of special cases of these alpha differences so you can get free energy minimization
+when alpha goes to zero but you can also get other things so you can get other kinds of algorithms
+like expectation propagation and assumed density filtering when alpha goes to one
+and there are other sort of lesser known things but but what's interesting is that these have
+qualitatively different behaviors so so free energy minimization tends to
+try to capture the modes of the distributions even if even if it means ignoring it captures sort of
+the the mode with the highest probability mass even if it means ignoring some of the other modes
+whereas algorithms like expectation propagation try to cover cover as many modes as they can
+with a single distribution so that's what's shown on the right where you kind of stretch
+your approximate posterior over a bunch of different modes as opposed to squash it onto a
+single mode and you can make a kind of more general characterization of this with respect to this
+alpha parameter so the critical difference has to do with zero first thing versus includes a zero
+avoiding behavior so when alpha is less than zero you get zero forcing behavior which means that
+when the probability distribution the true probability is zero it forces the approximate
+probability to be zero and this is going to keep the areas of largest total that that means that
+the approximate posterior is going to be forced to keep the areas of largest total mass so that
+you'll get this kind of mode seeking behavior whereas when alpha is greater than one the
+approximation will stretch to capture all the modes so this is a kind of zero avoiding behavior
+who knows whether any of these
+divergence functionals are relevant for neural computation or psychology but I think it's
+important to to know about some of these things so for example like you know Zach has stuff on
+tree-weighted belief propagation so that's a different alpha divergence from you know the
+kinds of mean field approximations that are often applied to neuroscience and so we should keep in
+mind that there's these are actually you know qualitatively different options here any thoughts
+or questions about this so far yeah
+well I mean I guess I should first start by saying that
+we should distinguish between applications of mean field approximations to
+analyzing neural systems as opposed to modeling neural systems so what I mean by that is you
+know the classical application of mean field approximations to computational neuroscience
+was taking some complex joint distribution over neural activities and then imposing the
+mean field approximation so it's not that the neural circuit itself is is implementing the
+mean field approximation we're just we're just using that as an analytical tool to
+make some characterizations of that neural circuit right so that's purely a data analysis tool
+and I'd say that's much more common than the actual actually using the mean field assumption
+in the model of the neural system which there's you know not that many people have done that but
+I think I guess generally speaking people have always liked the mean field approximation because
+it's simpler it's easier to implement it's it's often broadly applicable so like you can implement
+mean field approximations for basically for most exponential family distributions
+so it's always been kind of a workhorse of variational inference and there's other issues
+here which is that that have to do with convergence guarantees and things like that like
+when you run the mean field approximation you're guaranteed to to reach a local
+optimum of the variational free energy and if I'm remembering correctly that's not true of
+expectation propagation but I I may be misremembering that
+yeah but I think I think so anyway I just wanted to open your your minds to these
+alternative possibilities without trying to advocate for any one of them
+all right so so this kind of raises a bunch of questions and we can if you guys would like we
+can spend some time discussing these so what divergence is the brain optimizing how can we
+even know you know what kind of approximation family is the brain using so even once you
+commit to the divergence functional what what what what family is the brain using
+is there one divergence or maybe the or approximation family or does the brain use
+a bunch of different ones is there generic optimization machinery that's being applied
+to all inference problems or do we have specialized inference machinery for particular
+problems so for example I already said before that you need to make these Gaussian assumptions
+and gradient descent in this continuous parameter space to make like the classical predictive
+coding schemes work but maybe you need other things to other other assumptions to make them work
+for other kinds of variables like discrete variables and then another important question to
+think about is what kinds of constraints do probabilistic approximations place on generative
+models what I mean by that is I could dream up some super complicated generative model but if
+inference is intractable in that generative model then what good is that to me right I you know
+really I want to only think about generative models where I can actually do tractable inference
+and and even in the cases where I try to do you know quasi tractable inference you know approximate
+inference in some complex generative model my inferences might not line up very well with the
+true posterior for that generative model so I may I may end up having a pretty stark mismatch
+between my inferences and the true posterior so that might add that might mean that the brain
+selects generative models that are somehow matched to its approximation machinery so I don't know
+if any of you guys have any thoughts about that I don't know well I guess it depends maybe maybe
+you can yeah right right I think it's just so hard to make a general statement about that but I
+think you could probably prove that certain combinations are distinguishable I feel like
+I don't know if wage is still here I think he was doing some experiments trying to do something like
+yeah I mean I still think it's yeah I still think it's meaningful to because how do we
+even talk about approximate inference or inference at all if we don't know what kind of generative
+model we're assuming I mean then we may as well just abandon this whole perspective right because
+we just there's no way to derive ex ante predictions about inference if we don't
+start with a generative model yeah yeah right right right and yeah no no I think that's that's
+a super interesting possibility and I guess I guess I don't know how else to deal with that
+except on a kind of case-by-case basis like someone should say I think the brain is doing
+this generative model in this inference and then we'll try to come with some alternatives that
+maybe and maybe we'll find out that it's not identifiable in the end anybody else yeah
+so we're always wondering this framework of optimization but I mean there's stuff on the
+traditional in the old days or even T even if for example it's not following any cost
+function that's not an optimization problem is it TD learning is not why not I mean there's a
+I mean it you're trying to minimize that you know there's a there's a bellman optimality
+equation that you're trying to satisfy right yeah yeah I mean it's suspenseful
+yeah uh-huh
+yeah but you're sorry so say again
+right
+right
+yeah no I think that that always seemed very plausible to me that you could have this kind of
+society of mind we have a bunch of different systems trying to do their own thing and then
+there's not necessarily unified cost function I mean at some level if you believe in evolution
+there has to be a unified cost function which is fitness but but at the level of the
+organism the optimization that's being performed in the single organism that might not be
+yeah yeah
+um
+what do you want to do with variation inequalities
+yeah I mean I mean you you you can read Carl Friston right he's trying to
+put everything into this framework right so um so you can judge for yourself whether he succeeds
+yeah all right so one yeah yeah yeah yeah
+well sorry well I think the predictive coding is the most plausible example of that right
+that that's a that's a biologically plausible architecture for implementing
+you mean like can we can we reverse engineer the constraints on the variational family from
+some biophysical constraints um maybe I mean I think that I think that Carl Friston has tried to do
+things of that sort um and and there's certainly some there's a paper by Andrey Bostos about how
+you can use cortical canonical microcircuits to implement various predictive coding schemes and
+so there there there's stuff like that I don't know how strong reverse inference you could make
+from that but I don't know was there a comment over here that you wanted to jump in yeah
+oh you're Andre okay
+okay so all right so talk to Andre he seems to have the answer
+yeah okay well that's that's interesting to know yeah
+yes among other things
+yeah
+yeah that's an interesting idea so I would imagine yes I think that's so one thing that I
+always wanted to do was like variational signal detection theory basically you know
+most of signal detection theory is based on Gaussian assumptions so what happens if we have
+some non-gaussian distribution like a heavy tail distribution but then we we assume that you're
+doing signal detection theory with a plus approximation so you're basically trying to fit
+a Gaussian to this non-gaussian thing so you're going to have some systematic biases
+relative to the ideal observer so I think that that that could be done and I'm not aware of anyone
+having done that yeah yeah well well one trick with mixture of Gaussians is that you can have a
+kind of auxiliary variable setup where you condition on the mixture component so you
+you sample the mixture assignments and then everything is Gaussian conditionally Gaussian
+right so then you can kind of get around that but I don't know I don't know the answer then
+specifically in the context of predictor and maybe someone else does yeah
+yeah yeah yeah but but so so actually years ago I wrote a paper that derives
+variational inference for mixture of Gaussians approximation so if you're interested that was
+that was a machine learning paper and we didn't make any claims about the brain but that but so
+you have it's not entirely trivial right so you have to you have to make you have to make some
+additional approximations to to make that optimization problem tractable it's called
+non-parametric variational inference if you're interested all right so why don't we keep going
+okay great so let's go to move on to amortize inference which to me I think is kind of the
+most exciting direction here so most of the approximations we've been talking about most
+of the approximations studying in psychology and neuroscience are are memoryless what that means
+is that if I ask you to solve like a sequence of inference problems your solution to one
+inference problem will have no effect on your solution to the next inference problem you're
+solving each of them de novo and this is obviously wasteful because there could be
+significant shared structure across inferences and it's not being exploited so how can we
+formalize sharing of structure across inferences so one way to think about this in the variational
+framework is that we're gonna instead of modeling a separate variational posterior for each data set
+we're going to model a mapping from data to to posterior so I'm now I'm now writing this explicitly
+as q of s given d and now there's an additional thing here which is this expectation under p
+tilde of the klde version so what is that so p tilde is the what we're calling the query distribution
+over the data so this is the distribution over data that data sets you're going to be exposed to
+that's some stream of data sets and the idea here is that you want to optimize this mapping
+from data to posterior that minimizes the klde versions on average with respect to the query
+distribution so the intuition here is that if you assuming that this variational approximation has
+some limited capacity you want to concentrate the approximation resources on regions of the
+data distribution that have high probability under the query distribution okay so an example is
+shown here so I'm sure on the x axis the prior and the y axis is the the likelihood and so this
+is a particular joint distribution and then and then that contour plot superimposed on it is the
+query distribution and so what's shown in the middle is the result of running this of optimizing
+that expected KL of solving that expected KL optimization problem where now you get a good
+approximation of the posterior primarily in the regions of high query probability and outside that
+region you basically say whatever I'm not going to care about those regions because I don't see
+them very often right so and so so I'm concentrating regions resources on regions of high probability
+and ignoring the regions of low probability and one consequence of this is that if the depending
+on how you structure that mapping if there's some kind of convergence of that map so shared
+parameters across the problem across the different posteriors then you're going to have a kind of
+learning to infer effect which is that solving one inference problem is going to bleed into your
+solution to the next inference problem so we can make this a little bit more concrete let's imagine
+a particular neural network that's implementing this mapping from data to posterior so you get a
+query the query includes the data set itself and the question you're being asked about the data
+and then that gets passed through some hidden layers some computational bottleneck
+and then and then outputs the output which is some sufficient statistics of the posterior so how
+we choose to represent the approximate posterior so the implications the first one I already mentioned
+people are going to learn to infer so even when you know all aspects of the generative model
+so there's no learning about the distribution itself judgments are adapted to the query
+distribution so we're going I'm going to talk in a moment about experiments where we think that
+people aren't actually learning about the world they're learning about their internal inference
+machinery so they're learning how to infer and then the other important implication is that
+inference is not memoryless so early influence early inferences influence later ones
+and people should learn to ignore their priors when they're uninformative there's a high signal to
+noise ratio under the query distribution and but also to ignore their likelihoods when the signal
+to noise ratio is low in other words they can adaptively pay attention to different parts
+of the posterior calculation like the likelihood or the prior and this doesn't necessarily mean
+that they have some explicit representation of the weighting of likelihood and prior it could all
+happen in this kind of hidden layer of the neural network emergently so a little bit of background
+so the idea of advertised inference is not actually new you know the classic example of this was the
+Helmholtz machine that was developed in the 1990s by Peter Dan and Jeff Hinton and others
+and so on the surface it looks just like a neural network right but the critical thing is that it's
+simultaneously a generative model and a recognition model that is in a they use the term recognition
+model to denote this amortized posterior so the model generates data from the sigmoid belief
+network and then it also tries to optimize a neural network going the opposite direction
+that does inference in that generative model and the same idea has been kind of updated and modernized
+for applications to a bunch of different models most famously the variational auto encoder which
+is a form of amortized inference so you can interpret the encoder as an approximate posterior
+where the hidden layer represents samples from this belief distribution the approximate
+belief distribution and then the decoder corresponds to the generative model and so these two things
+work in tandem to optimize this amortized objective function so from a psychological
+perspective we're interested in the question do people learn to infer can we show evidence
+that people are sensitive to the the the query distribution in making their inferences so the
+kind of the first step in this direction was I reanalyzed some data that I collected a few years
+ago from for a different purpose where subjects were showing we're doing this very simple task
+so they had to predict the next number that appears and the numbers were drawn from a Gaussian
+distribution with some mean that they didn't know and importantly across blocks the mean of that of
+each block was drawn from some other Gaussian distribution so it's a hierarchical Gaussian model
+um and I had two different conditions one where the means across these blocks were were
+very tightly clustered together and one where they were more dispersed so low dispersion high
+dispersion um and um in this context the interesting question here is if subjects are
+learning to infer that they should tend to overreact so they should learn to ignore their prior
+in the high dispersion condition and do that more relative to the low dispersion condition
+because essentially in the high dispersion condition the this this hierarchical prior
+doesn't provide as much information about about the number prediction so they should basically
+learn to ignore that prior relative to what an ideal observer would do so what I'm showing you here
+is that that on the y-axis is the empirical data so how much do people update their predictions
+from trial to trial um and then on the x-axis is the ideal observer so the optimal Bayesian
+model and what you see is that there's this characteristic pattern where in the high dispersion
+condition people seem to systematically overreact to the data so they seem to be updating more
+than they should compared to than the low dispersion condition um if they were being ideal Bayesians
+they would lie along this diagonal line um so that's one first clue that people might be learning
+to infer but the part of the problem here is it's a little bit unclear whether people might have
+also been learning about the generative model at the same time that they might be learning to infer
+so we wanted a cleaner test of this so we went back to a kind of a classic workhorse of um of
+experimental psychology where which are these ball and urn paradigms so the idea here is that
+I'm going to draw one of these urns so I show you these two urns that have different compositions
+of blue and red balls and I'm going to draw one of these urns with some probability those are the
+base rates of the urns and I show this to you in this kind of wheel fortune thing um and then I'm
+going to draw um one marble from one ball from the urn that I selected and show it to you so you
+only get to see the the the color of the ball that I selected and you have to infer the posterior
+probability of over the urns um so what what is what is the probability that uh that the urn
+came from the left the ball came from the left or the right urn um so it's important to emphasize
+that everything you need to know about the joint distribution is given to you here right so there's
+no learning about the world the world is you have it all very explicit for you right um so um
+but what we're one thing we're going to do here is from trial to trial we're going to give you a
+whole bunch of these different uh problems and in some conditions we're going to vary hold the
+likelihood constant across trials and vary the prior in other cases we're going to hold the
+likely the prior constant and vary the likelihood so it looks like this um and the reason we're
+doing this is we wanted to show that even though you have all the information available that you
+need to be an ideal Bayesian um you're going to tend to ignore um the prior when the prior is not
+variable and ignore the likelihood when the likelihood is not variable um and in fact that's
+exactly what what um people do uh it shows that basically people uh learn to infer in the sense
+that they can um uh they can pay more differential attention to the more informative source of
+information based on their query distribution um and it turns out that this can can explain a
+pretty broad range of phenomena um there are many documented deviations from from Bayesian
+updating so um in general for these kinds of ball and urn problems you see that people consistently
+update in the direction prescribed by Bayes rule but they don't they sometimes seem to update too
+much and sometimes too little um and there's evidence for this actually in real financial
+markets so um our claim here is that amortized inference can explain some of these deviations
+and one one clue from the old psychology literature is that if you look at um people people's
+responses relative to um ideal Bayesian response they seem to be better calibrated around odds
+log odds of zero um and then once you get to more extreme log odds either in favor against
+some hypothesis people seem to get systematically miscalibrated and there is an ecological uh
+explanation for this in terms of the query distribution so if you look at those query
+distributions um the um uh they tend to be centered around zero in other words the query
+distribution is centered around exactly the place where people are best are most calibrated right
+and so we don't think that's a coincidence uh we think that's because of learning to infer
+um it turns out that you can also get these kinds of memory-based spillover effects in the
+sub-additivity and super-additivity examples that I showed you before so we've we've done experiments
+where we took the same basic paradigm that I showed you before where people are told about
+some q-object like a table and then they have to um rate the probability that um some subset of other
+objects is present in the image but what we do is we actually organize these trials into pairs
+so they do the pairs of trials um and we're looking at sub-additive and super-additive effects on
+the second trial as a function of unpacking in the first trial right so if people if if people
+were memory-less then it wouldn't matter what you did on the first trial there would be no spillover
+into the second trial um but we we predicted that um depending on whether you have an atypical or
+typical unpacking in the in the first trial that's going to translate into a sub-additive or super
+additive effect in the second trial and in fact that's exactly what we found um um and um in fact
+you can take that one step further and show that um that it's sensitive to the similarity of q so
+it's not just that there's arbitrary spillover from one trial to the next um it depends on the
+similarity of q's between those those two inferences so you only are going to transfer information
+from one inference problem to another um if those inference problems are similar um like
+basically their queries are similar um and that's again consistent with this kind of amortization
+framework um another intriguing phenomena that this could potentially explain is belief bias so um
+if you had this um perfectly generic probabilistic inference machinery in your heads then I could
+give you any numbers of priors of likely and likelihoods and you should be able to crunch
+those numbers and give me back um um an inference and even if that's an approximate inference machine
+machinery it probably it shouldn't um you know the version of the story that I've been giving
+you before is that it doesn't matter what numbers you put into it um whether those numbers are
+plausible or implausible it should just run its approximation and give you an answer um
+but it turns out that that it does matter for people so um if you give people implausible numbers
+then they seem to be worse um more poorly calibrated with the ideal Bayesian answer than if you give
+them plausible numbers so if I told you like um here's a medical test for um uh for hiv the base
+rate for hiv is 99 percent in the population and the medical test has an accuracy of two percent
+right so that's a very implausible set of numbers if you're talking to a doctor in the western world
+and um and so the so the the so the finding here the experimental finding is that when you get
+people these kinds of impossible numbers they're not as good at being they're not as good Bayesians
+as they would be if you give them possible numbers like a base rate of one percent and accuracy of
+90 percent um and we could explain this um by in terms of learning to infer um because remember
+people are optimizing their mapping their their approximate posterior they're they're
+optimizing it for a particular query distribution that is the query distribution that they're
+exposed to in their in the natural world and if you give them weird queries they're not
+going to be optimized for that they haven't allocated cognitive resources to being able to answer um
+query queries outside of their query distribution yeah
+yeah yeah that's a great question so the question is about whether this is motivation dependent
+and um so the assumption here is that you have limited cognitive resources because if you had
+infinite cognitive resources then you could just perfectly represent all mysterious right um
+now there's an open question which is that cannot if I'm sufficiently motivated can I increase my
+availability of resources and therefore get better approximations um and not be quite as
+restricted to the particular query distribution that I'm showing um so the prediction would be
+that if you could motivate someone sufficiently some of these effects would go away um but I'm not
+aware of studies that systematically look at that um there's one other um perspective on on
+amortization that I wanted to bring up which is a regularization perspective um so suppose that
+we're getting this sequence of of queries and I'm looking at one particular query I can break down
+the optimization problem into um minimizing the KL diversions for that particular query plus a
+regularization term that depends on all the other queries or rather the expected KL under this
+query distribution um and the implication here is that if the focal query is high probability
+then the second term counts less that that comes from this one over p of d term um so if I get a
+really if I get a query this really high probability under the query distribution then I'm going to
+ignore this regularizer and I'm just going to try to fit my um approximation to that to that
+particular query but if it's very low probability under the query distribution then I'm basically
+going to ignore that query and just pull my approximation towards the the approximation
+that fits the rest of my query distribution um so so there's a kind of adaptive regularization here
+that's um that makes intuitive sense um and we can we can think about this almost as a kind of
+meta Bayesian inference so um when I have an approximate posterior um I have uncertainty
+about what the posterior should be given the data that I've observed um and that's what the this
+regularization perspective is saying is that I that given my uncertainty I want to pull my estimates
+towards the distribution of of posteriors that I that I'm commonly confront um and this can explain
+for example why probability estimates tend to be biased towards the mean of the query distribution
+this is sometimes called conservatism um and it it's consistent with this idea that
+you know on the tails of in the tails of the distribution your um you have a greater degree
+of uncertainty um and so you should have strong um stronger regularization around the in the tails
+of the distribution and it turns out that it actually makes another prediction which is that
+the variance of the um judgments are going to be higher in around the mean of the query
+distribution because of the essentially because of this bias variance trade-off so you have
+stronger bias um in the tails of the distribution and lower variance but you have weaker bias
+in the mean of the distribution and and higher variance and that and that's consistent with
+the empirical data that that's been recently collected um all right so um to summarize so far
+I've shown you some evidence from a bunch of different sources that people learn to infer
+they their their judgments adapt to the query distribution and and this might um
+offer an explanation of different contradictory patterns of uh under and over reaction that
+are documented in the experimental literature um and it seems seductive to think that this might
+be an account of how the the brain might do approximate inference that there's a single
+network that's outputting posteriors directly rather than running inference from scratch um and
+there's an interesting connection here to um uh deep networks and I think this comes back to a
+question that came up in the previous uh part of the tutorial um so can we connect this in any
+possible way to the kinds of um deep learning architectures that have been applied to um
+systems neuroscience and uh I'll give you one answer to that question so let's take for example
+this very successful model from Dan Yamans and Jim Decarlo um where they modeled eventual visual
+stream as this feed forward neural network well now now they've added some bells and whistles
+and there's recurrence and feedback but but this is the kind of the the initial version of this was
+feed forward um a feed forward convolutional neural network um so one way we might think about
+what's going on here is that this feed forward network is actually the approximate recognition
+model you know approximate amortized posterior for a structured generative model and this is the
+line of argument that was made um by Ilko Yildirim um so he developed this uh structure generative
+model for faces that that has um a bunch of pose parameters like um sorry shape parameters like
+like shape and also texture and then some pose and lighting parameters and these are all entered
+into an rendering a graphics renderer to produce some realistic three-dimensional face um and then
+he modeled the inference about these parameters as uh using this amortized neural network
+that basically tries to map from the data back into the latent space of the structured generative
+model and by training these things conjointly you can synthesize the combination of kind of
+structured generative models which allow you to make um to have sort of strong inductive biases
+about the nature of those parameters but the efficiency of um of deep neural networks
+um so that you don't have to run some very costly inference algorithm and they did a bunch of
+experiments on how people actually make inferences about things like lighting and pose
+and they showed that the um if you try to train a convolutional neural network by itself on this
+task it doesn't do very well um but you can do much better if you you take this um if you use the
+convolutional neural network as the the um recognition model for a structured generative model
+and by well I mean that that uh you know it matches people's human behavior much better
+and in fact they went once that further and they connected uh the the representations from this
+convolutional neural network to um uh to macaque face patch responses and and tried to argue that
+the similarity that the um the similarity structure of these macaque face patch responses matches this
+the particular similarity structure of this um recognition model this confnet that's trained
+as a recognition model um they actually have a I discovered that they have a more recent
+pre-print based on this that you can see on bioarchive which I haven't read yet but I'm sure
+it's great all right so let's go to the the last part of the tutorial thanks for bearing with me
+which is are we making things too complicated so we've we've gone through a lot of
+technical stuff variational inference markup chains uh you know amortized posteriors and so on
+that's a lot of work right to to make to set these things up so that they work properly
+um maybe we're making things too complicated um maybe there's a way to do this with a lot less work
+so this leads to this comparison between bespoke versus versus generic neural networks
+um so we one nice thing about bespoke neural networks that are designed for this very particular
+purpose that we can guarantee that they're doing the right thing under certain circumstances
+but how far can we go with generic non-specialized neural networks that weren't optimized for this
+purpose so this was um um a question that was answered by Ermin Orhan and Weijima
+in this very interesting paper where they took generic neural networks
+um the just simple feedforward networks that and the only thing bespoke about these networks is
+that they were configured to solve particular tasks like q combination um but beyond that they
+weren't specifically designed to solve probabilistic inference problems um and and the only thing that
+they they added thing that they did here was that they assumed that um like in the probabilistic
+population coding models that the gain of the responses at the input layer depended on
+uncertainty so on on contrast for some of these tasks um so so then they basically just train
+these networks without optimizing for probabilistic inference they're just trained to solve this
+particular task um and they did this for a bunch of different tasks like q combination um coordinate
+transformations common filtering causal structure inference um and then what they showed rather
+remarkably is that um the estimates of the variables that they got um for continuous tasks
+were very close to the um the estimates that you get from the Bayes optimal solution
+and on discrete tasks you could even they even show that the posterior probability
+the probabilistic output from of the network so that network can give a probabilistic output
+but it's not actually computing a posterior uh at least not by design uh was very close to
+to the true the true posterior probability um and they they took this one step further and they
+showed that um if you take a if you train a q combination network with two q's and then you
+hold those you basically freeze those the weights for that those that part of the network and then
+you add a third q then the frozen part of the network can combine with this new q once it's
+properly trained um to do three q uh q combination near optimally uh so what that means is that
+in order to do that near optimally you have to have it implies that the these the the pre-trained
+modules have represented something about the uncertainty um that they can then transfer to
+this three q case so it's a pretty non-trivial generalization from this training regime um
+and so so it's pretty interesting I think to to find that you can get kind of probabilistic
+inference behavior out of non probabilistically trained networks and they they make an efficiency
+argument here which is that you need many fewer neurons to achieve near optimal performance
+compared to what you might need for example in a probabilistic population but so it actually
+the minimum number of hidden units you need grows sub-linearly with the number of input units
+which again suggests the kind of attractability argument in favor of this kind of objective function
+there's another way to to construct probabilistic inference from ostensibly non probabilistic
+machinery by introducing a reliability cost this is work by Lawrence Acheson and and Matelango
+so the idea here is that you're going to take a generic neural network that's trained non probabilistically
+or rather it's not trained to output a posterior probability but it but it has a
+it's trained to optimize um or I'll show you what the optimization problem is in a second but I just
+say one more thing about the reliability cost which is that the you know this kind of reliability
+cost is plausible because um we know that signaling mechanisms like ion channels and
+quantal release are intrinsically stochastic and that a big part of our brain's energy budget is
+basically devoted to you know controlling the reliability of this of this stochastic machinery
+so the objective function that they introduced here is a coding cost for encoding some latent
+variable z that depends on the reconstruction error and and the sparseness cost so this is
+basically like a standard optimization problem for a latent variable model um like sparse coding
+model but then they also so so then the idea here is that they combine that coding cost
+with a reliability cost and the and the simplest thing to do analytically is to use the entropy
+because if you use the entropy then the expected coding cost plus the minus the entropy gives you
+the variational free energy um so so what we've done here is shown how if you if you construct a
+network that's just trying to optimize reconstruction reconstruction error plus sparsity penalty
+plus reliability cost then an emergent property of that optimization problem is that they'll
+actually be solving in effect a variational optimization problem that they will in effect be
+optimizing a variational posterior so so it's important to keep in mind that the stochasticity
+of the network is not designed to sample from the posterior rather the stochasticity is just there
+but by training the network to optimize this objective function you can basically harness
+that stochasticity to generate samples from the from this approximate posterior so that's another
+way to get um approximate inference out of machinery that was not um that that was not
+specialized for approximate inference um so what are the implications of this so we see that
+probabilistic inference emerges from networks that are optimized to find good codes while paying
+cost and reliability and and there's this means that there's an interesting synergy between
+biophysical and statistical constraints so you might motivate of reliability cost purely on
+biophysical grounds that is energetically costly to be reliable but that turns out to have this
+other asset from a statistical perspective that you can approximate the posterior that way
+um and there's an interesting um connection here between sampling and variational inference so
+now we have these stochastic networks that are stochastic by virtue of their signaling machinery
+but they can be hot harnessed to optimize free energy um all right so so i'm gonna wrap up and
+then i hope that we can just have some some open discussion um so i hope to convey that
+approximate inference in the brain is inevitable in the sense that there's no other way to do
+inference except approximately but it's also still shrouded in mystery and we have these main
+candidates like Monte Carlo methods and variational methods but really each one of those is kind of
+this box filled with lots of different options for how to construct approximations um and in
+some cases these things might tend to converge like we can build sample-based variational approximations
+so it might turn out to be the case that the the approximation algorithm or algorithms that are
+used by the brain are using all of these things simultaneously in some interesting way and and
+finally um i think that the question of amortization opens up a whole host of interesting issues for
+neural computation this idea that the brain's inference engine is optimized for not just a
+single posterior but for a whole ensemble of procedures and i think that's deserving of of
+significant future work um if you'd like to learn more about this i i just threw up a few
+references here um and i'm sure there's more recent ones as well um and yeah i'd like to open it up for
+questions unless everyone's totally exhausted yeah
+yeah so that yes sort of i mean but i'm not sure how scalable yes there there is like
+so for example some people in machine learning have developed amortized sequential Monte Carlo
+methods yeah oftentimes they use some kind of deep network to parameterize the sampling distribution
+for example yeah no no i think that that is something of the sort that people have tried
+are there questions
+yeah
+yeah yeah so the question is how do you learn the generative models themselves yeah that's a
+huge question i mean a lot of people have thought about that and i i sort of avoided that here
+um but i mean i'd suggest for example looking at work from Wolfgang Maas's lab who's done a
+lot of work on um on learning of generative models yeah anything
+okay all right well thank you guys for listening this is fun

@@ -1,0 +1,322 @@
+This week we are going to be talking about an algorithm for resizing an image but without resizing
+the objects within it. So I've skipped all the way to the bottom of a notebook that you're going
+to go through this week and what you'll see is we've got this very famous image the persistence
+of memory on the left all the melting clocks and then on the right is going to be a squished version
+of it and based on how I tweak this slider we can squish it to be narrower and narrower but
+if you'll notice even as I get it to be about half the width that it was before
+the clocks themselves haven't actually changed their width nor has this
+weird monster looking creature instead the algorithm is smart enough to kind of kill
+the dead space inside the image without killing any of the content and if you contrast this with
+how you know a lot of design software handles things if I were to open up you know illustrator
+and I take the same image and I say I want to rescale it I want to make it half the width
+it squishes all of the contents inside it sort of deforms it other pieces of design software
+actually have different defaults so if I were to go to figma for example and I take the same
+same image and I say okay let's try to rescale it what it defaults to doing is cropping it so
+it'll take out some of the content on the left edge but if you want to somehow get the best of
+both worlds where you're not getting rid of anything on the inside but you're not deforming
+anything on the inside this tactic which is called seam carving is kind of a shockingly
+effective way to do that so I'm going to give the high level view of how this algorithm works
+in this lecture and start to go through a bit of this notebook kind of from the bottom to the
+top at first and as the week progresses with the other lectures we're really going to dig into the
+code for how this is possible so the first step I'm going to go ahead and change what's displayed
+here to give a little inkling of what's going on on the right you'll notice these sort of pink
+lightning bolts what's happening is that with each step as we're making the image smaller
+the algorithm decides on a seam to remove from the image so this is a set of pixels where there's
+one pixel per row that forms this continuous path from the top to the bottom and it has to
+somehow decide what path is the one that's most okay to get rid of so you'll notice right here
+it's this path that's avoiding the branch it's avoiding the clock but it's just going through
+the sky and the ground and it's saying that's probably something that we can cut out and it
+keeps the image looking largely the same and as I keep shrinking it further and further it's
+choosing these other seams which look like these pink lightning bolts so question is of course you
+know how do we find that what is it actually doing and the tactic here is going to be to assign some
+kind of importance to each of the pixels in the screen and then find the path from the top to the
+bottom which passes through the least important pixels or if we were to have you know a number
+associated with that importance as you add up that number from top to bottom it should be
+minimizing that total quantity and there's different approaches that you can take and
+the original paper on this describes several different ones but what we're going to do in
+conjunction with what we were talking about last week is a kind of edge detection so skipping up
+higher in the notebook here we've got the same image on the left and on the right you'll notice
+that we've pulled out all of the edges into this really kind of pretty looking pencil sketch view
+and what we're going to say is that the importance of a pixel is going to be the extent to which it
+sits inside an edge so all of the white ones that we see on the right here would be considered
+important they shouldn't be cut out but anything black so you notice that's coming from the sky
+it's coming from the ground all of that where there's not any sharp edges those are the pixels
+that we're okay removing now in the last lecture on convolutions i touched just a tiny bit on edge
+detection with sobel filters but let me switch to another notebook here to go into a little bit
+more detail on that so i've got a very simple image here which is just a white blob in a blue
+background and what we're going to want to do is somehow pick up on all of the edges which should
+just form a circle around it in this cell here i'm looking at the kernel library and i'm calling
+sobel which if you'll remember pulls out two little three by three arrays so if we were to just
+look at the raw data for one of those arrays the one that i'm naming sx and you'll see it's a three
+by three array it's got values zero down the center column and then positive values on the right
+negative values on the left and if we just pull up a simple function to visualize that
+we're looking at it as blue on the right and red on the left and if we look at the other one sy
+same deal but it's just kind of pulling out from the top and the bottom
+and now let's say we were to do a convolution with one of these filters so maybe i'll take this one
+in the x direction so a simple three by three grid and i'm going to do this convolution against the
+blob image at the top which as you might remember from last lecture means we sort of take this kernel
+and have it walk across every pixel and take a weighted sum what we end up getting is something
+that produces positive values wherever the blob image was fading from bright towards darker
+in the negative values where it was fading from dark towards bright and if that seems like the
+opposite of what you might expect thinking of this kernel remember that with convolutions we
+actually think of turning that kernel upside down before it marches across and again this was all in
+the last lecture if you want to look at that with more detail now instead if we were to filter
+it with the other one the one that was in the y direction and if i go and change what's going on
+down here we see that it picks up on the top and the bottom now i actually want to visualize this
+in a slightly different way so what i'm going to do is let me go ahead and hide this cell
+and i will also get rid of this cell here let's look back at the kernel in the x direction
+and then what i'm going to do is look at a bunch of little vectors on the screen that indicate
+how strong is the convolution of this image with that kernel at various points and then it gives
+a little direction to it so at points where the convolution pops out positive it'll be vectors
+pointing to the right and where it pops out negative its vectors pointing to the left and
+then if i were to do this in the y direction which would correspond to convolving with that
+sy kernel same deal basically anywhere where that convolution is positive it'll be vectors this
+time pointing up and otherwise pointing down and then the main idea here is going to be to add those
+two vectors together so if i were to just take the ones pointed to the right so just the ones
+pointed to the right and i add them with the ones that are just pointing up what we get are these
+ones that are pointing away from the brightness towards the darkness and any of you familiar
+with multivariable calculus might find this very familiar notion it's something known as the gradient
+where if you have a vector that has an x component telling you how much a value changes as you move
+from the left to the right which we might call the partial derivative with respect to x and then
+the y component tells you how much you change as you move up and down the partial derivative with
+respect to y when you package those together it gets you a vector that points kind of in the
+direction of greatest change so often is described as the direction of steepest ascent and actually
+in that sense i should be honest that the vectors that you're seeing right now are technically in
+the negative direction of the gradient because the gradient proper goes from the low values
+towards the high it'll point from low to high and this is doing the opposite for our purposes the
+direction actually won't matter that much all that we're going to care about is the magnitude
+of the vectors that we're looking at and the reason that it's defaulting to this is just because
+when you do the convolution with a sobo filter it flips that filter around first so it's sort of
+doing the negative of what you might expect for the reasons that you know i talked about last lecture
+now while we're here it might be worth really digging into why this particular filter this
+shape of values is a reasonable way to try to measure something like a derivative you know a
+partial derivative in the x direction or in the y direction so if we go over and we just
+picture a grid of values let's say we want to understand the rate of change around the pixels
+surrounding what i've labeled as e here the first dead simple thing you might think to do if you
+want to know what's the rate of change in the x direction is to just look at the value of that
+pixel f and then subtract off the value of pixel e and honestly that would probably work you could
+have an incredibly simple kernel that was just adding up the value to the right subtracting the
+one to the left and that would get you some notion of a partial derivative but if you want more of
+the information and what's going on you might also want to maybe average this or simply add it to
+the difference between e and d you know what's the change between this pixel and what's happening
+just to the left of it so we might add on you know the difference between e and d and potentially
+divide the whole thing by two or average it it doesn't really matter in absolute terms all we
+care about at the end is the relative terms what's the relative change around one pixel compared
+to the amount of change around another and if you look at this of course we can just cancel out the
+minus e and the plus e going on so it's just taking this right value minus the left one and
+again that would probably work pretty well as an edge detecting filter if all you did was take that
+f minus d but with the sobel filter effectively what you're doing is taking a kind of average
+with what's going on on the top row and the bottom row or at the top you know we would
+be taking the same deal but the corresponding terms are c and a here and at the bottom it would
+look like i and g and really what a sobel filter does is it gives more weight to this middle one
+since after all that's where the pixel we care about is so it gives kind of half weight to the
+ones on the top and bottom and then more weight to that middle one and if you unpack what this is
+really saying in terms of where you add and where you subtract it gets you exactly this shape that
+we were calling sx over here and if you just look at its values it's exactly what i just described
+you're taking in that middle row something on the right minus the part on the left most
+and then the top and bottom rows do the same but scale down by a little bit the whole point here
+is that when we use those sobel filters to get a notion of partial derivative in the x partial
+derivative in the y and that gets us a gradient vector if we just look at the magnitude of that
+gradient vector and i'm going to plot it down here where white means a higher magnitude black means a
+lower magnitude what we've done is picked up on the edge of this circular blob and this becomes
+a little bit more interesting if we take something that's different than the disk and we have you
+know another very pixelated image like mario in here so here again we're doing the same thing where
+we have all of the rates of change in the x direction we're adding them to all of the rates
+of change in the y direction and then if we just look at the magnitude of those gradient vectors
+it picks up on the edginess of mario and more than that it tells us that the brightest pixels
+are the ones where there's a really sharp edge and then the ones that are kind of a lighter gray
+are an edge but ones that don't correspond to as much contrast now digging into the code for
+what this is actually displaying you'll notice that i've got a del x and del y being defined as
+the partial derivatives of this image and that partial derivative function as i've kind of been
+describing is basically just applying sobel filters it takes the sx and sy the kernel dot
+sobel that we were just looking at and depending on what i have toggled here it will populate the
+del x term to be a convolution of the brightness of the image with the sobel filter in the x
+direction and then the del y term is a convolution of that brightness but with the other filter
+so that's all the partial derivative functions are doing but this is just a nice abstraction
+so that we don't have to think of the convolution necessarily and you know if i have both of my
+buttons toggled here to say yes we're taking into account the x and the y direction what it does is
+it basically just takes the magnitude of that vector you know it takes the del x direction
+squared the del y direction squared and then the square root of all of that that is going to be
+the notion of importance that we assign to each one of our pixels so jumping back to our salvador
+dolly example that's exactly what's going on with the image on the right and if i open up a little
+under the hood here you can see that we're pulling out these two different kernels the sobel filters
+we are taking a convolution in this case with the brightness of the image and then taking the
+square root of the sum of the squares of those values that's what's determining the the value of
+each pixel and if we scroll up a little bit we can see kind of all of that broken down a little bit
+more this image on the left is the convolution with the sx filter the one on the right is the
+convolution with the sy filter so kind of the edginess in the x direction edginess in the right
+direction but thinking back to our end goal here which is the really clever way to shrink down an
+image by cutting out the unimportant seams this still leaves an open question of what's the best
+way to find that seam from the top to the bottom find some path from the top to the bottom which
+we consider to be passing through the least important of all the pixels well for that again
+let me shift to a smaller example that might be a little bit easier to think about okay so here
+i've got a grid and i've associated a value with each element in that grid and let's say i want to
+start at this one which is 0.3 and i want to find a path to the bottom that passes through the the
+lowest valued pixels now one approach might be a greedy algorithm where we look at the three below
+it and this is going to be our notion of connectedness is that each pixel has to be connected to one
+of the three below it you can't jump more than that we can talk more about what might happen if
+you try but if we take a greedy approach you would just choose the one that's the lowest value so in
+this case it would choose the the pixel with value zero and then we look at the three below that it
+would choose the one with 0.2 the three below that the smallest is 0.4 and we continue on like that
+this would be sort of a greedy algorithm way of finding a seam down the image where the total
+value of all the pixels that it touches is pretty low and in this case if we add them all up it ends
+up being 1.3 but the problem with greedy algorithms like this is that you can't be sure that you've
+actually found the best seam from the top to the bottom and in fact for this example it's not the
+best and we can see that with another much less efficient approach where we search through all
+possible paths from the top to the bottom and then we consider the sum of the values that it passes
+through each one and we're just going to keep track of which one is the lowest after searching
+through them all so here it searched through them all in this small example there were around I think
+200 examples that had to search through and it found one that isn't the greedy algorithm notice
+as it goes from the first pixel from the first row down to the next row it doesn't take the smallest
+choice it takes that 0.1 because that gives it access to much lower values on the way down
+and here it was a total of 0.6 in contrast to the 1.3 that we had from the other example
+but if you start to think about computational complexity on doing a tactic like this where
+we're searching through every possible path from the top to the bottom remember each step involves
+three different choices so you're taking basically three to the power n where n is the number of rows
+that's going to be on the order of the number of steps that you have to take which for any
+reasonably sized image is going to be completely untenable but if we notice what's actually going
+on here there's a lot of repeated computation in doing all of these so for example while it's
+searching through these paths you know on this one it has to add up 0.3 plus 0.0 plus 0.4 plus
+0.0 on and on and then on the next one it takes pretty much the same sum but it's only changing
+that last part and then on the next step it again has pretty much the same sum for the beginning
+with just changes at the end so going through all of these and redoing that sum every single time
+is clearly pretty inefficient there is a lot of room for improvement here
+so the actual algorithm that we're going to use which falls into a family of what we might call
+dynamic programming will make an effort to memorize some of the sums that it needs along the way
+so that it doesn't have to recompute things needlessly so pulling up the very last animation
+here before we jump back to the notebook I'm going to have that grid of values on the left
+and for lack of a better term some people often just call these values the energy so we're trying
+to find a path of minimal energy and on the right the goal is going to be to populate this
+in a way where each value will tell us the minimum possible total energy of some path
+towards the bottom so for example this 1.7 at the top is telling us no matter what path we
+choose to get towards the bottom it has to have a total energy of at least 1.7 so you know maybe
+it involves taking this 0.4 plus 0.4 plus 0.2 on and on it's something that's relatively high
+whereas this little value here this 0.3 tells us there's some path from this pixel towards the
+bottom where the sum cumulative energy is 0.3 and looking over at the corresponding point we
+can probably see what that path is it's this 0.1 plus 0 plus 0 plus 0 plus 0.2 now as far as how
+we actually form this we do it from the bottom to the top so the first step is going to be to
+simply copy that bottom row since once you're at the bottom that's the best that you can do
+whatever the energy of the pixel that you're on that's going to be the minimal total path
+and then for each pixel above it all we do is say what's the smallest number below you
+and then i'm going to add the new energy of the new pixel that i'm on plus the
+minimal energy below it so you know maybe i'll scoot over to a more interesting example like
+this one where it's got three possible energies below it 0.2 0.5 and 0.3 obviously the step that
+it would choose to take is to get to that point two and to get the new cumulative energy we take
+the energy of that corresponding pixel which is 0.2 and that gives us that 0.4 and so that's how
+we fill out that row and then we do precisely the same thing for the next row so let me jump to
+another maybe interesting this is a sufficiently interesting pixel so this one we see that it's
+got three choices for where to hop below it and now it's not looking at the energy of the pixels
+below it but it's saying once i get to that pixel below me what's going to be the sum total energy
+of the minimal path to the bottom from there so in this case the best option would be this point
+two and then we add that to the value of the pixel which is zero and we get that point two
+so we keep doing this iteratively on the way up and what it means is the number of steps required
+is just three times the total number of pixels in the image which is dramatically better than the
+three to the end that we were getting by doing the exhaustive global search the inefficient way
+but this still gives us a way of finding the globally optimum choice for a path from the top
+to the bottom because for example let's say i'm starting from the pixel we were looking at earlier
+this 0.31 all i have to do is look at that and with each step on the way down simply go to the
+lowest so i go to the lowest neighbor here that 0.3 the lowest neighbor there that 0.2
+and keep doing that and what i'll find is a minimal path which you'll notice that 0.6 should be
+familiar from what our globally exhaustive search doing it the inefficient way ended up finding
+after it looked through all of them and did all of these computations it sniffed out the one that
+was in fact total energy 0.6 so that's what we might call the dynamic programming approach
+where it's kind of keeping track of values on the way not having to redo computations
+and let's see what it looks like in the context of our notebook so what we're going to do is
+look at each pixel and ask hey what is the path with least total energy towards the bottom and
+in this context what we mean by energy is the edginess of that pixel measured with the gradient
+like i was just describing so if you say hey what's the uh minimal total energy for some path from
+this particular pixel towards the bottom and then you assign it a color this is what we get
+so just to be clear this image right here is kind of the scaled up version in the context of the
+melting clocks image of what we were building up in a much smaller example over here from bottom to
+top where the pixels which are increasingly teal are the ones that don't really have a good path
+from the top to the bottom so to speak so over here in our notebook everything which is a really
+bright pixel is kind of screaming out do not touch me if you have a seam that ends up where i am
+right now there's going to be no way towards the bottom that doesn't involve cutting out things
+that we want to keep so if we you know compare this to the actual image that we have you'll notice
+that we get these kind of triangle shapes above all of the content so above the strange monster
+creature here um we have these triangles which is a way of saying don't let a seam get into this
+point because once it gets there any path towards the bottom of the image will have to pass through
+something which is full of edges something which has high energy something that we don't
+want to get rid of you'll be going through more of the implementation details in the next lecture
+with a live coding session featuring the great the one and only James Schloss but for right now
+let's actually take a little bit of a peek behind the hood to see what's going on in generating this
+this array of values which again is exactly what we were looking at with this animation over here
+where we're kind of going from the bottom to the top thinking term by term building up values
+based on just adding the energy of a given pixel with whatever the minimal term sitting right below
+it was but let's let's think through that in more detail so we've got this function here
+which is trying to find the the least edgy path you know the least edgy values for a given array
+of energies or edginess or whatever we want to consider e to represent here so we start by creating
+array of zeros with the same size and then we're also actually going to keep track of the directions
+so what direction should we step from each pixel to get to that optimal path that actually makes
+it so that we can draw one of these seams now if you'll remember the very first step before we
+did any of the recursive looks was to copy whatever the bottom row in the energy matrix was over to
+this new one that we're generating and so that's exactly what we do here we take whatever that
+bottom row is for e and we fill that into the least e matrix from there we have a loop that goes
+from the bottom to the top and then we're going to go from the left to the right and essentially
+what we're doing here is we're just finding the minimal value from the least e matrix that we've
+already been building and then we add that together with the corresponding energy value
+of the um of the original matrix and then what we're also doing is keeping track of the directions
+so for example if we were to pop over here and we imagine while we're populating this you know
+we're populating let's say yeah this pixel here so it looks at the three below it it sees that 0.2
+is the smallest one we want to remember that that's the direction it's going to walk
+and so here we're going to assign an index of negative one zero and one for the three possible
+directions that you can step as you go down and we're filling out this um matrix of directions
+what we're calling dirs and what this line says is essentially fill it either with a negative one
+a zero or one depending on what the minimal value that we found was so once we've built up this matrix
+of directions we could actually uh visualize it with a bunch of little arrows if you wanted
+so this is what comes out from a sub portion of the salvador dolly image where we're stepping
+either a little bit down to the left a little bit down uh in the pure direction or down to the right
+and that effectively is the same as having seams for our image so over here we've got another
+little slider which is basically telling us what is the best possible seam from a given pixel on
+the top towards the bottom and it's using that directions matrix and you'll notice on the right
+what it's passing through are all of the darkest pixels right it's the ones that um involve low
+energy so as we kind of play with the slider and walk it across it's showing us the best paths from
+top to bottom that hit low energy pixels which again means hitting ones that don't have edges
+which is the metric that we're using for whether or not we want to include a pixel
+and so that effectively is the algorithm once you have these seams you choose the seam with the
+smallest possible energy and with each step you snip that out of the image and as you snip more and
+more of them out we get a narrower and narrower image um but it's kept all of the content
+now this works particularly well for our melting clocks image but i want to show you an example
+where this fails what are the times we're cutting out the non-edgey pixels might not
+actually give us something that's uh visually what we're going for so i think one good example
+here would be uh looking at starry night because just based on the style of this painting all of
+the stuff in the background pretty much all of the things in the image are edges there's a lot of
+changing in color as you move a little bit from point to point and we can see this when we um
+do our two different filters and compute our two different gradients in this case it's just
+tons of edges left and right and when we put them together to get our pencil sketch we see that
+the background you know the sky is full of whiteness it's full of high energy things that we would
+potentially not want to remove so when we build up that um matrix with our dynamic programming
+approach that says what should i not be touching almost everything in the sky in that actual
+background it seems to want to avoid and the one region that it seems okay going through
+is what actually sits more in the foreground of the image this um sort of bush figure
+and when we actually apply the seam carving you can see that in action we can see how um
+the slices that it wants to take out disproportionately include that dark foreground
+image simply because it has fewer edges than a lot of the things in the background so for
+something like this the performance that still produces something pretty but maybe it's a little
+bit less impressive if our goal is not to distort the objects within the image but that doesn't mean
+this whole algorithm is out the window what it means is that the energy function that you're
+assigning the way that you're putting importance to each pixel might need to change but then you
+can apply the same basic idea of finding seams using this dynamic programming approach and cutting
+them out step by step now just to finish things off i wanted to show you a couple interesting
+points from the original paper on this um on this topic this idea of seam carving you might wonder
+what happens if instead of finding a nice seam from the top to the bottom you just choose the
+lowest energy pixel from each row you know potentially that should take out an even less
+interesting subset of the image as you carve down but if you do that what you end up getting is what's
+in this um image e here where it shifts all of the things left to right so it doesn't actually
+keep the objects intact at all you might also wonder if instead of choosing the seam which is able
+to step either down into the left down or down into the right if you just choose the columns
+which are the least interesting the least edgy um and in that context what you get is something that
+again it kind of looks okay but you have these strange artifacts along the way that make it
+pretty clear that you've messed with the image somehow but i think the most fun thing from
+this paper was when they talked about potentially extending it where let's say you have some kind
+of image where you want to get rid of part of it and in this example presumably uh this was
+someone's ex-girlfriend or something like that and he wants to remove that part of the image
+well if you have any kind of um user interface that lets you manually assign low importance to some
+of the pixels which is to say low energy to some of the pixels so you might go and manually decide
+which part you want to remove and maybe assign high energy to parts that you want to keep like the
+original um person in here then if you do that same seam carving idea and you shrink the image down
+it will get rid of the specific subsection of the image that you want it to and still leave it
+looking pretty similar it doesn't really seem like there was a sharp cut that happened in this one
+which i found kind of an interesting application okay so that's it for today and then um in some
+of the other lectures you're going to look into more of the implementation details behind this
+and also how to make it run as efficiently as you can where's the low hanging fruit there
