@@ -1,0 +1,1007 @@
+A 3D Convolutional Approach to Spectral Object Segmentation in Space and Time
+
+Elena Burceanu1;2(cid:3) and Marius Leordeanu3;4
+1Bitdefender
+2University of Bucharest, Romania
+3Institute of Mathematics of the Romanian Academy
+4University Politehnica of Bucharest, Romania
+eburceanu@bitdefender.com, marius.leordeanu@cs.pub.ro
+
+Abstract
+
+We formulate object segmentation in video as a
+spectral graph clustering problem in space and
+time,
+in which nodes are pixels and their rela-
+tions form local neighbourhoods. We claim that
+the strongest cluster in this pixel-level graph repre-
+sents the salient object segmentation. We compute
+the main cluster using a novel and fast 3D ﬁltering
+technique that ﬁnds the spectral clustering solution,
+namely the principal eigenvector of the graph’s ad-
+jacency matrix, without building the matrix explic-
+itly - which would be intractable. Our method is
+based on the power iteration which we prove is
+equivalent to performing a speciﬁc set of 3D con-
+volutions in the space-time feature volume. This
+allows to avoid creating the matrix and have a fast
+parallel implementation on GPU. We show that our
+method is much faster than classical power iteration
+applied directly on the adjacency matrix. Different
+from other works, ours is dedicated to preserving
+object consistency in space and time at the level of
+pixels.
+In experiments, we obtain consistent im-
+provement over the top state of the art methods on
+DAVIS-2016 dataset. We also achieve top results
+on the well-known SegTrackv2 dataset.
+
+Introduction
+
+1
+Elements from a video are interconnected in space and time
+and have an intrinsic graph structure (Fig. 1). Most exist-
+ing approaches use higher-level components, such as objects,
+super-pixels or features, at a signiﬁcantly lower resolution.
+Considering this graph structure in space-time, explicitly at
+the dense pixel-level, is an extremely expensive problem. Our
+proposed solution to video object segmentation, Spectral Fil-
+tering Segmentation (SFSeg), is based on transforming an ex-
+pensive eigenvalue problem inspired from spectral clustering,
+into 3D convolutions on the space-time volume. This makes
+it fast, while keeping the properties of spectral clustering. We
+are the ﬁrst, to our best knowledge, to propose a practical
+spectral clustering approach to video object segmentation at
+the pixel level, in space and time.
+
+(cid:3)Contact Author
+
+Figure 1: We see the video as a locally connected graph of pixels in
+space-time. The strength and the number of connections are enforc-
+ing the pixel membership to the salient video object.
+
+Most state of the art algorithms for this task do not use the
+time constraint, and when they do, they take little advantage
+of it. Time plays a fundamental factor in how objects move
+and change in the world, but computer vision does not yet
+exploit it sufﬁciently. Consequently, the segmentation out-
+puts of current state of the art algorithms is not always con-
+sistent over time. Our work comes to address precisely this
+aspect and our contribution is demonstrated through solid ex-
+periments on DAVIS-2016 and SegTrackv2 datasets on which
+we improve over state of the art methods.
+
+We demonstrate in experiments that the eigenvector of the
+graph’s adjacency matrix is a good solution for salient ob-
+ject segmentation. Once our ﬁltering-based optimization con-
+verges, the segmentation map is spatio-temporally consistent,
+with a smooth transition between frames: noise coming from
+other objects is removed and missing parts of the object are
+added back. Through multiple iterations, the relevant infor-
+mation is propagated step by step to farther away neighbour-
+hoods in space and time, acting like a diffusion.
+
+Our contribution is two-fold. Besides formulating the
+segmentation problem in video as an eigenvalue problem on
+the adjacency matrix of the graph in space-time, we also pro-
+vide a very fast optimization algorithm that computes the re-
+quired eigenvector (which represents the desired segmenta-
+tion) without explicitly creating or using the huge adjacency
+matrix. We prove theoretically and in practice that our al-
+gorithm reaches the same solution as a standard routine for
+eigenvector computation. We also show in experiments that
+the values in the ﬁnal eigenvector, with one element per video
+pixel, conﬁrm the spectral clustering assumption and provide
+an improved soft-segmentation of the main object.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)4952 Related Work
+Most state of the art methods for video object segmentation
+are using CNNs architectures pre-trained for object segmen-
+tation on large image datasets. They have a strong image-
+based backbone and are not designed from scratch with both
+space and time dimensions in mind. Many solutions [Khoreva
+et al., 2017] adapt image segmentation methods by adding
+an additional branch to the architecture for incorporating
+the time axis: motion branch (previous frames or optical
+ﬂow as) or previous masks branch (for mask propagation).
+Other methods are based on one-shot learning strategies and
+ﬁne tune the model on the ﬁrst video frame, followed by
+some post-processing reﬁnement [Maninis et al., 2018]. Ap-
+proaches derived from OSVOS [2017] do not take the time
+axis into account. Our method comes to better address the
+natural space-time relationship, which is why it is effective
+when combined with frame-based segmentation algorithms.
+
+Graph representations. Graph methods are suitable for
+segmentation and can have different representations, where
+the nodes can be pixels, super-pixels, voxels or image/video
+regions. Graph edges are undirected, modeled as symmet-
+ric similarity functions or directed [Chung, 2005]. Pixel-
+level representations are computationally extremely expen-
+sive, making the problem intractable for high resolution
+videos. Our fast solution implicitly uses a pixel-level graph
+representation: we make a ﬁrst-order Taylor approximation
+of the Gaussian kernel (usually used for pairwise afﬁnities)
+and rewrite it as a sequence of 3D convolutions in the video
+directly. Thus, we get the desired outcome without explicitly
+working with the graph. We describe it in detail in Sec. 3.
+
+Spectral clustering. Computing eigenvectors of matrices
+extracted from data is a classic approach for clustering. There
+are several choices in the literature for choosing those matri-
+ces, the most popular being the Laplacian matrix [Ng et al.,
+2001], normalized [Shi and Malik, 2000] or unnormalized.
+Other methods use the random walk matrix or directly the
+unnormalized adjacency matrix. Most methods are based on
+ﬁnding the eigenvectors corresponding to the smallest eigen-
+values, while others, including our approach, require the lead-
+ing eigenvectors. Graph Cuts are a popular class of spectral
+clustering algorithms, with many variants: normalized, aver-
+age, min-max, mean cut and topological cut.
+
+[Kumar
+
+CRFs. Discriminative graphical models
+and
+Hebert, 2003] are often applied over the segmentation of
+images and videos (denseCRF [Kr¨ahenb¨uhl and Koltun,
+2011]). CRFs are effective as they incorporate the observed
+data both at the level of nodes as well as edges. But they have
+a strict probabilistic interpretation and use inference algo-
+rithms that are signiﬁcantly more expensive than the simpler
+eigenvector power iteration that we use for optimizing our
+non-probabilistic objective score.
+
+Image segmentation. Graph cuts have been used in image
+segmentation [Shi and Malik, 2000]. They are expensive in
+practice, as they require the computation of eigenvectors of
+smallest eigenvalues for very large Laplacian matrices. Fast
+graph-based algorithm for image segmentation exist, such as
+[Felzenszwalb and Huttenlocher, 2004], which is linear in the
+
+number of edges and it is based on an heuristic for building
+the minimum spanning tree. It is still used as staring point
+by current methods. Another approach [Pourian et al., 2015]
+is to learn image regions with spectral graph partitioning and
+formulate segmentation as a convex optimization problem.
+
+Video Segmentation. Many video segmentation methods
+In [Yu et al., 2015] a
+adapt existing image segmentation.
+parametric graph partitioning model over superpixels is pro-
+posed. Hierarchical graph-based segmentation over RGBD
+video sequences [Hickson et al., 2014] also groups pixels into
+regions. The problem is solved using bipartite graph match-
+ing and minimizing the spanning tree. In [Li et al., 2018], an
+efﬁcient graph cut method is applied on a subset of pixels. To
+our best knowledge, all of the efﬁcient methods group pixels
+into superpixels, regions from a grid or object proposals to
+handle the computational and memory burden. However, the
+hard initial grouping of pixels comes with a risk and could
+carry errors into the ﬁnal solution, as it misses details avail-
+able only at the original pixel resolution.
+
+Our formulation is related to [Leordeanu and Hebert,
+2005; Meila and Shi, 2001]. Our solution is the leading eigen-
+vector of the adjacency matrix, computed fast and stably with
+power iteration as explained in Sec. 3. Using the unnormal-
+ized adjacency matrix in combination with power iteration is
+the least expensive spectral approach and the only one that
+can be factored into simple and fast 3D convolutions. This
+possibility gives our algorithm efﬁciency and speed (Sec. 4).
+
+3 Our Approach
+We formulate salient object segmentation in video as a graph
+partitioning problem (foreground vs background), where the
+graph is both spatial and temporal. Each node i represents a
+pixel in the space-time volume, which has N = Nf (cid:2) H (cid:2) W
+pixels. Nf is the number of frames and (H; W ) the frame
+size. Each edge captures the similarity between two pixels
+and is deﬁned by the pairwise function Mi;j. The pairwise
+connections between pixels i and j, in space and time are
+symmetric deﬁning a N (cid:2) N adjacency matrix M. We take
+into account only the local connections in space-time, so M
+is sparse.
+
+Let s and f be feature vectors of size N (cid:2) 1 with a feature
+value for each node. They will be used in deﬁning the simi-
+larity function Mij (Eq. 1). For now we consider the simplest
+case when (si; fi) represent single channel features (e.g. they
+could be soft masks, grey level values, edge or motion cues,
+or any pre-trained features). Later on we show how we can
+easily adapt the formulation to the multi-channel feature case.
+We deﬁne the edge similarity Mi;j using a Gaussian kernel:
+
+Mi;j = sp
+= sp
+
+i sp
+i sp
+
+j e(cid:0)(cid:11)(fi(cid:0)fj )2(cid:0)(cid:12)dist2
+j e(cid:0)(cid:11)(fi(cid:0)fj )2
+
+Gi;j
+
+i;j
+
+Mi;j (cid:25) sp
+
+i sp
+j
+|{z}
+unary terms
+
+[1 (cid:0) (cid:11)(fi (cid:0) fj)2]Gi;j
+}
+{z
+|
+pairwise terms
+
+:
+
+(1)
+
+(2)
+
+In graph methods, it is common to use two types of terms for
+representing the model over the graph. Unary terms are about
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)496individual node properties, while pairwise terms describe re-
+lations between pairs of nodes. In our case, si, sj describe
+individual node properties, whereas fi, fj are used to deﬁne
+the pairwise similarity kernel between the two nodes. Note
+that in Eq. 2 we approximate the Gaussian kernel with its
+ﬁrst-order Taylor expansion. The approximation is crucial in
+making our ﬁltering approach possible, as shown next. Hy-
+perparameters p and (cid:11) control the importance of those terms.
+To partition the space-time graph of video pixels, we want
+to ﬁnd the strongest cluster in this graph. We ﬁrst represent a
+segmentation solution (i.e., cluster in the space-time graph)
+with an indicator vector x, that has one element for each
+node in the 3D space-time volume, such that xi = 1 if node
+(pixel) i is in the video segmentation cluster (foreground) and
+xi = 0 otherwise (background). We deﬁne the clustering
+score to be the sum over all pairwise similarity terms Mij
+between the nodes inside the cluster. The higher this score,
+the stronger the sum of connections and the cluster. The seg-
+mentation score can be written compactly in matrix form as
+S(x) = xT Mx. Similar to other spectral approaches in
+graph matching [Leordeanu and Hebert, 2005], we ﬁnd the
+segmentation solution xs that maximizes S(x) under the re-
+laxed constraints kxk2 = 1. Fixing the L2 norm of x is
+needed since only relative soft segmentation values matter.
+Thus, our optimization problem become one of maximizing
+the Raleigh quotient:
+
+xs = argmax
+
+x
+
+(xT Mx=kxk2):
+
+(3)
+
+The global optimum solution is the principal eigenvector
+of M. M is symmetric and has non-negative values, so the
+solution will also have non-negative elements, by Perron-
+Frobenius theorem [Frobenius, 1907]. The ﬁnal segmentation
+could be simply obtained by thresholding. However, matrix
+M, even for a small video has 20 million nodes (50 frames of
+480 (cid:2) 854), making the problem of ﬁnding the leading eigen-
+vector with standard procedures intractable (Sec 4.2).
+
+Next we show how to take advantage of the ﬁrst-order ex-
+pansion of the pairwise terms deﬁning M and break power
+iteration into several very fast 3D convolutions in space and
+time, directly on the feature maps, without explicitly using
+the very big adjacency matrix. Our method receives as input
+pixel level feature maps and returns a ﬁnal segmentation, as
+the solution xs to problem 3.
+
+3.1 Power Iteration with Pixel-wise Iterations
+
+We apply power iteration algorithm to compute the eigenvec-
+tor. At iteration k + 1, we have Eq. 4:
+
+xk+1
+i  
+
+X
+
+Mi;jxk
+j ;
+
+j2N (i)
+
+(4)
+
+where, after each iteration, the solution is normalized to unit
+norm and N (i) is the set of neighbors pixels with i, in space
+and time. Expanding Mi;j (Eq. 2), Eq. 4 becomes:
+
+i   (cid:11)sp
+xk+1
+
+i
+
+X
+
+j2N (i)
+
+sp
+j [(cid:11)(cid:0)1 (cid:0) f 2
+
+i (cid:0) f 2
+
+j + 2fifj]Gi;jxk
+
+j ; (5)
+
+i   (cid:11)sp
+xk+1
+
+i ((cid:11)(cid:0)1 (cid:0) f 2
+i )
+
+X
+
+sp
+j Gi;jxk
+
+j (cid:0)
+
+j2N (i)
+X
+sp
+j f 2
+
+j Gi;jxk
+
+j +
+
+(cid:11)sp
+i
+
+j2N (i)
+X
+
+2(cid:11)sp
+
+i fi
+
+sp
+j fjGi;jxk
+j :
+
+(6)
+
+j2N (i)
+
+3.2 Power Iteration Using 3D Convolutions
+In Eq. 6 we observe that the links between the nodes are lo-
+cal (M is sparse) and we can replace the sums over neigh-
+bours with local 3D convolutions in space and time. Thus,
+we rewrite Eq. 6 as a sum of convolutions in 3D:
+
+Xcrt   Sp (cid:1) ((cid:11)(cid:0)11 (cid:0) F2) (cid:1) G3D (cid:3) (Sp (cid:1) Xk)(cid:0)
+Sp (cid:1) G3D (cid:3) (F2 (cid:1) Sp (cid:1) Xk)+
+2Sp (cid:1) F (cid:1) G3D (cid:3) (F (cid:1) Sp (cid:1) Xk);
+
+(7)
+
+Xk+1   Xcrt=kXcrtk2;
+(8)
+where (cid:3) is a convolution over a 3D space-time volume with
+a 3D Gaussian ﬁlter (G3D), (cid:1) is an element-wise multipli-
+cation, 3D matrices Xk; S; F have the original video shape
+(Nf (cid:2) H (cid:2) W ) and 1 is a 3D matrix with all values 1. We
+transformed the standard form of power iteration in Eq. 4
+in several very fast matrix operations: 3 convolutions and
+13 element-wise matrix operations (multiplications and ad-
+ditions), which are local operations that can be parallelized.
+
+3.3 Multiple Feature Channels
+Our approach in Eq. 7 can easily accommodate multiple fea-
+ture channels if we rewrite Mi;j from Eq. 2 and propagate it
+through Eq. 7, the ﬁnal multi-channel solution is obtained by
+summing over the ﬁnal solution for each channel:
+
+Xmulti
+
+crt =
+
+Nf eat
+X
+
+m=1
+
+Xcrt(Fc);
+
+(9)
+
+where Fc is one (3D) channel feature matrix.
+
+4 Algorithm
+We present the version of our algorithm (Alg. 1) that has a
+single channel feature map, but can be easily adapted to the
+multi-channel version, using Eq. 9. We ﬁrst initialize the so-
+lution X with a uniform vector or with a soft-segmentation
+provided by another method, if it is available. We also ini-
+tialize feature maps S and F, which could be of any kind:
+lower-level (optical ﬂow, edges, gray-level values) or higher-
+level pre-trained semantic features (deep features or initial
+soft/hard segmentation maps). At each iteration, we select
+a time frame around the current one. In Step 2, we multiply
+the corresponding matrices, apply the convolutions, compose
+the results and obtain the new segmentation mask for pix-
+els in current frame, using the space-time operations (as in
+Eq. 7). Since the solution needs to be binary at the end (for
+evaluation), after each iteration (Step 3, line 14 in Alg. 1), we
+project the solution in a more discrete space (see Sec. 4.1).
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)497Algorithm 1 Power iteration with 3D convolutions algorithm.
+At each iteration we pass through the whole video and com-
+pute the updated soft-segmentation X. First, we select a time
+window around current frame [i (cid:0) w; i + w]. Secondly we
+compute the eigenvector with convolutions. Then, after each
+iteration, we binarize the solution (see Sec. 4.1).
+S - unary feature maps for video
+F - deﬁnes pairwise feature maps for video
+X - salient object segmentation
+1: X   S
+2: for iter in [1::Ni] do
+for i in [1::Nf ] do
+3:
+4:
+5:
+6:
+7:
+8:
+9:
+10:
+11:
+12: X   normalize(Xnew)
+. STEP 3. binarization:
+13:
+14: X   project binary(X)
+15: end for
+
+. STEP 1. Take a temporal window around frame i:
+Sw; Xw; Fw   TOF (S; X; F)[i (cid:0) w : i + w]
+. STEP 2. Compute new mask:
+T1   ((cid:11)(cid:0)11 (cid:0) F2
+T2   (cid:0)G3D (cid:3) (F2
+T3   2Fw (cid:1) G3D (cid:3) (Fw (cid:1) Sp
+Xnew[i]   Sp
+
+w (cid:1) Xw)
+w (cid:1) (T1 + T2 + T3)
+
+w) (cid:1) G3D (cid:3) (Sp
+w (cid:1) Sp
+w (cid:1) Xw)
+
+w (cid:1) Xw)
+
+end for
+
+Figure 2: Total runtime in logarithmic scale for 100 iterations, in-
+cluding the time for building the adjacency matrix for power itera-
+tion. Our ﬁltering formulation scales with the number of nodes, in
+contrast to power iteration, having an exponentially better time.
+
+4.1 Binarization - Spectral vs Discrete Space
+At the end, we need to have a hard segmentation map for
+the object of interest. Over the iterations, a spectral method
+makes the solution continuous. It was previously observed
+that in graph matching optimization, where the solution is re-
+laxed [Leordeanu et al., 2009], keeping it close to the initial
+discrete domain comes with a better ﬁnal performance, even
+though the optimum in the spectral space is affected. So we
+integrated the binarization in the iterative optimization. After
+several iterations in the continuous space, we start projecting
+the solution on an almost discrete space through a sigmoid
+(which continuously approximates a step function) and ini-
+tialize the next iteration with this projection. After the last
+iteration, we apply a hard threshold on a solution much closer
+to the discrete space than before. This way, the transition is
+smoother compared with a simple sharp thresholding.
+
+4.2 Numerical Analysis
+We compare the standard power iteration eigenvector com-
+putation with our ﬁltering formulation, both from qualitative
+and quantitative (speedup) points of view.
+Computational Complexity. Lanczos [1950] method for
+sparse matrices has O(kNf NpNi) complexity for computing
+the leading eigenvector, where k is the number of neighbours
+for each node, Nf the number of frames in video, Np the
+number of pixels per frame and Ni the number of iterations.
+Our full iteration algorithm has also O(kNf NpNi) complex-
+ity, but with highly parallelizable operations, comparing to
+Lanczos. The Gaussian ﬁlters are separable, so the 3D con-
+volutions can be broken into a sequence of three vector-wise
+convolutions, reducing the complexity O(k) for ﬁltering to
+3O(k 1
+3 ): 3*7*7=147 vs 3+7+7=17 for a 3x7x7 kernel.
+
+Figure 3: A toy examples for qualitative comparisons with soft
+masks for a six frames video. Starting with a very noisy input seg-
+mentation mask and showing: SFSeg segmentations after 5 iters;
+Power Iteration after 5 iters; the real main eigenvector. The results
+are almost identical, proving that SFSeg is a good approximation.
+More, for other methods, this is tractable only on toy examples.
+
+We compare three solutions: a) Lanczos for the principal
+eigenvector for Eq. 1 b) Lanczos for the approximate adja-
+cency matrix as in Eq. 2 c) our 3D convolutions approach.
+For a small graph of 4000 nodes (a video with 10 frames of
+20 (cid:2) 20 pixels), a) and b) have 0.15 sec/iter and our 3D ﬁlter-
+ing formulation has 0.02 sec/iter (Fig. 2). Our approach scales
+better, having a huge advantage when working with videos
+with millions of nodes because we do not explicitly build the
+adjacency matrix and ﬁltering is parallelized on GPU.
+
+Qualitative analysis. We perform tests on synthetic data,
+in order to study the differences between the original spectral
+solution using the exponential pairwise scores (1) and the one
+obtained after our ﬁrst-order Taylor approximation trick (2).
+In Fig. 3 we see qualitative comparisons between the solu-
+tions obtained by three implementations: our SFSeg, power
+iteration with original pairwise scores and numpy eigenvector
+with original pairwise scores. The output is almost identical.
+In the synthetic experiments, the input is noisy, but all spec-
+tral solutions manage to reconstruct the initial segmentation.
+
+Quantitative analysis. We analyze the numerical differ-
+ences between the original eigenvector and our approxima-
+tion (SFSeg). We plot the angle (in degrees) and the IoU (Jac-
+card) between SFSeg (ﬁrst-order approximation of pairwise
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)498Semi
+Supervised
+
+Un
+Supervised
+
+Input
+Method
+
+Input
+Score
+(J)
+
+SFSeg
+over
+Input (J)
+
+Improved
+Videos
+(%)
+
+OnAVOS 86.1 86.3 (+0.2)
+OSVOS-S 85.6 86.0 (+0.4)
+PReMVOS 84.9 88.2 (+3.3)
+FAVOS 82.4 83.0 (+0.6)
+OSMN 73.9 75.9 (+2.0)
+
+COSNet 80.5 80.9 (+0.4)
+MotAdapt 77.2 77.5 (+0.3)
+PDB 77.2 77.4 (+0.2)
+ARP 76.2 77.7 (+1.5)
+LVO 75.9 78.8 (+2.9)
+FSEG 70.7 72.3 (+1.6)
+NLC 55.1 55.6 (+0.5)
+
+65
+90
+90
+95
+95
+
+65
+65
+60
+90
+90
+95
+65
+
+Average Boost
+
++1.1%
+
+80%
+
+Table 1: Improvement over top segmentation methods on DAVIS-
+2016 tasks, validation set. SFSeg has the same hyper-parameters
+per task. We also included results for other competitive (non-SOTA)
+inputs. 2nd column: Jaccard score for the input method; 3rd col-
+umn: score after applying SFSeg over the input method; 4th col-
+umn: the percentage of videos when the performance is improved
+after using SFSeg. The average SFSeg boost is 1.1% in Jaccard
+score and on average SFSeg raises performance for 80% of videos.
+Input methods : [Voigtlaender and Leibe, 2017; Maninis et al., 2018;
+Luiten et al., 2018; Lu et al., 2019; M. Siam, 2019; Song et al., 2018;
+Koh and Kim, 2017; Tokmakov et al., 2017; Jain et al., 2017;
+Cheng et al., 2018; Yang et al., 2018; Faktor and Irani, 2014].
+
+Input
+Frames
+
+Input
+Mask
+
+SFSeg
+Iter2
+
+SFSeg
+Convergence
+
+Figure 5: We present the evolution of SFSeg, over several iterations.
+Using the input segmentation mask (column 2) from top methods on
+DAVIS: ARP, FSEG and LVO, we show the intermediate value of
+the mask at Iter2 (column 3) and Iter4 (column 4).
+
+over other competitive, non-SOTA methods. We noted that
+the improvement is not related with the quality measure of
+the input. In some cases the improvement is stronger when
+input comes from stronger methods. Nevertheless, we con-
+sistently improve over the input method, whose segmentation
+mask we use to initialize the segmentation X0.
+
+In Fig. 5 we show the iterative effect of SFSeg. Each exam-
+ple starts from the initial RGB frame and its initial segmen-
+tation (as produced by top DAVIS methods), and presents the
+segmentation at an intermediate iteration and the ﬁnal one,
+when SFSeg reaches convergence.
+
+Figure 4: The angle and the IoU between real eigenvector and our
+SFSeg solution. The evolution of those metrics is monitored over
+multiple SFSeg iterations.
+
+functions, optimized with 3D convolutions) and the original
+eigenvector (exponential pairwise functions in the adjacency
+matrix), over multiple SFSeg iterations in Fig. 4. Note that in
+these experiments we intentionally start from a far away so-
+lution (70 degrees difference between the SFSeg initial seg-
+mentation vector and the original eigenvector) to better show
+that SFSeg indeed converges to practically the same eigen-
+vector. Such comparisons can be performed only on synthetic
+data with relatively small videos, for which the computation
+of the adjacency matrix needed for the original eigenvector
+is tractable. The results clearly show that SFSeg, with ﬁrst
+order approximations of the pairwise functions on edges and
+optimization based on 3D ﬁlters, reaches the same theoretical
+solution, while being orders of magnitude faster.
+
+5 Experimental Analysis
+Experiments on DAVIS-2016. DAVIS-2016 [Perazzi et
+al., 2016] is a densely annotated video object segmentation
+dataset. It contains 50 high-resolution video sequences (30
+train/20 valid), with a total of 3455 annotated frames of real-
+world scenes. The benchmark comes with two tasks: the un-
+supervised one, where the solutions do not have access to the
+ﬁrst frame of the video and the semi-supervised one, where
+the methods use the ground-truth from the ﬁrst frame. In both
+setups, the methods can train the model on the training set and
+report their performance on the validation set. Our results are
+reported on the validation set, but we do not use the training
+set. For optical ﬂow we used the Pytorch implementation of
+Flownet2 [Reda et al., 2017].
+Experimental Setup. We test SFSeg with input from pre-
+computed segmentations of the video produced by top meth-
+ods from DAVIS-2016, on both tasks. For the features maps,
+we initialized S with the pre-computed input segmentation
+values. For F, we used two channels: the magnitude for the
+direct optical ﬂow and for the reverse optical ﬂow. We set:
+Ni = 5; (cid:11) = 1 and p = 0:1 for unsupervised task and
+p = 0:2 for the semi-supervised one. The algorithm is im-
+plemented as in Alg. 1 with the multi-channels as in Eq. 9.
+
+In Tab. 1 we show the results of our method, SFSeg,
+when combined with top methods on DAVIS-2016, semi-
+supervised and unsupervised tasks. For a better understand-
+ing of the results, we also show the effect of applying SFSeg
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)499Input
+
+PReMVOS SFSeg
+
+GT
+
+Input
+
+OnAVOS SFSeg
+
+GT
+
+Input
+
+ARP
+
+SFSeg
+
+GT
+
+Figure 6: We show the output of SFSeg (col 3) over the input masks (col 2) received from top DAVIS-2016 solutions in various video frames
+(col 1). We see how the quality of the masks is increasing, bringing the input masks closer to ground truth (col 4). 1. PReMVOS - 3rd place
+on semi-supervised (motocross-jump); 2. OnAVOS - 1st place on semi-supervised (breakdance); 3. ARP - 2nd place on unsupervised (dog).
+
+Method Score (J)
+
+Method
+
+DAVIS
+(J)
+
+SegTrackv2
+(J)
+
+LVO
+FSEG
+OSVOS
+NLC
+MaskTrack
+BB + SFSeg + denseCRF (ours)
+
+57.3
+61.4
+65.4
+67.2
+70.3
+72.7
+
+Table 2: Comparative results on SegTrackv2. Our standalone so-
+lution, Backbone + SFSeg + denseCRF, obtains the best results
+among the other top methods in the literature.
+Input methods:
+[Tokmakov et al., 2017; Jain et al., 2017; Caelles et al., 2017;
+Faktor and Irani, 2014; Khoreva et al., 2017].
+
+In Fig. 6 we show qualitative examples of our spec-
+tral method, SFSeg, applied over the initial mask, received
+as input from highly qualitative segmentation solutions on
+DAVIS-2016. The new masks show signiﬁcant improvement
+without using other new means of supervision.
+Experiments on SegTrackv2. SegTrackv2 [Li et al., 2013]
+is a video object segmentation dataset, containing 14 videos,
+with multiple objects per frame. The purpose for video object
+segmentation task is to ﬁnd the segmentation for all the ob-
+jects in the frame (also split in two tasks: using the ﬁrst frame
+or not). We use our standalone method, SFSeg, applied over
+the soft output of a competitive Backbone (BB): UNet over
+ResNet34 pretrained features, ﬁne tuned 40 epochs on salient
+object segmentation in images on DUTS dataset [Wang et al.,
+2017] (with RectiﬁedAdam as optimizer). In Tab. 2 we show
+comparative results of our standalone method and other top
+solutions on the SegTrackv2 dataset.
+
+SFSeg vs denseCRF. We compare SFSeg with denseCRF
+[Kr¨ahenb¨uhl and Koltun, 2011], which is one of the most used
+reﬁnement method in video object segmentation [Song et al.,
+2018]. When applied over the same Backbone presented
+above, we observe that SFSeg brings a stronger improve-
+ment than denseCRF on both DAVIS-2016 and SegTrackv2
+(Tab. 3). More, the two are complementary: in combination,
+the performance is boosted by the largest margin.
+
+Running Time. The algorithm scales well,
+the running
+time being linear in the number of video pixels, as detailed
+in Sec. 4. For a frame of 480 (cid:2) 854 pixels, it takes 0:055 sec
+per iteration, compared with 0:8 sec for denseCRF. Filtering
+takes 60% of time, the rest of 40% being used on other auxil-
+iary operations (copying tensors). The time penalty of adding
+
+BB
+BB + denseCRF
+BB + SFSeg
+BB + SFSeg + denseCRF
+
+67.2
+68.1
+68.7
+69.2
+
+72
+72
+72.1
+72.7
+
+Table 3: Reﬁnement Comparison. We compare SFSeg with dense-
+CRF when applied to a competitive end-to-end Backbone (as de-
+tailed above). While SFSeg outperforms denseCRF when used in-
+dividually, the two methods prove to be not only different, but also
+complementary, since combining them boosts the Jaccard score.
+
+SFSeg is minor for most methods, which takes several sec-
+onds per frame (e.g. 4:5 sec per frame [Maninis et al., 2018],
+13 sec per frame [Luiten et al., 2018]). We tested on a GTX
+Titan X Maxwell GPU, in Pytorch [Paszke et al., 2017].
+
+6 Conclusions and Future Work
+We formulate video object segmentation as clustering in the
+space-time graph of pixels. We introduce an efﬁcient spec-
+tral algorithm, Spectral Filtering Segmentation (SFSeg), in
+which the standard power iteration for computing the princi-
+pal eigenvector of the graph adjacency matrix is transformed
+into a set of 3D convolutions applied on 3D feature maps
+in the video volume. Our original theoretical contribution
+makes the initial intractable problem possible. We validate
+experimentally that our solution based on a ﬁrst-order Taylor
+approximation of the original pairwise potential used in spec-
+tral clustering is practically equivalent to the original one.
+In experiments, SFSeg consistently improves (for 80% of
+videos) over top published video object segmentation meth-
+ods, at a small additional computational cost. Moreover, our
+method also achieves top performance in combination with
+other backbone networks (not necessarily state of the art).
+The consistent improvements in practice indicate that our
+spectral approach brings a new and complementary dimen-
+sion to clustering in space-time, which is not fully addressed
+by current solutions. In the immediate future we will explore
+ways to learn more powerful features end-to-end, within our
+spectral clustering formulation.
+
+Acknowledgments
+part by UEFISCDI, under Projects EEA-RO-2018-0496 and
+PN-III-P1-1.2-PCCDI-2017-0734.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)500References
+[Caelles et al., 2017] S. Caelles, K. Maninis, J. Pont-Tuset,
+L. Leal-Taix´e, D. Cremers, and L. Van Gool. One-shot
+video object segmentation. CVPR, 2017.
+
+[Cheng et al., 2018] J. Cheng, Y.-H. Tsai, W.-C. Hung,
+S. Wang, and M.-H. Yang. Fast and accurate online video
+object segmentation via tracking parts. CVPR, 2018.
+[Chung, 2005] Chung. Laplacians and the cheeger inequality
+
+for directed graphs. Annals of Combinatorics, 2005.
+
+[Faktor and Irani, 2014] A. Faktor and M. Irani. Video seg-
+mentation by non-local consensus voting. BMVC, 2014.
+[Felzenszwalb and Huttenlocher, 2004] P. Felzenszwalb and
+D. Huttenlocher. Efﬁcient graph-based image segmenta-
+tion. IJCV, 2004.
+
+[Frobenius, 1907] G. Frobenius. ”About a Fundamental The-
+orem of Group Theory. II. Session Reports of the Royal
+Prussian Academy of Sciences, 1907.
+
+[Hickson et al., 2014] S. Hickson, S. Birchﬁeld, I. Essa, and
+H. Christensen. Efﬁcient hierarchical graph-based seg-
+mentation of rgbd videos. CVPR, 2014.
+
+[Jain et al., 2017] S. Jain, B. Xiong, and K. Grauman. Fu-
+sionseg: Learning to combine motion and appearance for
+fully automatic segmention of generic objects in videos.
+arXiv, 2017.
+
+[Khoreva et al., 2017] A. Khoreva, F. Perazzi, R. Benenson,
+B. Schiele, and A. Hornung. Learning video object seg-
+mentation from static images. CVPR, 2017.
+
+[Koh and Kim, 2017] Y. Koh and C. Kim. Primary object
+segmentation in videos based on region augmentation and
+reduction. CVPR, 2017.
+
+[Kr¨ahenb¨uhl and Koltun, 2011] P.
+
+V. Koltun.
+crfs with gaussian edge potentials. arXiv, 2011.
+
+Efﬁcient
+
+Kr¨ahenb¨uhl
+and
+inference in fully connected
+
+[Kumar and Hebert, 2003] S. Kumar and M. Hebert. Dis-
+criminative random ﬁelds: A discriminative framework for
+contextual interaction in classiﬁcation. 2003.
+
+[Lanczos, 1950] C. Lanczos. An iteration method for the so-
+lution of the eigenvalue i problem . of linear differential
+and integral operators. 1950.
+
+[Leordeanu and Hebert, 2005] M. Leordeanu and M. Hebert.
+A spectral technique for correspondence problems using
+pairwise constraints. ICCV, 2005.
+
+[Leordeanu et al., 2009] M. Leordeanu, M. Hebert, and
+R. Sukthankar. An integer projected ﬁxed point method
+for graph matching and MAP inference. NIPS, 2009.
+[Li et al., 2013] F. Li, T. Kim, A. Humayun, D. Tsai, and
+J. Rehg. Video segmentation by tracking many ﬁgure-
+ground segments. ICCV, 2013.
+
+[Li et al., 2018] S. Li, B. Seybold, A. Vorobyov, X. Lei, and
+C. Kuo. Unsupervised video object segmentation with
+motion-based bilateral networks. ECCV, 2018.
+
+[Lu et al., 2019] X. Lu, W. Wang, C. Ma, J. Shen, L. Shao,
+and F. Porikli. See more, know more: Unsupervised video
+object segmentation with co-attention siamese networks.
+CVPR, 2019.
+
+[Luiten et al., 2018] J. Luiten, P. Voigtlaender, and B. Leibe.
+Premvos: Proposal-generation, reﬁnement and merging
+for video object segmentation. ACCV, 2018.
+
+[M. Siam, 2019] S. Lu L. Petrich M. Gamal M Elhoseiny
+M Jagersand M. Siam, C. Jiang. Video object segmen-
+tation using teacher-student adaptation in a human robot
+interaction (hri) setting. ICRA, 2019.
+
+[Maninis et al., 2018] K. Maninis, S. Caelles, Y. Chen,
+J. Pont-Tuset, L. Leal-Taix´e, D. Cremers, and L. Van Gool.
+Video object segmentation without temporal information.
+PAMI, 2018.
+
+[Meila and Shi, 2001] M. Meila and J. Shi. A random walks
+
+view of spectral segmentation. AISTATS, 2001.
+
+[Ng et al., 2001] A. Ng, M. Jordan, and Y. Weiss. On spec-
+tral clustering: Analysis and an algorithm. NIPS, 2001.
+[Paszke et al., 2017] A. Paszke, S. Gross, S. Chintala,
+G. Chanan, E. Yang, Z. DeVito, Z. Lin, A. Desmaison,
+L. Antiga, and A. Lerer. Autodiff in pytorch. 2017.
+
+[Perazzi et al., 2016] F.
+
+Pont-Tuset,
+Perazzi,
+B. McWilliams, L. Van Gool, M. Gross, and A. Hornung.
+A benchmark dataset and evaluation methodology for
+video object segmentation. CVPR, 2016.
+
+J.
+
+[Pourian et al., 2015] N. Pourian, S. Karthikeyan,
+
+and
+B. Manjunath. Weakly supervised graph based seman-
+tic segmentation by learning communities of image-parts.
+ICCV, 2015.
+
+[Reda et al., 2017] F. Reda, R. Pottorff, J. Barker, and
+B. Catanzaro. ﬂownet2-pytorch: Pytorch implementation
+of ﬂownet 2.0: Evolution of optical ﬂow estimation with
+deep networks, 2017.
+
+[Shi and Malik, 2000] J. Shi and J. Malik. Normalized cuts
+
+and image segmentation. Technical report, 2000.
+
+[Song et al., 2018] H. Song, W. Wang, S. Zhao, J. Shen, and
+K. Lam. Pyramid dilated deeper convlstm for video salient
+object detection. ECCV, 2018.
+
+[Tokmakov et al., 2017] P. Tokmakov, K. Alahari,
+
+and
+C. Schmid. Learning video object segmentation with vi-
+sual memory. ICCV, 2017.
+[Voigtlaender and Leibe, 2017] P.
+
+and
+B. Leibe. Online adaptation of convolutional neural
+networks for video object segmentation. BMVC, 2017.
+[Wang et al., 2017] L. Wang, H. Lu, Y. Wang, D. Feng, M.
+sand Wang, B. Yin, and X. Ruan. Learning to detect salient
+objects with image-level supervision. CVPR, 2017.
+
+Voigtlaender
+
+[Yang et al., 2018] L. Yang, Y. Wang, X. Xiong, J. Yang, and
+A. Katsaggelos. Efﬁcient video object segmentation via
+network modulation. CVPR, 2018.
+
+[Yu et al., 2015] C. Yu, H. Le, G. Zelinsky, and D. Samaras.
+Efﬁcient video segmentation using parametric graph parti-
+tioning. ICCV, 2015.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)501

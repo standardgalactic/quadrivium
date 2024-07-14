@@ -1,0 +1,3495 @@
+Sebastian Thrun
+Yufeng Liu
+Carnegie Mellon University
+Pittsburgh, PA, USA
+Daphne Koller
+Andrew Y. Ng
+Stanford University
+Stanford, CA, USA
+Zoubin Ghahramani
+Gatsby Computational Neuroscience Unit
+University College London, UK
+Hugh Durrant-Whyte
+University of Sydney
+Sydney, Australia
+
+Simultaneous
+Localization and
+Mapping With
+Sparse Extended
+Information
+Filters
+
+Abstract
+
+1. Introduction
+
+In this paper we describe a scalable algorithm for the simultaneous
+mapping and localization (SLAM) problem. SLAM is the problem of
+acquiring a map of a static environment with a mobile robot. The vast
+majority of SLAM algorithms are based on the extended Kalman ﬁlter
+(EKF). In this paper we advocate an algorithm that relies on the dual
+of the EKF, the extended information ﬁlter (EIF). We show that when
+represented in the information form, map posteriors are dominated
+by a small number of links that tie together nearby features in the
+map. This insight is developed into a sparse variant of the EIF, called
+the sparse extended information ﬁlter (SEIF). SEIFs represent maps
+by graphical networks of features that are locally interconnected,
+where links represent relative information between pairs of nearby
+features, as well as information about the robot’s pose relative to
+the map. We show that all essential update equations in SEIFs can
+be executed in constant time, irrespective of the size of the map.
+We also provide empirical results obtained for a benchmark data
+set collected in an outdoor environment, and using a multi-robot
+mapping simulation.
+
+KEY WORDS—mobile robotics, mapping, SLAM, ﬁlters,
+information ﬁlters, multi-robot systems,
+Kalman ﬁlters,
+robotic perception, robot learning
+
+The International Journal of Robotics Research
+Vol. 23, No. 7–8, July–August 2004, pp. 693-716,
+DOI: 10.1177/0278364904045479
+©2004 Sage Publications
+
+Simultaneous localization and mapping (SLAM) is the prob-
+lem of acquiring a map of an unknown environment with a
+moving robot, while simultaneously localizing the robot rel-
+ative to this map (Leonard and Durrant-Whyte 1992; Dis-
+sanayake et al. 2001). The SLAM problem addresses sit-
+uations where the robot lacks a global positioning sensor.
+Instead, it has to rely on a sensor of incremental egomotion for
+robot position estimation (e.g., odometry, inertial navigation).
+Such sensors accumulate error over time, making the problem
+of acquiring an accurate map a challenging one (Thorpe and
+Durrant-Whyte 2001). In recent years, the SLAM problem has
+received considerable attention by the scientiﬁc community,
+and a ﬂurry of new algorithms and techniques has emerged
+(Leonard et al. 2002).
+
+Existing algorithms can be subdivided into batch and on-
+line techniques. The former offer sophisticated techniques
+to cope with perceptual ambiguities (Shatkay and Kaelbling
+1997; Thrun, Fox, and Burgard 1998; Burgard et al. 1999),
+but they can only generate maps after extensive batch pro-
+cessing. On-line techniques are speciﬁcally suited to acquire
+maps as the robot navigates (Smith and Cheeseman 1985; Dis-
+sanayake et al. 2001). On-line SLAM is of great practical im-
+portance in many navigation and exploration problems (Bur-
+gard et al. 2000; Simmons et al. 2000). Today’s most widely
+used on-line algorithms are based on the extended Kalman
+ﬁlter (EKF), whose application to SLAM problems was de-
+veloped in a series of seminal papers (Smith and Cheese-
+man 1985; Moutarlier and Chatila 1989; Smith, Self, and
+
+693
+
+694 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+Cheeseman 1990). The EKF calculates a Gaussian posterior
+over the locations of environmental features and the robot
+itself. The estimation of such a joint posterior probability dis-
+tribution solves one of the most difﬁcult aspects of the SLAM
+problem, namely the fact that the errors in the estimates of
+features in the map are mutually dependent, by virtue of the
+fact that they are acquired through a moving platform with
+inaccurate positioning. Unfortunately, maintaining a Gaus-
+sian posterior imposes a signiﬁcant burden on the memory
+and space requirements of the EKF. The covariance matrix of
+the Gaussian posterior requires space quadratic in the size of
+the map, and the basic update algorithm for EKFs requires
+quadratic time per measurement update. This quadratic space
+and time requirement imposes severe scaling limitations. In
+practice, EKFs can only handle maps that contain a few hun-
+dred features. In many application domains, it is desirable to
+acquire maps that are orders of magnitude larger (Julier and
+Uhlmann 2000).
+
+This limitation has long been recognized, and a number of
+approaches exist that represent the posterior in a more struc-
+tured way; some of those will be discussed in detail towards
+the end of the paper. Possibly the most popular idea is to de-
+compose the map into collections of smaller, more manage-
+able submaps (Leonard and Feder 1999; Guivant and Nebot
+2001; Bosse, Leonard, and Teller 2002; Tardós et al. 2002;
+Williams and Dissanayake 2002), thereby gaining represen-
+tational and computational efﬁciency. An alternative struc-
+tured representation effectively estimates posteriors over en-
+tire paths (along with the map), not just the current robot
+pose. This makes it possible to exploit a conditional indepen-
+dence that is characteristic of the SLAM problem, which in
+turn leads to a factored representation (Murphy 2000; Monte-
+merlo et al. 2002; 2003). Most of these structured techniques
+are approximate, and most of them require memory linear in
+the size of the map. Some can update the posterior in constant
+time, whereas others maintain quadratic complexity at a much
+reduced constant factor.
+
+In this paper we describe a SLAM algorithm that repre-
+sents map posterior by relative information between features
+in the map, and between the map and the robot’s pose. This
+idea is not new; in fact, it is at the core of recent algorithms by
+Newman (2000), Csorba (1997) and Deans and Hebert (2000),
+and it is related to an algorithm by Lu and Milios (1997). Just
+as in recent work by Nettleton, Gibbens, and Durrant-Whyte
+(2000), our approach is based on the well-known information
+form of the EKF, also known as the extended information ﬁl-
+ter (EIF; Maybeck 1979). This ﬁlter maintains an information
+matrix, instead of the common covariance matrix. The main
+contribution of this paper is an EIF that maintains a sparse
+information matrix, called the sparse extended information
+ﬁlter (SEIF). This sparse matrix deﬁnes a Web-like network
+of local relative constraints between pairs of adjacent features
+in the map, reminiscent of a Gaussian Markov random ﬁeld
+(Weiss and Freeman 2001). The sparsity has important ram-
+
+iﬁcations on the computational properties of solving SLAM
+problems.
+
+The use of sparse matrices, or local links, is motivated by
+a key insight: the posterior distribution in SLAM problems is
+dominated by a small number of relative links between ad-
+jacent features in the map. This is best illustrated through an
+example. Figure 1 shows the result of the vanilla EKF (Smith
+and Cheeseman 1985; Moutarlier and Chatila 1989; Smith,
+Self, and Cheeseman 1990) applied to the SLAM problem,
+in an environment containing 50 landmarks. The left panel
+shows a moving robot, along with its probabilistic estimate of
+the location of all 50 point features. The central information
+maintained by the EKF solution is a covariance matrix of these
+different estimates. The normalized covariance, i.e., the cor-
+relation, is visualized in the center panel of this ﬁgure. Each of
+the two axes lists the robot pose (x–y location and orientation)
+followed by the x–y locations of the 50 landmarks. Dark en-
+tries indicate strong correlations. It is known that in the limit
+of SLAM, all x-coordinates and all y-coordinates become
+fully correlated (Dissanayake et al. 2001). The checkerboard
+appearance of the correlation matrix illustrates this fact. Main-
+taining these cross-correlations—of which there are quadrati-
+cally many in the number of features in the map—are essential
+to the SLAM problem. This observation has given rise to the
+(false) suspicion that on-line SLAM inherently requires up-
+date time quadratic in the number of features in the map.
+
+The key insight that underlies SEIF is shown in the right
+panel of Figure 1. Shown there is the inverse covariance ma-
+trix (also known as the information matrix; Maybeck 1979;
+Nettleton, Gibbens, and Durrant-Whyte 2000), normalized
+just like the correlation matrix. Elements in this normalized
+information matrix can be thought of as constraints, or links,
+which constrain the relative locations of pairs of features in the
+map; the darker an entry in the display, the stronger the link.
+As this depiction suggests, the normalized information ma-
+trix appears to be naturally sparse: it is dominated by a small
+number of strong links; and it possesses a large number of
+links whose values, when normalized, are near zero. Further-
+more, the strength of each link is related to the distance of the
+corresponding features: strong links are found only between
+metrically nearby features. The more distant two features, the
+weaker their link. As will become more obvious in the paper,
+this sparseness is not coincidental; rather, it directly relates
+to the way information is acquired in SLAM. This observa-
+tion suggest that the EKF solution to SLAM can indeed be
+approximated using a sparse representation—despite the fact
+that the correlation matrix is densely populated. In particular,
+while any two features are fully correlated in the limit, the cor-
+relation arises mainly through a network of local links, which
+only connect nearby features. It is important to notice that this
+structure naturally emerges in SLAM; the results in Figure 1
+are obtained using the vanilla EKF algorithm in Smith and
+Cheeseman (1986).
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+695
+
+Fig. 1. Typical snapshots of EKFs applied to the SLAM problem. Shown here is a map (left panel), a correlation (center
+panel), and a normalized information matrix (right panel). Notice that the normalized information matrix is naturally almost
+sparse, motivating our approach of using sparse information matrices in SLAM.
+
+Fig. 2. Illustration of the network of features generated by our approach. Shown on the left is a sparse information matrix,
+and on the right a map in which entities are linked whose information matrix element is non-zero. As argued in the paper, the
+fact that not all features are connected is a key structural element of the SLAM problem, and at the heart of our constant time
+solution.
+
+As noted above, our approach exploits this insight by main-
+taining a sparse information matrix, in which only nearby
+features are linked through a non-zero element. The resulting
+network structure is illustrated in the right panel of Figure 2,
+where disks correspond to point features and dashed arcs to
+links, as speciﬁed in the information matrix visualized on the
+left. This diagram also shows the robot, which is linked to
+a small subset of all features only. Those features are called
+active features and are drawn in black. Storing a sparse infor-
+mation matrix requires space linear in the number of features
+in the map. More importantly, all essential updates in SLAM
+can be performed in constant time, regardless of the number
+of features in the map. This result is somewhat surprising, as a
+naive implementation of motion updates in information ﬁlters
+
+requires inversion of the entire information matrix, which is an
+O(N 3) operation; plain EKFs, in comparison, require O(N 2)
+time (for the perceptual update).
+
+The remainder of this paper is organized as follows. In Sec-
+tion 2 we formally introduce the EIF, which forms the basis of
+our approach. SEIFs are described in Section 3, which states
+the major computational results of this paper. In this section
+we develop the constant time algorithm for maintaining sparse
+information matrices, and we also present an amortized con-
+stant time algorithm for recovering a global map from the
+relative information in the SEIF. The important issue of data
+association ﬁnds its treatment in Section 4, which describes
+a constant time technique for calculating local probabilities
+necessary to make data association decisions. Experimental
+
+696 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+results are provided in Section 5. We speciﬁcally compare our
+new approach to the EKF solution, using a benchmark data
+set collected in an outdoor environment (Dissanayake et al.
+2001; Guivant and Nebot 2001). These results suggest that the
+sparseness constraint introduces only very small errors in the
+resulting maps, when compared to the computationally more
+cumbersome EKF solution. The paper is concluded by a lit-
+erature review in Section 6 and a discussion of open research
+issues in Section 7.
+
+2. Extended Information Filters
+
+In this section we review the EIF, which forms the basis of
+our work. EIFs are computationally equivalent to EKFs, but
+they represent information differently: instead of maintaining
+a covariance matrix, the EIF maintains an inverse covariance
+matrix, also known as information matrix. EIFs have previ-
+ously been applied to the SLAM problem, most notably by
+Nettleton et al. (2000) and Nettleton, Gibbens, and Durrant-
+Whyte (2000), but they are much less common than the EKF
+approach.
+
+Most of the material in this section applies equally to linear
+and nonlinear ﬁlters. We have chosen to present all material in
+the more general nonlinear form, since robots are inherently
+nonlinear. The linear form is easily obtained as a special case.
+
+2.1. Information Form of the SLAM Problem
+
+Let xt denote the pose of the robot at time t. For rigid mobile
+robots operating in a planar environment, the pose is given by
+its two Cartesian coordinates and the robot’s heading direc-
+tion. Let N denote the number of features (e.g., landmarks)
+in the environment. The variable yn with 1 ≤ n ≤ N denotes
+the pose of the nth feature. For example, for point landmarks
+in the plane, yn may comprise the two-dimensional Cartesian
+coordinates of this landmark. In SLAM, it is usually assumed
+that features do not change their location over time; see Häh-
+nel et al. (2003c) and Wang, Thorpe, and Thrun (2003) for a
+treatment of SLAM in dynamic environments.
+
+The robot pose xt and the set of all feature locations Y
+together constitute the state of the environment. It will be
+denoted by the vector ξt =
+xt
+, where the
+superscript “T” refers to the transpose of a vector.
+
+. . .
+
+yN
+
+y1
+
+(cid:1)
+
+(cid:2)
+
+T
+
+In the SLAM problem, it is impossible to sense the state ξt
+directly—otherwise there would be no mapping problem. In-
+stead, the robot seeks to recover a probabilistic estimate of ξt .
+Written in a Bayesian form, our goal shall be to calculate a pos-
+terior distribution over the state ξt . This posterior p(ξt | zt , ut )
+is conditioned on past sensor measurements zt = z1, . . . , zt
+and past controls ut = u1, . . . , ut . Sensor measurements zt
+might, for example, specify the approximate range and bear-
+ing to nearby features. Controls ut specify the robot motion
+command asserted in the time interval (t − 1; t].
+
+Following the rich EKF tradition in the SLAM literature,
+our approach represents the posterior p(ξt | zt , ut ) by a mul-
+tivariate Gaussian distribution over the state ξt . The mean of
+this distribution will be denoted µt , and covariance matrix (cid:2)t :
+
+p(ξt | zt , ut ) ∝ exp
+
+(cid:3)
+
+− 1
+
+2 (ξt − µt )T(cid:2)−1
+
+t (ξt − µt )
+
+(cid:4)
+
+. (1)
+
+The proportionality sign replaces a constant normalizer that is
+easily recovered from the covariance (cid:2)t . The representation
+of the posterior via the mean µt and the covariance matrix (cid:2)t
+is the basis of the EKF solution to the SLAM problem (and
+to EKFs in general).
+
+Information ﬁlters represent the same posterior through a
+so-called information matrix Ht and an information vector
+bt —instead of µt and (cid:2)t . These are obtained by multiplying
+out the exponent of eq. (1):
+
+(cid:3)
+
+(cid:5)
+
+p(ξt | zt , ut ) ∝ exp
+= exp
+
+− 1
+(cid:3)
+2
+− 1
+
+t (cid:2)−1
+ξ T
+t (cid:2)−1
+2 ξ T
+
+t ξt − 2µT
+t (cid:2)−1
+t ξt + µT
+
+t (cid:2)−1
+t ξt − 1
+
+t ξt +µT
+2 µT
+
+t (cid:2)−1
+t (cid:2)−1
+
+t µt
+(cid:4)
+t µt
+
+(cid:6)(cid:4)
+
+.
+(2)
+
+2 µT
+
+t (cid:2)−1
+
+the last
+
+term in the exponent,
+We now observe that
+− 1
+t µt does not contain the free variable ξt and hence
+can be subsumed into the constant normalizer. This gives us
+the form:
+
+∝ exp{− 1
+
+2 ξ T
+
+t (cid:2)−1
+t(cid:7)(cid:8)(cid:9)(cid:10)
+=:Ht
+
+ξt + µT
+
+t (cid:2)−1
+(cid:7) (cid:8)(cid:9) (cid:10)
+=:bt
+
+t
+
+ξt }.
+
+(3)
+
+The information matrix Ht and the information vector bt are
+now deﬁned as indicated:
+
+Ht = (cid:2)−1
+
+t
+
+and
+
+bt = µT
+
+t Ht .
+
+(4)
+
+Using these notations, the desired posterior can now be rep-
+resented in what is commonly known as the information form
+of the Kalman ﬁlter:
+
+p(ξt | zt , ut ) ∝ exp
+
+(cid:3)
+
+− 1
+
+2 ξ T
+
+t Ht ξt + bt ξt
+
+(cid:4)
+
+.
+
+(5)
+
+As the reader may easily notice, both representations of the
+multi-variate Gaussian posterior are functionally equivalent
+(with the exception of certain degenerate cases): the EKF
+representation of the mean µt and covariance (cid:2)t , and the
+EIF representation of the information vector bt and the infor-
+mation matrix Ht . In particular, the EKF representation can
+be “recovered” from the information form via the following
+algebra:
+
+(cid:2)t = H −1
+
+t
+
+and
+
+µt = H −1
+
+t bT
+
+t
+
+= (cid:2)t bT
+
+t . (6)
+
+The advantage of the EIF over the EKF will become appar-
+ent further below, when the concept of sparse EIFs will be
+introduced.
+
+Of particular interest will be the geometry of the informa-
+
+tion matrix. This matrix is symmetric and positive-deﬁnite:
+
+
+
+Ht =
+
+
+
+
+
+
+Hxt ,xt Hxt ,y1
+Hy1,xt Hy1,y1
+...
+
+...
+
+HyN ,xt HyN ,y1
+
+· · · Hxt ,yN
+· · · Hy1,yN
+. . .
+· · · HyN ,yN
+
+...
+
+
+
+
+
+
+ .
+
+(7)
+
+Each element in the information matrix constrains one (on
+the main diagonal) or two (off the main diagonal) elements
+in the state vector. We will refer to the off-diagonal elements
+as “links”: the matrices Hxt ,yn link together the robot pose
+estimate and the location estimate of a speciﬁc feature, and
+the matrices Hyn,yn(cid:3) for n (cid:4)= n(cid:3) link together two feature loca-
+tions yn and yn(cid:3). Although rarely made explicit, the manipu-
+lation of these links is the very essence of Gaussian solutions
+to the SLAM problem. It will be an analysis of these links
+that ultimately leads to a constant-time solution to the SLAM
+problem.
+
+2.2. Measurement Updates
+
+In SLAM, measurements zt carry spatial information on the
+relation of the robot’s pose and the location of a feature. For
+example, zt might be the approximate range and bearing to
+a nearby feature. Without loss of generality, we will assume
+that each measurement zt corresponds to exactly one feature
+in the map. Sightings of multiple features at the same time
+may easily be processed one-after-another.
+
+Figure 3 illustrates the effect of measurements on the in-
+formation matrix Ht . Suppose the robot measures the approx-
+imate range and bearing to the feature y1, as illustrated in Fig-
+ure 3(a). This observation links the robot pose xt to the location
+of y1. The strength of the link is given by the level of noise
+in the measurement. Updating EIFs based on this measure-
+ment involves the manipulation of the off-diagonal elements
+Hxt ,y and their symmetric counterparts Hy,xt that link together
+xt and y. Additionally, the on-diagonal elements Hxt ,xt and
+Hy1,y1 are also updated. These updates are additive. Each ob-
+servation of a feature y increases the strength of the total link
+between the robot pose and this very feature, and with it the
+total information in the ﬁlter. Figure 3(b) shows the incor-
+poration of a second measurement of a different feature, y2.
+In response to this measurement, the EIF updates the links
+Hxt ,y2
+y2,xt (and Hxt ,xt and Hy2,y2 ). As this example sug-
+gests, measurements introduce links only between the robot
+pose xt and observed features. Measurements never gener-
+ate links between pairs of features, or between the robot and
+unobserved features.
+
+= H T
+
+For a mathematical derivation of the update rule, we ob-
+serve that Bayes rule enables us to factor the desired posterior
+into the following product:
+
+p(ξt | zt , ut ) ∝ p(zt | ξt , zt−1, ut ) p(ξt | zt−1, ut )
+
+= p(zt | ξt ) p(ξt | zt−1, ut ).
+
+(8)
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+697
+
+The second step of this derivation exploited common (and
+obvious) independences in SLAM problems (Thrun 2002).
+| zt−1, ut ) is rep-
+For the time being, we assume that p(ξt
+resented by ¯Ht and ¯bt . These will be discussed in the next
+section, where robot motion will be addressed. The key ques-
+tion addressed in this section thus concerns the representation
+of the probability distribution p(zt | ξt ) and the mechanics
+of carrying out the multiplication above. In the “extended”
+family of ﬁlters, a common model of robot perception is one
+in which measurements are governed via a deterministic non-
+linear measurement function h with added Gaussian noise:
+
+zt = h(ξt ) + εt .
+
+(9)
+
+Here εt is an independent noise variable with zero mean,
+whose covariance will be denoted Z. Put into probabilistic
+terms, eq. (9) speciﬁes a Gaussian distribution over the mea-
+surement space of the form
+
+p(zt | ξt ) ∝ exp
+
+(cid:3)
+
+− 1
+
+2 (zt − h(ξt ))TZ−1(zt − h(ξt ))
+
+(cid:4)
+
+.
+
+(10)
+
+Following the rich literature of EKFs, EIFs approximate this
+Gaussian by linearizing the measurement function h. More
+speciﬁcally, a Taylor series expansion of h gives us
+
+h(ξt ) ≈ h(µt ) + ∇ξ h(µt )[ξt − µt ],
+
+(11)
+
+where ∇ξ h(µt ) is the ﬁrst derivative (Jacobian) of h with re-
+spect to the state variable ξ , taken ξ = µt . For brevity, we
+will write ˆzt = h(µt ) to indicate that this is a prediction
+given our state estimate µt . The transpose of the Jacobian ma-
+trix ∇ξ h(µt ) and will be denoted Ct . With these deﬁnitions,
+eq. (11) reads as follows:
+
+h(ξt ) ≈ ˆzt + C T
+
+t (ξt − µt ).
+
+(12)
+
+This approximation leads to the following Gaussian approxi-
+mation of the measurement density in eq. (10):
+
+p(zt | ξt ) ∝ exp
+
+(cid:3)
+
+− 1
+
+2 (zt − ˆzt − C T
+
+t ξt + C T
+t µt )T
+(cid:4)
+
+Z−1(zt − ˆzt − C T
+
+t ξt + C T
+
+t µt )
+
+.
+
+(13)
+
+Multiplying out the exponent and regrouping the resulting
+terms gives us
+
+(cid:3)
+
+= exp
+
+− 1
+
+2 ξ T
+
+t Ct Z−1C T
+
+t ξt + (zt − ˆzt + C T
+
+t µt )TZ−1C T
+t ξt
+
+− 1
+
+2 (zt − ˆzt + C T
+
+t µt )TZ−1(zt − ˆzt + C T
+
+t µt )
+
+(14)
+
+(cid:4)
+
+.
+
+As before, the ﬁnal term in the exponent does not depend on
+the variable ξt and hence can be subsumed into the propor-
+tionality factor:
+
+(cid:3)
+
+∝ exp
+
+− 1
+
+2 ξ T
+
+t Ct Z−1C T
+
+t ξt + (zt − ˆzt + C T
+
+t µt )TZ−1C T
+t ξt
+
+(cid:4)
+
+.
+(15)
+
+698 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+(a)
+
+(b)
+
+Fig. 3. The effect of measurements on the information matrix and the associated network of features. (a) Observing y1 results
+in a modiﬁcation of the information matrix elements Hxt ,y1. (b) Similarly, observing y2 affects Hxt ,y2 . Both updates can be
+carried out in constant time.
+
+(cid:3)
+
+− 1
+
+We are now in the position to state the measurement update
+equation, which implements the probabilistic law (8).
+p(ξt | zt , ut ) ∝ exp
+2 ξ T
+t Ct Z−1C T
+2 ξ T
+t ( ¯Ht + Ct Z−1C T
+)ξt
+(cid:10)
+(cid:8)(cid:9)
+t
+Ht
+
+t ξt + (zt − ˆzt + C T
+
+t µt )TZ−1C T
+t ξt
+
+¯Ht ξt + ¯bt ξt
+
+= exp{− 1
+
+· exp
+
+2 ξ T
+
+− 1
+
+(cid:3)
+
+(cid:4)
+
+(cid:7)
+
+t
+
+(cid:4)
+
++ ( ¯bt + (zt − ˆzt + C T
+
+(cid:7)
+
+t µt )TZ−1C T
+)ξt }.
+(cid:10)
+t
+
+(cid:8)(cid:9)
+bt
+
+(16)
+
+Thus, the measurement update of the EIF is given by the fol-
+lowing additive rule:
+
+Ht = ¯Ht + Ct Z−1C T
+bt = ¯bt + (zt − ˆzt + C T
+
+t
+
+t µt )TZ−1C T
+t .
+
+(17)
+
+(18)
+
+In the general case, these updates may modify the entire infor-
+mation matrix Ht and vector bt , respectively. A key observa-
+tion of all SLAM problems is that the Jacobian Ct is sparse. In
+particular, Ct is zero except for the elements that correspond
+to the robot pose xt and the feature yt observed at time t.
+0 · · · 0
+
+0 · · · 0
+
+(cid:2)T
+
+Ct =
+
+(19)
+
+(cid:1)
+
+.
+
+∂h
+∂xt
+
+∂h
+∂yt
+
+This well-known sparseness of Ct (Dissanayake et al. 2001) is
+due to the fact that measurements zt are only a function of the
+relative distance and orientation of the robot to the observed
+feature. As a pleasing consequence, the update Ct Z−1C T
+to
+the information matrix in eq. (17) is only non-zero in four
+places: the off-diagonal elements that link the robot pose xt
+with the observed feature yt , and the main-diagonal elements
+that correspond to xt and yt . Thus, the update equations (17)
+and (18) are well in tune with our intuitive description given
+at the beginning of this section, where we argued that mea-
+surements only strengthen the links between the robot pose
+and observed features, in the information matrix.
+
+t
+
+To compare this to the EKF solution, we notice that even
+though the change of the information matrix is local, the re-
+sulting covariance usually changes in non-local ways. Put dif-
+ferently, the difference between the old covariance ¯(cid:2)t = ¯H −1
+
+t
+
+and the new covariance matrix (cid:2)t = H −1
+everywhere.
+
+t
+
+is usually non-zero
+
+2.3. Motion Updates
+
+The second important step of SLAM concerns the update of
+the ﬁlter in accordance to robot motion. In the standard SLAM
+problem, only the robot pose changes over time. The environ-
+ment is static.
+
+The effect of robot motion on the information matrix Ht
+is slightly more complicated than that of measurements. Fig-
+ure 4(a) illustrates an information matrix and the associated
+network before the robot moves, in which the robot is linked to
+two (previously observed) features. If robot motion was free
+of noise, this link structure would not be affected by robot
+motion. However, the noise in robot actuation weakens the
+link between the robot and all active features. Hence Hxt ,y1
+and Hxt ,y2 are decreased by a certain amount. This decrease
+reﬂects the fact that the noise in motion induces a loss of infor-
+mation of the relative location of the features to the robot. Not
+all of this information is lost, however. Some of it is shifted
+into between-feature links Hy1,y2 , as illustrated in Figure 4(b).
+This reﬂects the fact that even though the motion induced a
+loss of information of the robot relative to the features, no
+information was lost between individual features. Robot mo-
+tion thus has the effect that features that were indirectly linked
+through the robot pose become linked directly.
+
+To derive the update rule, we begin with a Bayesian de-
+scription of robot motion. Updating a ﬁlter based on robot
+motion motion involves the calculation of the following
+posterior:
+
+(cid:17)
+
+p(ξt | zt−1, ut ) =
+
+p(ξt | ξt−1, zt−1, ut ) p(ξt−1 | zt−1, ut )
+
+dξt−1.
+
+(20)
+
+Exploiting the common SLAM independences (Thrun 2002)
+leads to
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+699
+
+(a)
+
+(b)
+
+Fig. 4. The effect of motion on the information matrix and the associated network of features: (a) before motion; (b) after
+motion. If motion is non-deterministic, motion updates introduce new links (or reinforce existing links) between any two
+active features, while weakening the links between the robot and those features. This step introduces links between pairs of
+features.
+
+(cid:17)
+
+p(ξt | zt−1, ut ) =
+
+p(ξt | ξt−1, ut ) p(ξt−1 | zt−1, ut−1)
+
+dξt−1.
+
+(21)
+
+The term p(ξt−1 | zt−1, ut−1) is the posterior at time t − 1,
+represented by Ht−1 and bt−1. Our concern will therefore be
+with the remaining term p(ξt | ξt−1, ut ), which characterizes
+robot motion in probabilistic terms.
+
+Similar to the measurement model above, it is common
+practice to model robot motion by a nonlinear function with
+added independent Gaussian noise:
+
+ξt = ξt−1 + (cid:5)t with (cid:5)t = g(ξt−1, ut ) + Sxδt . (22)
+
+Here g is the motion model, a vector-valued function which
+is non-zero only for the robot pose coordinates, as feature
+locations are static in SLAM. The term labeled (cid:5)t consti-
+tutes the state change at time t. The stochastic part of this
+change is modeled by δt , a Gaussian random variable with
+zero mean and covariance Ut . This Gaussian variable is a low-
+dimensional variable deﬁned for the robot pose only. Here Sx
+is a projection matrix of the form Sx = ( I 0 . . . 0 )T, where
+I is an identity matrix of the same dimension as the robot pose
+vector xt and as of δt . Each 0 in this matrix refers to a null
+matrix, of which there are N in Sx. The product Sxδt , hence,
+gives the following generalized noise variable, enlarged to the
+dimension of the full state vector ξ : Sxδt = ( δt 0 . . . 0 )T.
+In EIFs, the function g in eq. (22) is approximated by its ﬁrst
+degree Taylor series expansion:
+
+g(ξt−1, ut ) ≈ g(µt−1, ut ) + ∇ξ g(µt−1, ut )[ξt−1 − µt−1]
+(23)
+
+= ˆ(cid:5)t + At ξt−1 − At µt−1.
+
+Here At = ∇ξ g(µt−1, ut ) is the derivative of g with respect to
+ξ at ξ = µt−1 and ut . The symbol ˆ(cid:5)t is short for the predicted
+motion effect, g(µt−1, ut ). Plugging this approximation into
+
+eq. (22) leads to an approximation of ξt , the state at time t:
+
+ξt ≈ (I + At )ξt−1 + ˆ(cid:5)t − At µt−1 + Sxδt .
+
+(24)
+
+Hence, under this approximation the random variable ξt is
+again Gaussian distributed. Its mean is obtained by replacing
+ξt and δt in eq. (24) by their respective means:
+
+¯µt = (I + At )µt−1 + ˆ(cid:5)t − At µt−1 + Sx0
+
+= µt−1 + ˆ(cid:5)t .
+
+(25)
+
+The covariance of ξt is simply obtained by scaled and adding
+the covariance of the Gaussian variables on the right-hand
+side of eq. (24):
+
+¯(cid:2)t = (I + At )(cid:2)t−1(I + At )T + 0 − 0 + SxUt S T
+= (I + At )(cid:2)t−1(I + At )T + SxUt ST
+x .
+
+x
+
+(26)
+
+Update equations (25) and (26) are in the EKF form, i.e., they
+are deﬁned over means and covariances. The information form
+is now easily recovered from the deﬁnition of the information
+form in eq. (4) and its inverse in eq. (6). In particular, we have
+
+(cid:5)
+
+¯Ht = ¯(cid:2)−1
+
+t
+
+=
+
+(I + At )(cid:2)t−1(I + At )T + SxUt S T
+
+x
+
+(cid:5)
+
+=
+
+¯bt = ¯µT
+
+t
+
+¯Ht =
+
+(I + At )H −1
+t−1(I + At )T + SxUt S T
+(cid:18)
+(cid:19)
+T ¯Ht =
+(cid:19)
+
+µt−1 + ˆ(cid:5)t
+
+t−1bT
+t−1
+
+H −1
+
++ ˆ(cid:5)t
+
+(cid:18)
+
+(cid:18)
+
+x
+
+(cid:19)
+T ¯Ht
+
+=
+
+bt−1H −1
+t−1
+
++ ˆ(cid:5)T
+
+t
+
+¯Ht .
+
+(27)
+
+(28)
+
+(cid:6)−1
+
+(cid:6)−1
+
+These equations appear computationally involved, in that they
+require the inversion of large matrices. In the general case, the
+complexity of the EIF is therefore cubic in the size of the state
+space. In the next section, we provide the surprising result that
+both ¯Ht and ¯bt can be computed in constant time if Ht−1 is
+sparse.
+
+700 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+3. Sparse Extended Information Filters
+
+The central, new algorithm presented in this paper is the SEIF.
+The SEIF differs from the EIF described in the previous sec-
+tion in that it maintains a sparse information matrix. An infor-
+mation matrix Ht is considered sparse if the number of links
+to the robot and to each feature in the map is bounded by a
+constant that is independent of the number of features in the
+map. The bound for the number of links between the robot
+pose and other features in the map will be denoted θx; the
+bound on the number of links for each feature (not counting
+the link to the robot) will be denoted θy. The motivation for
+maintaining a sparse information is mainly computational, as
+will become apparent below. Its justiﬁcation has already been
+discussed above, when we demonstrated that in SLAM the
+normalized information matrix is already almost sparse. This
+suggests that by enforcing sparseness, the induced approxi-
+mation error is small.
+
+3.1. Constant Time Results
+
+We begin by proving three important constant time results,
+which form the backbone of SEIFs. All proofs can be found
+in the Appendix.
+
+LEMMA 1. The measurement update in Section 2.2 requires
+constant time, irrespective of the number of features in the
+map.
+
+This lemma ensures that measurements can be incorpo-
+rated in constant time. Notice that this lemma does not require
+sparseness of the information matrix; rather, it is a well-known
+property of information ﬁlters in SLAM.
+Less trivial is the following lemma.
+
+If the information matrix is sparse and At = 0,
+LEMMA 2.
+the motion update in Section 2.3 requires constant time. The
+constant-time update equations are given by
+
+x Ht−1Sx]−1S T
+
+x Ht−1
+
+t
+
+Lt = Sx[U −1
++ S T
+¯Ht = Ht−1 − Ht−1Lt
+¯bt = bt−1 + ˆ(cid:5)T
+
+t Ht−1 − bt−1Lt + ˆ(cid:5)T
+
+t Ht−1Lt .
+
+(29)
+
+This result addresses the important special case At = 0, i.e.,
+the Jacobian of pose change with respect to the absolute robot
+pose is zero. This is the case for robots with linear mechanics,
+and with nonlinear mechanics where there is no “cross-talk”
+between absolute coordinates and the additive change due to
+motion.
+
+In general, At
+
+(cid:4)= 0, since the x–y update depends on the
+robot orientation. This case is addressed by the next lemma.
+
+LEMMA 3.
+If the information matrix is sparse, the motion
+update in Section 2.3 requires constant time if the mean µt
+is available for the robot pose and all active features. The
+constant-time update equations are given by
+
+(cid:8)t = I − Sx(I + [S T
+
+x At Sx]−1)−1ST
+
+x
+
+t−1
+
+H (cid:3)
+= (cid:8) T
+(cid:5)Ht = H (cid:3)
+¯Ht = H (cid:3)
+¯bt = bt−1 − µT
+
+t Ht−1(cid:8)t
+t−1Sx[U −1
+− (cid:5)Ht
+
+t−1
+
+t
+
++ S T
+
+x H (cid:3)
+
+t−1Sx]−1S T
+
+x H (cid:3)
+t−1
+
+t−1((cid:5)Ht − Ht−1 + H (cid:3)
+
+t−1) + ˆ(cid:5)T
+
+t
+
+¯Ht .(30)
+
+(cid:4)= 0, a constant-time update requires knowledge of
+For At
+the mean µt−1 before the motion command, for the robot pose
+and all active features (but not the passive features). This in-
+formation is not maintained by the standard information ﬁlter,
+and extracting it in the straightforward way (via eq. (6)) re-
+quires more than constant time. A constant-time solution to
+this problem will now be presented.
+
+3.2. Sparsiﬁcation
+
+3.2.1. General Idea
+
+The ﬁnal step in SEIFs concerns the sparsiﬁcation of the in-
+formation matrix Ht . Because sparsiﬁcation is so essential to
+SEIFs, let us ﬁrst discuss it in general terms before we apply
+it to the information ﬁlter. Sparsiﬁcation is an approximation
+whereby a posterior distribution is approximated by two of its
+marginals. Suppose a, b, and c are sets of random variables (b
+is not to be confused with the information vector bt ). Suppose
+we are given a joint distribution p(a, b, c) over these vari-
+ables. To sparsify this distribution, suppose we would like to
+remove any direct link between the variables a and b. In other
+words, we would like to approximate p by a distribution ˜p for
+which the following property holds: ˜p(a | b, c) = p(a | c)
+and ˜p(b | a, c) = p(b | c). This conditional independence
+is commonly known as “d-separation” (Pearl 1988). In multi-
+variate Gaussians, it is easily shown that d-separation is equiv-
+alent to the absence of a direct link between a and b, i.e., the
+corresponding element in the information matrix is zero.
+
+A good approximation ˜p is obtained by a term proportional
+to the product of the marginals, p(a, c) and p(b, c). Neither
+of these marginals retain dependence between the variables
+a and b, since they both contain only one of those variables.
+Thus, the product p(a, c) p(b, c) does not contain any direct
+dependences between a and b; instead, a and b are d-separated
+by c. However, p(a, c) p(b, c) is not yet a valid probability
+distribution over a, b, and c. This is because c occurs twice
+in this expression. However, proper normalization by p(c)
+yields a probability distribution (assuming p(c) > 0):
+
+˜p(a, b, c) = p(a, c) p(b, c)
+
+p(c)
+
+(31)
+
+To understand the effect of this approximation, we apply the
+following transformation:
+
+˜p(a, b, c) = p(a, b, c)
+p(a, b, c)
+
+p(a, c) p(b, c)
+p(c)
+
+= p(a, b, c)
+
+= p(a, b, c)
+
+p(b, c)
+p(a, b, c)
+
+p(a, c)
+p(c)
+p(a | c)
+p(a | b, c)
+
+.
+
+(32)
+
+In other words, removing the direct dependence between a and
+b is equivalent to approximating the conditional p(a | b, c)
+by a conditional p(a | c). We also note (without proof) that
+among all approximations q of p in which c d-separates a and
+b, the one described here is “closest” to p, where closeness
+is measured by the Kullback Liebler divergence, a common
+information-theoretic measure of the “nearness” of probabil-
+ity distributions (see Cover and Thomas 1991, for a deﬁnition
+and discussion of KL divergence):
+
+˜p = argminqD(q || p).
+
+(33)
+
+An important observation pertains to the fact that the original
+p(a | b, c) is at least as informative as p(a | c); the condi-
+tional hat replaces p(a | b, c) in ˜p. This is because p(a | b, c)
+is conditioned on a superset of variables of the conditioning
+variables in p(a | c). For Gaussians, this implies that the
+variance of the approximation p(a | c) is equal or larger than
+the variance of the original conditional, p(a | b, c). Further,
+the variances of the marginals ˜p(a), ˜p(b), and ˜p(c) are also
+larger than or equal to the corresponding variances of p(a),
+p(b), and p(c). In other words, it is impossible that the vari-
+ance shrinks under this approximation. Such an operation is
+commonly referred to as consistent in the SLAM literature
+(Dissanayake et al. 2001). However, we note that the consis-
+tency of a single-step update does not imply that the posterior
+of a sparsiﬁed Bayes ﬁlter remains consistent—a phenomenon
+we will discuss in detail below.
+
+3.2.2. Application to Extended Information Filters
+
+SEIFs apply the idea of sparsiﬁcation to the posterior p(xt , Y |
+zt , ut ), thereby maintaining a matrix Ht that is sparse at all
+times. This sparseness is at the core of SEIF’s efﬁciency. Spar-
+siﬁcation is necessarily an approximative step, since informa-
+tion matrices in SLAM are naturally not sparse—even though
+normalized information matrices tend to be almost sparse. In
+the context of SLAM, it sufﬁces to remove links (deactivate)
+between the robot pose and individual features in the map; if
+done correctly, this also limits the number of links between
+pairs of features.
+
+To see, let us brieﬂy consider the two circumstances un-
+der which a new link may be introduced. First, observing a
+passive feature activates this feature, that is, introduces a new
+link between the robot pose and the very feature. Thus, mea-
+surement updates potentially violate the bound θx. Secondly,
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+701
+
+motion introduces links between any two active features, and
+hence leads to violations of the bound θy. This consideration
+suggests that controlling the number of active features can
+avoid violation of both sparseness bounds.
+
+Our sparsiﬁcation technique is illustrated in Figure 5.
+Shown there is the situation before and after sparsiﬁcation.
+The removal of a link in the network corresponds to setting
+an element in the information matrix to zero; however, this
+requires the manipulation of other links between the robot
+and other active features. The resulting network is only an
+approximation to the original one, whose quality depends on
+the magnitude of the link before removal.
+
+To deﬁne the sparsiﬁcation step, it will prove useful to
+
+partition the set of all features into three disjoint subsets
+
+Y = Y + + Y 0 + Y −,
+(34)
+where Y + is the set of all active features that shall remain
+active. Y 0 are one or more active features that we seek to
+deactivate (remove the link to the robot). Y − are all currently
+passive features. Since Y + ∪ Y 0 contains all currently active
+features, the posterior can be factored as follows:
+
+p(xt , Y | zt , ut ) = p(xt , Y 0, Y +, Y − | zt , ut )
+= p(xt | Y 0, Y +, Y −, zt , ut )
+p(Y 0, Y +, Y − | zt , ut )
+
+= p(xt | Y 0, Y +, Y − = 0, zt , ut )
+p(Y 0, Y +, Y − | zt , ut ).
+
+(35)
+
+In the last step we exploit the fact that if we know the ac-
+tive features Y 0 and Y +, the variable xt does not depend on
+the passive features Y −. We can hence set Y − to an arbi-
+trary value without affecting the conditional posterior over xt ,
+p(xt | Y 0, Y +, Y −, zt , ut ). Here we simply chose Y − = 0.1
+
+Following the sparsiﬁcation idea discussed in general
+|
+terms in the previous section, we now replace p(xt
+Y 0, Y +, Y − = 0) by p(xt | Y +, Y − = 0), that is, we drop
+the dependence on Y 0:
+
+˜p(xt , Y | zt , ut ) = p(xt | Y +, Y − = 0, zt , ut )
+
+p(Y 0, Y +, Y − | zt , ut ).
+
+(36)
+
+This approximation is obviously equivalent to the following
+expression:
+
+˜p(xt , Y | zt , ut ) = p(xt , Y + | Y − = 0, zt , ut )
+p(Y + | Y − = 0, zt , ut )
+
+p(Y 0, Y +, Y − | zt , ut ).
+
+(37)
+
+3.2.3. Constant-Time Calculation
+
+The approximate posterior ˜p deﬁned in eq. (37) is now easily
+calculated in constant time. In particular, we begin by calculat-
+ing the information matrix for the distribution p(xt , Y 0, Y + |
+1. Another choice would have been to integrate out the variables Y −
+; how-
+ever, the resulting sparsiﬁcation requires inversions of large matrices, and
+numerical truncation errors may yield non-sparse matrices.
+
+702 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+Y − = 0) of all variables but Y −, and conditioned on Y − = 0.
+This is obtained by extracting the submatrix of all state vari-
+ables but Y −:
+
+H (cid:3)
+
+t
+
+= Sx,Y +,Y 0 S T
+
+x,Y +,Y 0 Ht Sx,Y +,Y 0 S T
+
+x,Y +,Y 0 .
+
+(38)
+
+With that, the matrix inversion lemma2 leads to the following
+information matrices for the terms p(xt , Y + | Y − = 0, zt , ut )
+and p(Y + | Y − = 0, zt , ut ), denoted H 1
+t , respectively:
+
+t and H 2
+
+H 1
+t
+H 2
+t
+
+= H (cid:3)
+= H (cid:3)
+
+t
+
+t
+
+− H (cid:3)
+− H (cid:3)
+
+t SY0 (S T
+Y0
+t Sx,Y0 (S T
+
+H (cid:3)
+
+t SY0 )−1S T
+H (cid:3)
+
+H (cid:3)
+t Sx,Y0 )−1S T
+
+Y0
+
+t
+
+x,Y0
+
+x,Y0
+
+H (cid:3)
+t .
+
+(40)
+
+Here the various S-matrices are projection matrices, analo-
+gous to the matrix Sx deﬁned above. The ﬁnal term in our
+approximation (37), p(Y 0, Y +, Y − | zt , ut ), has the following
+information matrix:
+
+H 3
+t
+
+= Ht − Ht Sxt (S T
+
+xt
+
+Ht Sxt )−1S T
+
+xt
+
+Ht .
+
+(41)
+
+Putting these expressions together according to eq. (37) yields
+the following information matrix, in which the feature Y 0 is
+now indeed deactivated:
+˜Ht = H 1
++H (cid:3)
+
+t SY0 (S T
+Y0
+H (cid:3)
+
+= Ht − H (cid:3)
+
+t SY0 )−1S T
+
+− H 2
+
++ H 3
+
+t Sx,Y0 )−1S T
+
+t Sx,Y0 (S T
+
+H (cid:3)
+
+H (cid:3)
+
+H (cid:3)
+
+Y0
+
+t
+
+t
+
+t
+
+t
+
+t
+
+x,Y0
+
+−Ht Sxt (S T
+
+xt
+
+x,Y0
+Ht Sxt )−1S T
+
+xt
+
+Ht .
+
+(42)
+
+The resulting information vector is now obtained by the fol-
+lowing simple consideration:
+
+˜bt = µT
+= µT
+
+˜Ht = µT
+t Ht +µT
+
+t (Ht − Ht + ˜Ht )
+t ( ˜Ht − Ht ) = bt +µT
+
+t
+
+t ( ˜Ht − Ht ). (43)
+
+All equations can be computed in constant time, regardless
+of the size of Ht . The effect of this approximation is the
+deactivation of the features Y 0, while introducing only new
+links between active features. The sparsiﬁcation rule requires
+knowledge of the mean vector µt for all active features, which
+is obtained via the approximation technique described in the
+previous section. From eq. (43), it is obvious that the sparsi-
+˜bT
+ﬁcation does not affect the mean µt , that is, H −1
+t .
+However, the mean can be affected by a number of other as-
+pects of SEIF, such as the use of an approximate Ht matrix in
+subsequent ﬁlter updates.
+
+= ˜H −1
+
+t bT
+
+t
+
+t
+
+The sparsiﬁcation is executed whenever a measurement
+update or a motion update would violate a sparseness con-
+straint. Active features are chosen for deactivation in reverse
+order of the magnitude of their link. This strategy tends to de-
+activate features whose last sighting is furthest away in time.
+
+2. The matrix inversion lemma (Sherman–Morrison–Woodbury formula), as
+used throughout this paper, is stated as follows:
+(cid:21)−1
+
+(cid:21)−1
+
+(cid:20)
+
+(cid:20)
+
+= H − H S
+
+−1 + STH S
+
+B
+
+STH. (39)
+
+−1 + SBST
+
+H
+
+Empirically, it induces approximation errors that are negli-
+gible for appropriately chosen sparseness constraints θx and
+θy. In practice, our implementation constrains only θx. This
+induces a bound on the number of between-landmark links,
+simply because only adjacent links tend to be active at the
+same time. All our experiments below, thus, constrain θx but
+use θy = N.
+
+3.3. Amortized Approximate Map Recovery
+
+Before deriving an algorithm for recovering the state estimate
+µt from the information form, let us brieﬂy consider what
+parts of µt are needed in SEIFs, and when. SEIFs need the
+state estimate µt of the robot pose and the active features in
+the map. These estimates are needed at three different occa-
+sions: (1) the linearization of the nonlinear measurement and
+motion model; (2) the motion update according to Lemma 3;
+(3) the sparsiﬁcation technique described further below. For
+linear systems, the means are only needed for the sparsiﬁ-
+cation (third point above). We also note that we only need
+constantly many of the values in µt , namely the estimate of
+the robot pose and of the locations of active features.
+
+As stated in eq. (6), the mean vector µt is a function of Ht
+
+and bt :
+
+µt = H −1
+
+t bT
+
+t
+
+= (cid:2)t bT
+t .
+
+(44)
+
+Unfortunately, calculating eq. (44) directly involves inverting
+a large matrix, which would requires more than constant time.
+The sparseness of the matrix Ht allows us to recover the
+state incrementally. In particular, we can do so on-line, as the
+data are being gathered and the estimates b and H are being
+constructed. To do so, it will prove convenient to pose eq. (44)
+as an optimization problem.
+LEMMA 4. The state µt is the mode ˆνt := argmaxνt p(νt ) of
+the Gaussian distribution, deﬁned over the variable νt :
+
+p(νt ) = const. · exp
+
+(cid:3)
+
+− 1
+
+2 ν T
+
+t Ht νt + bT
+t νt
+
+(cid:4)
+
+.
+
+(45)
+
+Here νt is a vector of the same form and dimensionality as µt .
+This lemma suggests that recovering µt is equivalent to ﬁnd-
+ing the mode of eq. (45). Thus, it transforms a matrix inversion
+problem into an optimization problem. For this optimization
+problem, we will now describe an iterative hill climbing al-
+gorithm which, thanks to the sparseness of the information
+matrix, requires only constant time per optimization update.
+Our approach is an instantiation of coordinate descent. For
+simplicity, we state it here for a single coordinate only; our
+implementation iterates a constant number K of such opti-
+mizations after each measurement update step. The mode ˆνt
+of eq. (45) is attained at
+
+ˆνt = argmaxνt p(νt ) = argmaxνt exp
+2 ν T
+
+= argminνt
+
+t Ht νt − bT
+
+t νt .
+
+1
+
+(cid:3)
+
+(cid:4)
+
+− 1
+
+2 νT
+
+t Ht νt + bT
+t νt
+(46)
+
+We note that the argument of the min-operator in eq. (46)
+can be written in a form that makes the individual coordinate
+variables νi,t (for the ith coordinate of νt ) explicit:
+
+1
+
+2 νT
+
+t Ht νt − bT
+
+t νt = 1
+
+2
+
+(cid:22)
+
+(cid:22)
+
+νT
+i,t Hi,j,t νj,t
+
+−
+
+j
+
+i
+(cid:22)
+
+bT
+i,t νi,t ,
+
+i
+
+(47)
+
+where Hi,j,t is the element with coordinates (i, j ) in Ht , and bi,t
+if the ith component of the vector bt . Taking the derivative of
+this expression with respect to an arbitrary coordinate variable
+νi,t gives us
+
+(cid:23)
+
+1
+2
+
+(cid:22)
+
+(cid:22)
+
+i
+
+j
+
+i,t Hi,j,t νj,t −
+ν T
+
+(cid:24)
+
+(cid:22)
+
+i
+
+bT
+i,t νi,t
+
+∂
+∂νi,t
+
+(cid:22)
+
+=
+
+Hi,j,t νj,t − bT
+i,t .
+
+(48)
+
+j
+
+Setting this to zero leads to the optimum of the ith coordinate
+variable νi,t given all other estimates νj,t :
+
+(cid:25)
+
+ν[k+1]
+
+i,t
+
+= H −1
+
+i,i,t
+
+−
+
+bT
+i,t
+
+(cid:26)
+
+Hi,j,t ν [k]
+
+j,t
+
+.
+
+(49)
+
+(cid:22)
+
+j (cid:4)=i
+
+The same expression can conveniently be written in matrix
+notation, where Si is a projection matrix for extracting the ith
+component from the matrix Ht :
+(cid:5)
+
+(cid:6)
+
+ν[k+1]
+
+i,t
+
+= (S T
+
+i Ht Si)−1S T
+
+i
+
+bt −Ht ν [k]
+
+t
+
++Ht SiS T
+
+i ν [k]
+
+t
+
+All other estimates νi(cid:3),t with i (cid:3)
+= ν[k]
+update step, i.e., ν[k+1]
+i(cid:3),t .
+
+i(cid:3),t
+
+(cid:4)= i remain unchanged in this
+
+As is easily seen, the number of elements in the summation
+in eq. (49), and hence the vector multiplication in eq. (50), is
+constant if Ht is sparse. Hence, each update requires constant
+time. To maintain the constant-time property of our SLAM
+algorithm, we can afford a constant number of updates K per
+time-step. This will generally not lead to convergence, but
+the relaxation process takes place over multiple time-steps,
+resulting in small errors in the overall estimate.
+
+4. Data Association
+
+Data association refers to the problem of determining the cor-
+respondence between multiple sightings of identical features.
+Features are generally not unique in appearance, and the robot
+has to make decisions with regards to the identity of individual
+features. Data association is generally acknowledged to be a
+key problem in SLAM, and a number of solutions have been
+proposed (Dissanayake et al. 2001; Montemerlo et al. 2003;
+Tardós et al. 2002). Here we follow the standard maximum
+likelihood approach described in Dissanayake et al. (2001).
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+703
+
+This approach requires a mechanism for evaluating the like-
+lihood of a measurement under an alleged data association,
+so as to identify the association that makes the measurement
+most probable. The key result here is that this likelihood can
+be approximated tightly in constant time.
+
+4.1. Recovering Data Association Probabilities
+To perform data association, we augment the notation to make
+the data association variable explicit. Let nt be the index of
+the measurement zt , and let nt be the sequence of all corre-
+spondence variables leading up to time t. The domain of nt
+is 1, . . . , Nt−1 + 1 for some number of features Nt−1 that is
+increased dynamically as new features are acquired. We dis-
+tinguish two cases, namely that a feature corresponds to a pre-
+viously observed one (hence nt ≤ Nt−1), or that zt corresponds
+to a new, previously unobserved feature (nt = Nt−1 + 1). We
+will denote the robot’s guess of nt by ˆnt .
+
+To make the correspondence variables explicit in our no-
+tation, the posterior estimated by SEIF will henceforth be
+denoted
+
+p(ξt | zt , ut , ˆnt ).
+
+(51)
+
+Here ˆnt is the sequence of the estimated values of the cor-
+respondence variables nt . Notice that we choose to place the
+correspondences on the right side of the conditioning bar. The
+maximum likelihood approach simply chooses the correspon-
+dence that maximizes the measurement likelihood at any point
+in time:
+ˆnt = argmaxnt p(zt | zt−1, ut , ˆnt−1, nt )
+(cid:17)
+
+. (50)
+
+= argmaxnt
+
+p(zt | ξt , nt ) p(ξt | zt−1, ut , ˆnt−1)
+(cid:10)
+
+(cid:7)
+
+dξt
+
+(cid:17) (cid:17)
+
+= argmaxnt
+
+p(zt | xt , ynt , nt )
+
+(cid:8)(cid:9)
+¯Ht , ¯bt
+
+| zt−1, ut , ˆnt−1).
+
+p(xt , ynt
+
+(52)
+Our notation p(zt | xt , ynt , nt ) of the sensor model makes the
+correspondence variable nt explicit. Calculating this proba-
+bility exactly is not possible in constant time, since it involves
+marginalizing out almost all variables in the map (which re-
+quires the inversion of a large matrix). However, the same type
+of approximation that was essential for the efﬁcient sparsiﬁ-
+cation can also be applied here as well.
+In particular, let us denote by Y +
+
+nt the combined Markov
+blanket of the robot pose xt and the landmark ynt . This Markov
+blanket is the set of all features in the map that are linked to the
+robot of landmark ynt . Figure 6 illustrates this set. Notice that
+Y +
+nt includes by deﬁnition all active landmarks. The sparseness
+of ¯Ht ensures that Y +
+nt contains only a ﬁxed number of features,
+regardless of the size of the map N.
+
+All other features will be collectively referred to as Y −
+nt ,
+
+i.e.,
+
+Y −
+nt
+
+= Y − Y +
+nt
+
+− {ynt
+
+}.
+
+(53)
+
+704 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+(a)
+
+(b)
+
+Fig. 5. Sparsiﬁcation: a feature is deactivated by eliminating its link to the robot. To compensate for this change in information
+state, links between active features and/or the robot are also updated. The entire operation can be performed in constant time.
+
+The set Y −
+nt contains only features whose location asserts only
+an indirect inﬂuence on the two variables of interest, xt and
+|
+ynt . Our approach approximates the probability p(xt , ynt
+zt−1, ut , ˆnt−1) in eq. (52) by essentially ignoring these indirect
+inﬂuences:
+
+p(xt , ynt
+
+(cid:17) (cid:17)
+
+| zt−1, ut , ˆnt−1)
+
+xx
+
+tt
+
+yy
+
+nn
+
+=
+
+=
+
+≈
+
+p(xt , ynt , Y +
+
+nt
+
+, Y −
+nt
+
+(cid:17) (cid:17)
+
+| zt−1, ut , ˆnt−1) dY +
+
+nt dY −
+
+nt
+
+p(xt , ynt
+
+, zt−1, ut , ˆnt−1)
+
+| Y +
+nt
+
+, Y −
+nt
+| Y −
+, zt−1, ut , ˆnt−1)
+nt
+| zt−1, ut , ˆnt−1) dY +
+
+p(Y +
+nt
+p(Y −
+nt
+
+(cid:17)
+
+p(xt , ynt
+
+p(Y +
+nt
+
+| Y +
+nt
+| Y −
+nt
+
+, Y −
+nt
+= µ−
+
+nt
+
+= µ−
+
+nt dY −
+n , zt−1, ut , ˆnt−1)
+n , zt−1, ut , ˆnt−1) dY +
+
+nt
+
+.
+
+Fig. 6. The combined Markov blanket of feature yn and robot
+xt is sufﬁcient for approximating the posterior probability of
+the feature locations, conditioning away all other features.
+This insight leads to a constant time method for recovering
+the approximate probability distribution p(xt , yn | zt−1, ut ).
+
+(54)
+
+This probability can be computed in constant time. In com-
+plete analogy to various derivations above, we note that the
+approximation of the posterior is simply obtained by carving
+out the submatrix corresponding to the two target variables:
+
+(cid:2)t:nt
+µt:nt
+
+= S T
+(S T
+= µt Sxt ,yn.
+
+xt ,yn
+
+xt ,yn,Y
+
+Ht Sxt ,yn,Y
+
++
+
+n )−1 Sxt ,yn
+
++
+n
+
+(55)
+
+This calculation is constant time, since it involves a matrix
+whose size is independent of N. From this Gaussian, the de-
+sired measurement probability in eq. (52) is now easily re-
+covered, as described in Section 2.2. In our experiment, we
+found this approximation to work surprisingly well. In the
+results reported further below using real-world data, the av-
+erage relative error in estimating likelihoods is 3.4 × 10−4.
+Association errors due to this approximation were practically
+non-existent.
+
+New features are detected by comparing the likelihood
+| zt−1, ut , ˆnt−1, nt ) to a threshold α. If the likelihood
+p(zt
+is smaller than α, we set ˆnt = Nt−1 + 1 and Nt = Nt−1 + 1;
+otherwise the size of the map remains unchanged, that is,
+Nt = Nt−1. Such an approach approach is standard in the
+context of EKFs (Dissanayake et al. 2001).
+
+4.2. Map Management
+
+Our exact mechanism for building up the map is closely re-
+lated to common procedures in the SLAM community (Dis-
+sanayake et al. 2001). Due to erroneous feature detections
+caused for example by moving objects or measurement noise,
+additional care has to be taken to ﬁlter out those interfer-
+ing measurements. For any detected object that cannot be ex-
+plained by existing features, a new feature candidate is gen-
+erated but not put into SEIF directly. Instead it is added into
+a provisional list with a weight representing its probability
+of being a useful feature. In the next measurement step, the
+newly arrived candidates are checked against all candidates in
+the waiting list; reasonable matches increase the weight of cor-
+responding candidates. Candidates that are not matched lose
+weight because they are more likely to be a moving object.
+When a candidate has its weight above a certain threshold, it
+joins the SEIF network of features.
+
+We notice that data association violates the constant-time
+property of SEIFs. This is because when calculating data asso-
+ciations, multiple features have to be tested. If we can ensure
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+705
+
+Fig. 7. Comparison of EKFs (top column) with SEIFs (bottom column) using a simulation with N = 50 landmarks. In
+both diagrams, the left panels show the ﬁnal ﬁlter result, which indicates higher certainties for our approach due to the
+approximations involved in maintaining a sparse information matrix. The center panels show the links: black, between the
+robot and the active landmarks; gray, between landmarks. The right panels show the resulting covariance and normalized
+information matrices for both approaches. Notice the similarity. Even though the information matrix in SEIFs is sparse, the
+resulting correlation matrix is almost equivalent to that produced by the EKF.
+
+that all plausible features are already connected in the SEIF
+by a short path to the set of active features, it would be feasi-
+ble to perform data association in constant time. In this way,
+the SEIF structure naturally facilitates the search of the most
+likely feature given a measurement. However, this is not the
+case when closing a cycle for the ﬁrst time, in which case
+the correct association might be far away in the SEIF adja-
+cency graph. Using incremental versions of kd-trees (Lomet
+and Salzberg 1990; Procopiuc et al. 2002), it appears to be
+feasible to implement data association in logarithmic time by
+recursively partitioning the space of all feature locations us-
+ing a tree. However, our present implementation does not rely
+on such trees, hence is overly inefﬁcient.
+
+As a ﬁnal aside, we notice that another important operation
+can be done in constant time in SEIF: the merge of identical
+features previously mistreated as two or more unique ones.
+It is simply accomplished by adding corresponding values in
+the Ht matrix and bt vector. This operation is necessary when
+collapsing multiple features into one upon the arrival of further
+sensor evidence, a topic that is presently not implemented.
+
+Fig. 8. The vehicle used in our experiments is equipped with
+a two-dimensional laser range ﬁnder and a differential GPS
+system. The vehicle’s ego-motion is measured by a linear
+variable differential transformer sensor for the steering, and
+a wheel-mounted velocity encoder. In the background, the
+Victoria Park test environment can be seen.
+
+5. Experimental Results
+
+5.1. Real Vehicle Results
+
+The primary purpose of our experimental comparison was to
+evaluate the performance of the SEIF against that of the popu-
+
+lar EKF algorithm, from which the SEIF is derived. We begin
+our exposition with experiments using a real-world bench-
+mark data set, which has commonly used to evaluate SLAM
+algorithms (Guivant and Nebot 2001; Montemerlo et al. 2003;
+Neira, Tardós, and Castellanos 2003). This data set was
+
+706 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+(a)
+
+(b)
+
+Fig. 9. The testing environment. A 350 × 350 m2 patch in Victoria Park in Sydney. (a) shows integrated path from odometry
+readings and (b) shows the path as the result of SEIF.
+
+ure 9(a), which shows the path of the vehicle. The poor quality
+of the odometry information along with the presence of many
+spurious features make this data set particularly amenable for
+testing SLAM algorithms.
+
+The path recovered by the SEIF is shown in Figure 9(b).
+This path is quantitatively indistinguishable from the one pro-
+duced by the EKF and related variants (Guivant and Nebot
+2001; Montemerlo and Thrun 2003; Montemerlo et al. 2003;
+Neira, Tardós, and Castellanos 2003). The average position
+error, as measured through differential GPS, is smaller than
+0.50 m, which is small compared to the overall path length of
+3.5 km. Compared with EKF, SEIF runs approximately twice
+as fast and consumes less than a quarter of the memory EKF
+uses. Moreover, the residual error is approximately the same
+as that of other state-of-the-art techniques, such as those re-
+ported in Guivant and Nebot (2001) Montemerlo and Thrun
+(2003), and Montemerlo et al. (2003).
+
+We conclude that the SEIF performs as well on a phys-
+ical benchmark data set as far as its accuracy is concerned;
+however, even though the overall size of the map is small,
+using SEIFs results in noticeable savings both in memory and
+execution time.
+
+5.2. Simulation Results
+
+Unfortunately, the real-world data set prohibits systematic
+variation of key parameters, such as the size of the environ-
+ment and the amount of measurement noise. The results re-
+ported in the remainder of this paper are based on simulation.
+
+Fig. 10. Overlay of estimated landmark positions and robot
+path.
+
+collected with an instrumented outdoor vehicle driven through
+a park in Sydney, Australia.
+
+The vehicle and its environment are shown in Figures 8
+and 9, respectively. The robot is equipped with a SICK laser
+range ﬁnder and a system for measuring steering angle and
+forward velocity. The laser is used to detect trees in the en-
+vironment, but it also picks up hundreds of spurious features
+such as corners of moving cars on a nearby highway. The raw
+odometry, as used in our experiments, is poor, resulting in
+several hundred meters of error when used for path integra-
+tion along the vehicle’s 3.5 km path. This is illustrated in Fig-
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+707
+
+In our simulations, we focused particularly on the “loop clos-
+ing” problem, which is generally acknowledged to be one of
+the hardest problems in SLAM (Lu and Milios 1997; Gutmann
+and Konolige 1999; Thrun 2000; Bosse et al. 2003; Hähnel
+et al. 2003a). When closing a loop, usually many landmark
+locations are affected. This puts to the test our amortized map
+recovery mechanism under difﬁcult circumstances. As noted
+above, loop closures are the only condition under which SEIFs
+cannot be executed in constant time per update, since the most
+likely data association requires non-local search.
+
+√
+
+√
+
+The robot simulator is set up to always generate maps
+with the same average density of landmarks; as the number
+of landmarks is increased, so is the size of the environment.
+Each unit interval possesses 50 landmarks (on average). Land-
+50 N
+marks are uniformly drawn in a squared region of size
+50 N; however, only landmarks are retained that meet
+by
+a minimum distance requirement to previously drawn land-
+marks. By growing the size of the environment by the square
+root of N, the average density of landmarks remains constant,
+regardless of the number of landmarks involved. The noise of
+robot motion and measurements are all modeled by zero mean
+Gaussian noise. Speciﬁcally, the variance is 10−4 for forward
+velocity, 10−3 for rotational velocity, 0.002 for range detection
+and 0.003 for bearings measurements. In each iteration of the
+simulation, the robot takes one move and one measurement,
+at which it may sense a variable number of nearby landmarks.
+In each of our experiments, we performed a total of 20N iter-
+ations, which leads roughly to the same number of sightings
+of individual landmarks. The maximum sensor range is set
+to 0.2, which results in approximately six landmark detec-
+tions on average for one measurement step. Unless otherwise
+noted, the number of active landmarks bounded by θx = 6.
+The variable θy remains unconstrained, since the constraint
+on θx effectively restricts the number of between-landmark
+links.
+
+Figures 11 and 12 show that SEIFs outperform EKFs in
+terms of computation and memory usage. In particular, Fig-
+ure 11 illustrates that in SEIFs, the computation time virtually
+levels off at N = 300, regardless of the number of landmarks
+involved. In EKFs, in contrast, the time increases quadrati-
+cally with the number of landmarks N. Clearly, this makes
+EKFs prohibitively slow for larger maps. EKFs, on the other
+hand, outperform SEIFs for very small number of landmarks
+(N ≤ 200), due to the additional computational overhead in-
+volved in the sparsiﬁcation and the map recovery. Figure 12
+illustrates that the memory requirement of SEIFs is strictly
+superior of that of EKFs. The memory consumed by SEIFs
+increases linearly with the size of the map, whereas that of
+EKFs grows quadratically.
+
+A key open question pertains to the degree at which main-
+taining sparse matrices affects the overall error of the map.
+Empirical simulation results are shown in Figure 13, which
+plots the empirical error as a function of the map size N. In
+absolute terms, the error in each of these maps is extremely
+
+Fig. 11. The comparison of average CPU time between SEIF
+and EKF.
+
+Fig. 12. The comparison of average memory usage between
+SEIF and EKF.
+
+Fig. 13. The comparison of root mean square distance error
+between SEIF and EKF.
+
+708 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+(a) EKF/SEIF: CPU time per update
+
+(b) EKF/SEIF: rms error
+
+Fig. 14. Comparison of EKFs and SEIFs for different degrees of sparseness, induced by different values of θx: (a) update
+time; (b) rms error in the residual estimate.
+
+small. Recall that for N = 200, the landmarks are spread in a
+region of size 100 by 100, whereas both methods yield an ap-
+proximate error of 0.015 per landmark. Both curves increase
+approximately linearly with N. This should not surprise, as
+the total area of the environment also increases linearly with
+N . However, SEIFs perform noticeably poorer than EKFs in
+this experiment. This increase in error is due to the various
+approximations underlying SEIFs.
+
+In a ﬁnal series of experiments, we evaluated the depen-
+dence of the computation time and the error on the sparsity
+of the ﬁlter. We systematically varied the threshold θx, which
+determines the maximum number of landmarks than can be
+active at a time. Because between-landmark arcs can only
+develop between landmarks that are active at the same time,
+limiting θx also limits the number of between-landmark arcs.
+Figure 14 shows the basic result. The left diagram depicts
+the update time for EKFs and SEIFs with varying numbers
+of active landmarks, and the solid curve in the right diagram
+shows the corresponding map errors. For a map with N =
+50 landmarks, EKFs require 135 ± 22.5 s per update on a
+low-end PC. SEIFs with θx = 10 active landmarks require
+21.8 ± 3.50 s. The increase in error is quite small. Whereas
+EKF’s error is 0.0526 ± 0.0189, the SEIF error is 0.0584 ±
+0.0215. As the number of active landmarks is reduced, the
+update becomes increasingly efﬁcient, but at the expense of
+an increased error. For θx = 6, we obtain an update time of
+13.0 ± 1.81, with an error of 0.0800 ± 0.0463, which is a 51%
+increase in error for a tenfold speedup. Beyond this, the error
+grows more rapidly. For example for θx = 6 the update time
+is 9.07 ± 0.513, but the error is now 0.341 ± 0.295, which is a
+548% increase over EKFs. From these results, it appears that
+ﬁve active landmarks give good results; less than that induces
+a signiﬁcant loss—although the ﬁnal selection of θx inevitably
+will depend on the costs of mapping error relative to the costs
+of computation.
+
+This result raises the question as to what causes this error.
+To dissect possible sources of error, we implemented SEIFs
+using the exact equations for recovering the mean and covari-
+ance, as deﬁned in eq. (6). In this way, we can separate the
+error arising from the amortized recovery of the mean, from
+the error induced by the sparsiﬁcation. The dashed curve in
+Figure 14(b) shows the resulting error. As this curve illus-
+trates, even a highly sparse SEIF is capable of producing
+accurate results. The error for θx = 4 active landmarks is
+0.0701 ± 0.0372, which is only 33% larger than that of EKFs
+(instead of 548%).
+
+5.3. Consistency
+
+SEIFs can be overconﬁdent, that is, the covariance of the pos-
+terior estimates can suggest a higher degree of conﬁdence
+than actually warranted by the sensor measurements. Such
+overconﬁdence is commonly called “inconsistency” in the
+SLAM literature. It arises from a number of factors. First,
+the linearization frequently causes overconﬁdence, which af-
+fects both the EKF and the SEIF solution. Further, the trun-
+cation of direct long-range links in SEIFs—a result of the
+sparsiﬁcation—can further induce overconﬁdence. Inconsis-
+tency does not necessarily induce error or jeopardize conver-
+gence. In fact, a recent result proves convergence for a ﬁlter
+that maintains no covariance estimate, hence is maximally
+overconﬁdent (Montemerlo et al. 2003). However, overconﬁ-
+dence can adversely affect the ability to perform data associa-
+tion (as can underconﬁdence). For this reason, characterizing
+the degree of overconﬁdence is a common step in evaluating
+the viability of a new SLAM algorithm. Here we are interested
+in the additional conﬁdence arising from the sparsiﬁcation,
+and we compare it to the conﬁdence levels of EKFs.
+
+The conﬁdence of SEIFs is depicted in Figure 15, which
+plots the determinant of the covariance |(cid:2)| as a function of
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+709
+
+ample illustrates that a small amount of overconﬁdence (0.1%
+in our case) may be well tolerable, assuming that the goal of
+the ﬁlter is to maximize the accuracy in the map. In fact, given
+the result in Montemerlo et al. (2003), the relation between
+consistency and error remains unclear.
+
+5.4. Multi-Vehicle SLAM
+
+In a ﬁnal series of experiments we applied SEIFs to a restricted
+version of the multi-robot SLAM problem, commonly stud-
+ied in the literature (Nettleton, Gibbens, and Durrant-Whyte
+2000). In our implementation, the robots are informed of
+their initial pose. This is a common assumption in multi-robot
+SLAM, necessary for the type linearization that is applied both
+in EKFs and SEIFs (Nettleton, Gibbens, and Durrant-Whyte
+2000). Recent work that enables vehicles to build joint maps
+without initial knowledge of their relative pose can be found
+in Gutmann and Konolige (1999), Stewart et al. (2003), and
+Thrun and Liu (2003).
+
+Our simulation involves a team of three air vehicles. The
+vehicles are not equipped with GPS; hence they accrue po-
+sitioning error over time. Figure 17 shows the joint map at
+different stages of the simulation. As in Nettleton, Gibbens,
+and Durrant-Whyte (2000), we assume that the vehicles com-
+municate updates of their information matrices and vectors,
+enabling them to generate a single, joint map. As argued there,
+the information form provides the important advantage over
+EKFs that communication can be delayed arbitrarily, which
+overcomes a need for tight synchronization inherent to the
+EKF. This characteristic arises directly from the fact that the
+information matrix Ht and the information vector bt in SEIFs
+is additive, whereas covariance matrices are not. In particu-
+lar, let (cid:9)H i
+(cid:10) be the posterior of the ith vehicle. Assum-
+ing that all posteriors are expressed over the same coordinate
+system and that each map uses the same numbering for all
+landmarks, the joint posterior integrating all of these local
+maps is given by (cid:9)
+(cid:10). This additive nature of the
+i bi
+t
+information form is well known, and has in the context of
+SLAM previously been exploited by Nettleton, Gibbens, and
+Durrant-Whyte (2000). SEIFs offer over the work in Nettle-
+ton, Gibbens, and Durrant-Whyte (2000) that the messages
+sent between vehicles are small, due to the sparse nature of
+the information form. A related approach for generating small
+messages in multi-vehicle SLAM has recently been described
+in Nettleton, Thrun, and Durrant-Whyte (2003).
+
+i H i
+t ,
+
+t , bi
+
+(cid:27)
+
+(cid:27)
+
+t
+
+Figure 17 shows a sequence of snapshots of the multi-
+vehicle system, using three different air vehicles. Initially, the
+vehicle starts our in different areas, and the combined map (il-
+lustrated by the uncertainty ellipses) consists of three disjoint
+regions. During steps 62–64, the top two vehicles discover
+identical landmarks; as a result, the overall uncertainty of their
+respective map region decreases; This illustrates that the SEIF
+indeed maintains the correlations in the individual landmark’s
+uncertainties; albeit using a sparse information matrix instead
+
+Fig. 15. Overconﬁdence in SEIFs. The determinant of
+the covariance matrix (cid:2)t = H −1
+plotted for EKFs and
+SEIFs with varying degrees of sparseness. This determinant
+characterizes the overall conﬁdence in the posterior estimate.
+
+T
+
+the algorithm, for our simulation with N = 50 landmarks.
+The larger this value, the more conﬁdent the ﬁlter. While the
+determinant of EKFs is 1724 ± 27.4, SEIFs with θx = 10
+active landmarks yield a determinant of 1726 ± 26.8. This
+0.1% increase is not statistically signiﬁcant. With θx = 6
+active landmarks, we observe |(cid:2)−1
+| = 1729 ± 27.3, a 0.3%
+increase that also lacks statistical signiﬁcance.
+
+t
+
+To understand the effect of the overconﬁdence on the er-
+ror, we modiﬁed the basic SEIF algorithm to yield less conﬁ-
+dent results. Our modiﬁcation was straightforward. After each
+update, the links between the robot and the active landmarks
+were weakened, by a “soft” sparsiﬁcation rule. More speciﬁ-
+cally, imagine after the tth update we are given an information
+matrix Ht and an information vector bt . Our approach ﬁrst
+sparsiﬁes away all active landmark links using the math de-
+scribed above (applied to all active landmarks). Let the result
+of this operation be denoted H 0
+t . Our approach then
+mixes (cid:9)Ht , bt (cid:10) and (cid:9)H 0
+
+(cid:10) using a mixing ratio ρ:
+
+t and b0
+
+t , b0
+
+t
+
+Ht ←− (1 − ρ)Ht + ρH 0
+t
+bt ←− (1 − ρ) bt + ρb0
+t .
+
+and
+
+(56)
+
+The resulting estimate is less conﬁdent (by deﬁnition) than
+the original one, where ρ characterizes the loss of conﬁdence.
+This is illustrated in Figure 16(a), which depicts the determi-
+nant of the covariance |(cid:2)t | for different levels of ρ (here with
+θx = 6).
+The
+
+reduction in
+conﬁdence—in fact, the resulting estimate is “consistent”—
+adversely affects the RMS map error. This is illustrated in
+Figure 16(b), which shows the error for different values of ρ.
+The more conﬁdent the ﬁlter, the smaller the resulting error.
+While this approach is just one way out of many to reduce
+conﬁdence by taking information out of the system, this ex-
+
+interesting ﬁnding is
+
+that
+
+this
+
+710 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+(a) Modiﬁed SEIF: determinant of (cid:2)t
+
+(b) Modiﬁed SEIF: rms rrror
+
+Fig. 16. Making SEIFs underconﬁdent (consistent). Shown on the left is the determinant of (cid:2)t for EKFs and the modiﬁed
+SEIF algorithm, with θx = 6 active landmarks, but for different levels of information decay (see text). The right diagram
+depicts the corresponding error.
+
+of the covariance matrix. Similarly, in steps 85–89, the third
+vehicle begins to discover identical landmarks also seen by
+another vehicle. Again, the resulting uncertainty of the en-
+tire map is reduced, as can be seen easily. The last panel in
+Figure 17 shows the ﬁnal map, obtained after 500 iterations.
+This example shows that SEIFs are well suited for multi-robot
+SLAM, assuming that the initial poses of the vehicles are
+known.
+
+6. Related Work
+
+SEIFs are related to a rich body of literature on SLAM and
+high-dimensional ﬁltering. Recently, several researchers have
+developed hierarchical techniques that decompose maps into
+collections of smaller, more manageable submaps (Leonard
+and Feder 1999; Guivant and Nebot 2001; Bailey 2002; Bosse
+et al. 2002; Tardós et al. 2002; Williams and Dissanayake
+2002). While, in principle, hierarchical techniques can solve
+the SLAM problem in linear time, many of these techniques
+still require quadratic time per update. One recent technique
+updates the ﬁlter in constant time (Leonard and Feder 1999)
+by restricting all computation to the submap in which the
+robot presently operates. Using approximation techniques for
+transitioning between submaps, this work demonstrated that
+consistent error bounds can be maintained with a constant-
+time algorithm (which is not necessarily the case for SEIFs).
+However, the method does not propagate information to pre-
+viously visited submaps unless the robot subsequently revisits
+these regions. Hence, this method suffers a slower rate of con-
+vergence in comparison to the O(N 2) full covariance solution.
+Alternative methods based on decomposition into submaps,
+
+such as the sequential map joining techniques described in
+Tardós et al. (2002) and Williams, Dissanayake, and Durrant-
+Whyte (2002) can achieve the same rate of convergence as the
+full EKF solution, but incur an O(N 2) computational burden.
+A different line of research has relied on particle ﬁlters for
+efﬁcient mapping (Doucet, de Freitas, and Gordon 2001). The
+FastSLAM algorithm (Montemerlo et al. 2002, 2003; Hähnel
+et al. 2003b) and earlier related mapping algorithms (Murphy
+2000; Thrun 2001) require time logarithmic in the number of
+features in the map, but they depend linearly on a particle-ﬁlter
+speciﬁc parameter (the number of particles). There exists now
+evidence that a single particle may sufﬁce for convergence in
+idealized situations (Montemerlo et al. 2002), but the number
+of particles required for handling data association problems
+robustly is still not fully understood. More recently, thin junc-
+tion trees have been applied to the SLAM problem by Paskin
+(2002). This work establishes a viable alternative to the ap-
+proach proposed here, with somewhat different computational
+properties. However, at the present point this approach lacks
+an efﬁcient technique for making data association decisions.
+As noted in the introduction of this paper, the idea of rep-
+resenting maps by relative information has previously been
+explored by a number of authors, most notably in recent al-
+gorithms by Newman (2000) and Csorba (1997) and Deans
+and Hebert (2000); it is also related to an earlier algorithm by
+Lu and Milios (1997) and Gutmann and Nebel (1997). The
+Newman algorithm assumes sensors that provide relative in-
+formation between multiple landmarks, which enables it to
+bypass the issue of sparsiﬁcation of the information matrix.
+The work by Lu and Milios uses robot poses as the core repre-
+sentation, hence the size of the ﬁlter grows linearly over time
+(even for maps of ﬁnite size). As a result, the approach is not
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+711
+
+Step t = 3
+
+Step t = 62
+
+Step t = 65
+
+Step t = 85
+
+Step t = 89
+
+Step t = 500
+
+Fig. 17. Snapshots from our multi-robot SLAM simulation at different points in time. Initially, the poses of the vehicles are
+known. During steps 62–64, vehicles 1 and 2 traverse the same area for the ﬁrst time; as a result, the uncertainty in their local
+maps shrinks. Later, in steps 85–89, vehicle 2 observes the same landmarks as vehicle 3, with a similar effect on the overall
+uncertainty. After 500 steps, all landmarks are accurately localized.
+
+712 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+applicable on-line. However, the approach by Lu and Milios
+relies on local links between adjacent poses, similar to the
+local links maintained by SEIFs between nearby landmarks.
+It therefore shares many of the computational properties of
+SEIFs when applied to data sets of limited size.
+
+Just as in recent work by Nettleton, Gibbens, and Durrant-
+Whyte (2000), our approach is based on the information form
+of the EKF (Maybeck 1979), as noted above. However, Net-
+tleton and colleagues focus on the issue of communication
+between multiple robots; as a result, they have not addressed
+computational efﬁciency problems (their algorithm requires
+O(N 3) time per update). Relative to this work, a central in-
+novation in SEIFs is the sparsiﬁcation step, which results in
+an increased computational efﬁciency. A second innovation is
+the amortized constant time recovery of the map.
+
+As noted above, the information matrix and vector esti-
+mated by the SEIF deﬁnes a Gaussian Markov random ﬁeld
+(GMRF; Weiss and Freeman 2001).As a direct consequence, a
+rich body of literature in inference in sparse GMRFs becomes
+directly applicable to a number of problems addressed here,
+such as the map recovery, the sparsiﬁcation, and the marginal-
+ization necessary for data association (Pearl 1988; Murphy,
+Weiss, and Jordan 1999; Wainwright 2002). Also applicable
+is the rich literature on sparse matrix transformations (Gupta,
+Karypis, and Kumar 1997).
+
+7. Discussion
+
+In this paper we have proposed an efﬁcient algorithm for the
+SLAM problem. Our approach is based on the well-known
+information form of the EKF. Based on the empirical ob-
+servation that the information matrix is dominated by a small
+number of entries that are found only between nearby features
+in the map, we have developed a SEIF. This ﬁlter enforces a
+sparse information matrix, which can be updated in constant
+time. In the linear SLAM case with known data association,
+all updates can be performed in constant time; in the nonlinear
+case, additional state estimates are needed that are not part of
+the regular information form of the EKF. We have proposed
+an amortized constant-time coordinate descent algorithm for
+recovering these state estimates from the information form.
+We have also proposed an efﬁcient algorithm for data associ-
+ation in SEIFs that requires logarithmic time, assuming that
+the search for nearby features is implemented by an efﬁcient
+search tree. The approach has been implemented and com-
+pared to the EKF solution. Overall, we ﬁnd that SEIFs pro-
+duce results that differ only marginally from that of the EKFs,
+yet at a much improved computational speed. Given the com-
+putational advantages of SEIFs over EKFs, we believe that
+SEIFs should be a viable alternative to EKF solutions when
+building high-dimensional maps.
+
+SEIFs, represented here, possess a number of critical limi-
+tations that warrant future research. First and foremost, SEIFs
+
+may easily become overconﬁdent, a property often referred
+to as “inconsistent” (Leonard and Feder 1999; Julier and
+Uhlmann 2000). The overconﬁdence mainly arises from the
+approximation in the sparsiﬁcation step. Such overconﬁdence
+is not necessarily an problem for the convergence of the ap-
+proach (Montemerlo et al. 2003), but it may introduce errors
+in the data association process. In practice, we did not ﬁnd
+the overconﬁdence to affect the result in any noticeable way;
+however, it is relatively easy to construct situations in which
+it leads to arbitrary errors in the data association process.
+
+Another open question concerns the speed at which the
+amortized map recovery converges. Clearly, the map is needed
+for a number of steps; errors in the map may therefore affect
+the overall estimation result. Again, our real-world experi-
+ments show no sign of noticeable degradation, but a small
+error increase was noted in one of our simulated experiments.
+Finally, SEIF inherits a number of limitations from the
+common literature on SLAM. Among those are the use of Tay-
+lor expansion for linearization, which can cause the map to di-
+verge; the static world assumption which makes the approach
+inapplicable to modeling moving objects (Wang, Thorpe, and
+Thrun 2003); the inability to maintain multiple data associ-
+ation hypotheses, which makes the approach brittle in the
+presence of ambiguous features; the reliance on features, or
+landmarks; and the requirement that the initial pose be known
+in the multi-robot implementation. Virtually all of these lim-
+itations have been addressed in the recent literature. For ex-
+ample, a recent line of research has devised efﬁcient particle
+ﬁltering techniques (Murphy 2000; Hähnel et al. 2003b; Mon-
+temerlo et al. 2003) that address most of these shortcomings.
+The issues addressed in this paper are somewhat orthogonal
+to these limitations, and it appears feasible to combine efﬁ-
+cient particle ﬁlter sampling with SEIFs. We also note that in a
+recent implementation, a new lazy data association methodol-
+ogy was developed that uses a SEIF-style information matrix
+to robustly generate maps with hundreds of meters in diameter
+(Thrun et al. 2003).
+
+The use of sparse matrices in SLAM offers a number of
+important insights into the design of SLAM algorithms. Our
+approach puts a new perspective on the rich literature on hier-
+archical mapping discussed further above. As in SEIFs, these
+techniques focus updates on a subset of all features, to gain
+computational efﬁciency. SEIFs, however, compose submaps
+dynamically, whereas past work relied on the deﬁnition of
+static submaps. We conjecture that our sparse network struc-
+tures capture the natural dependences in SLAM problems
+much better than static submap decompositions, and in turn
+lead to more accurate results. They also avoid problems that
+frequently occur at the boundary of submaps, where the es-
+timation can become unstable. However, the veriﬁcation of
+these claims will be subject to future research. A related pa-
+per discusses the application of constant-time techniques to
+information exchange problems in multi-robot SLAM (Net-
+tleton, Thrun, and Durrant-Whyte 2002).
+
+Finally, we note that our work sheds some fresh light on the
+ongoing discussion on the relation of topological and metric
+maps, a topic that has been widely investigated in the cognitive
+mapping community (Kuipers and Byun 1988; Chown, Ka-
+plan, and Kortenkamp 1995). Links in SEIFs capture relative
+information, in that they relate the location of one landmark to
+another (see also Csorba 1997; Deans and Hebert 2000; New-
+mann 2000). This is a common characteristic of topological
+map representations (Matari´c 1990; Kuipers and Byun 1991;
+Choset 1996; Shatkay and Kaelbling 1997). SEIFs also offer
+a sound method for recovering absolute locations and afﬁl-
+iated posteriors for arbitrary submaps based on these links,
+of the type commonly found in metric map representations
+(Smith and Cheeseman 1986; Moravec 1988). Thus, SEIFs
+bring together aspects of both paradigms, by deﬁning simple
+computational operations for changing relative to absolute
+representations, and vice versa.
+
+Appendix: Proofs
+
+Proof of Lemma 1: Measurement updates are realized via
+eqs. (17) and (18), restated here for the reader’s convenience:
+
+Ht = ¯Ht + Ct Z−1C T
+bt = ¯bt + (zt − ˆzt + C T
+
+t
+
+t µt )TZ−1C T
+t .
+
+(57)
+
+(58)
+
+From the estimate of the robot pose and the location of the
+observed feature, the prediction ˆzt and all non-zero elements
+of the Jacobian Ct can be calculated in constant time, for any
+of the commonly used measurement models g. The constant-
+time property follows now directly from the sparseness of the
+matrix Ct , discussed already in Section 2.2. This sparseness
+implies that only ﬁnitely many values have to be changed
+when transitioning from ¯Ht to Ht , and from ¯bt to bt .
+(cid:1)
+Proof of Lemma 2: For At = 0, eq. (28) gives us the follow-
+ing updating equation for the information matrix:
+
+¯Ht = [H −1
+
+t−1
+
++ SxUt S T
+
+x
+
+]−1.
+
+(59)
+
+Applying the matrix inversion lemma leads to the following
+form:
+
+¯Ht = Ht−1 − Ht−1 Sx [U
+
+(cid:7)
+
+−1
+t
+
++ ST
+
+x Ht−1Sx ]−1ST
+
+x Ht−1
+(cid:10)
+
+(cid:8)(cid:9)
+=:Lt
+
+= Ht−1 − Ht−1Lt .
+
+(60)
+
+The update of the information matrix, Ht−1Lt , is a matrix that
+is non-zero only for elements that correspond to the robot pose
+and the active features. To see, we note that the term inside
+the inversion in Lt is a low-dimensional matrix which is of
+the same dimension as the motion noise Ut . The inﬂation via
+the matrices Sx and S T
+x leads to a matrix that is zero except for
+elements that correspond to the robot pose. The key insight
+now is that the sparseness of the matrix Ht−1 implies that only
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+713
+
+ﬁnitely many elements of Ht−1Lt may be non-zero, namely
+those corresponding to the robot pose and active features.
+They are easily calculated in constant time.
+
+For the information vector, we obtain from eqs. (28) and
+
+(60):
+
+¯bt = [bt−1H −1
+t−1
+= [bt−1H −1
+t−1
+= bt−1 + ˆ(cid:5)T
+
+] ¯Ht
+](Ht−1 − Ht−1Lt )
+
++ ˆ(cid:5)T
++ ˆ(cid:5)T
+t Ht−1 − bt−1Lt + ˆ(cid:5)T
+
+t
+
+t
+
+t Ht−1Lt .
+
+(61)
+
+As above, the sparseness of Ht−1 and of the vector ˆ(cid:5)t ensures
+that the update of the information vector is zero except for
+entries corresponding to the robot pose and the active features.
+(cid:1)
+Those can also be calculated in constant time.
+Proof of Lemma 3: The update of ¯Ht requires the deﬁnition
+of the auxiliary variable (cid:8)t := (I + At )−1. The non-trivial
+components of this matrix can essentially be calculated in
+constant time by virtue of
+
+(cid:8)t = (I + SxS T
+
+x At SxS T
+
+= I − I Sx(SxI S T
+= I − Sx(I + [S T
+
+x
+
+x )−1
+x At Sx]−1)−1S T
++ [S T
+x I
+x At Sx]−1)−1S T
+x .
+
+(62)
+
+Notice that (cid:8)t differs from the identity matrix I only at el-
+ements that correspond to the robot pose, as is easily seen
+from the fact that the inversion in eq. (62) involves a low-
+dimensional matrix.
+
+The deﬁnition of (cid:8)t allows us to derive a constant-time
+
+expression for updating the information matrix H :
+
+]−1
+
+−1
+¯Ht = [(I + At )H
+t−1(I + At )T + Sx Ut ST
+x
+= [((cid:8)T
+)
+t Ht−1(cid:8)t
+(cid:10)
+(cid:8)(cid:9)
+=:H (cid:3)
+(cid:3)
+t−1)
+
+−1 + Sx Ut ST
+x
+
+]−1
+
+]−1
+
+(cid:7)
+
+= [(H
+(cid:3)
+t−1
+
+= H
+
+t−1
+−1 + Sx Ut ST
+x
+−1
+(cid:3)
+t−1Sx [U
+t
+
+− H
+(cid:7)
+
+(cid:3)
+
+t−1Sx ]−1ST
+x H
+
++ ST
+x H
+(cid:8)(cid:9)
+=:(cid:5)Ht
+
+(cid:3)
+t−1
+(cid:10)
+
+(63)
+
+= H
+
+(cid:3)
+t−1
+
+− (cid:5)Ht .
+
+t−1
+
+= (cid:8) T
+
+The matrix H (cid:3)
+t Ht−1(cid:8)t is easily obtained in constant
+time and, by the same reasoning as above, the entire update
+requires constant time. The information vector ¯bt is now ob-
+tained as follows:
+
+714 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+¯bt = [bt−1H −1
+t−1
+= bt−1H −1
+t−1
+= bt−1H −1
+
+] ¯Ht
++ ˆ(cid:5)T
+¯Ht
+¯Ht + ˆ(cid:5)T
+t−1( ¯Ht + Ht−1 − Ht−1
+(cid:10)
+(cid:7)
+
+t
+
+t
+
+(cid:8)(cid:9)
+=0
+
++ H (cid:3)
+(cid:7)
+
+t−1
+
+) + ˆ(cid:5)T
+t−1
+(cid:10)
+
+t
+
+− H (cid:3)
+(cid:8)(cid:9)
+=0
+
+¯Ht
+
+= bt−1H −1
+
+−Ht−1 + H (cid:3)
+
+t−1) + ˆ(cid:5)T
+
+t
+
+¯Ht
+
+t−1
+(cid:10)
+
+t−1(Ht−1 + ¯Ht − H (cid:3)
+(cid:7)
+
+(cid:8)(cid:9)
+−(cid:5)Ht
+t−1(Ht−1 − (cid:5)Ht − Ht−1 + H (cid:3)
+t−1((cid:5)Ht − Ht−1 + H (cid:3)
+
+t−1Ht−1H −1
+t−1((cid:5)Ht − Ht−1 + H (cid:3)
+
+t−1((cid:5)Ht − Ht−1 + H (cid:3)
+t−1) + ˆ(cid:5)T
+
+t
+
+= bt−1H −1
+= bt−1 − bt−1H −1
+= bt−1 − µT
+= bt−1 − µT
+
+t
+
+¯Ht
+t−1) + ˆ(cid:5)T
+¯Ht
+t−1) + ˆ(cid:5)T
+t−1) + ˆ(cid:5)T
+¯Ht .
+
+t
+
+t
+
+¯Ht
+(64)
+
+t−1
+
+The update (cid:5)Ht is non-zero only for elements that correspond
+to the robot pose or active features. Similarly, the difference
+− Ht−1 is non-zero only for constantly many elements.
+H (cid:3)
+Therefore, only those mean estimates in µt−1 are necessary to
+(cid:1)
+calculate the product µT
+t−1(cid:5)Ht .
+Proof of Lemma 4: The mode ˆνt of eq. (45) is given by
+
+ˆνt = argmaxνt p(νt )
+(cid:3)
+= argmaxνt exp
+= argminνt
+2 ν T
+
+1
+
+2 ν T
+
+− 1
+t Ht νt − bT
+
+t Ht νt + bT
+t νt
+t νt .
+
+(cid:4)
+
+(65)
+
+The gradient of the expression inside the minimum in eq. (65)
+with respect to νt is given by
+(cid:3)
+
+(cid:4)
+
+1
+
+2 ν T
+
+t Ht νt − bT
+t νt
+
+= Ht νt − bT
+t ,
+
+(66)
+
+∂
+∂νt
+
+whose minimum ˆνt is attained when the derivative (66) is 0,
+i.e.,
+
+ˆνt = H −1
+
+t bT
+t .
+
+From this and eq. (44) it follows that ˆνt = µt .
+
+(67)
+
+(cid:1)
+
+Acknowledgments
+
+The authors would like to acknowledge invaluable contribu-
+tions by the following researchers: Wolfram Burgard, Geof-
+frey Gordon, Tom Mitchell, Kevin Murphy, Eric Nettleton,
+Michael Stevens, and Ben Wegbreit. We also acknowledge
+the helpful suggestions by two anonymous reviewers. This re-
+search has been sponsored by DARPA’s MARS Program (con-
+tracts N66001-01-C-6018 and NBCH1020014), DARPA’s
+CoABS Program (contract F30602-98-2-0137), and DARPA’s
+MICA Program (contract F30602-01-C-0219), all of which is
+gratefully acknowledged. The authors furthermore acknowl-
+edge support provided by the National Science Foundation
+(CAREER grant number IIS-9876136 and regular grant num-
+ber IIS-9877033).
+
+References
+
+Bailey, T. 2002. Mobile Robot Localization and Mapping in
+Extensive Outdoor Environments. PhD thesis, University
+of Sydney, Sydney, NSW, Australia.
+
+Bosse, M., Leonard, J., and Teller, S. 2002. Large-scale CML
+using a network of multiple local maps. Proceedings of
+the IEEE International Conference on Robotics and Au-
+tomation (ICRA), Workshop Notes of the ICRA Workshop
+on Concurrent Mapping and Localization for Autonomous
+Mobile Robots (W4), Washington, DC, May 11–15.
+
+Bosse, M., Newman, P., Soika, M., Feiten, W., Leonard, J.,
+and Teller, S. 2003. An atlas framework for scalable map-
+ping. Proceedings of the IEEE International Conference
+on Robotics and Automation (ICRA), Taipei, Taiwan.
+Burgard, W., Fox, D., Jans, H., Matenar, C., and Thrun, S.
+1999. Sonar-based mapping of large-scale mobile robot
+environments using EM. Proceedings of the International
+Conference on Machine Learning, Bled, Slovenia.
+
+Burgard, W., Fox, D., Moors, M., Simmons, R., and Thrun,
+S. 2000. Collaborative multi-robot exploration. Proceed-
+ings of the IEEE International Conference on Robotics and
+Automation (ICRA), San Francisco, CA, April 24–28.
+Choset, H. 1996. Sensor Based Motion Planning: The Hierar-
+chical Generalized Voronoi Graph. PhD thesis, California
+Institute of Technology.
+
+Chown, E., Kaplan, S., and Kortenkamp, D. 1995. Prototypes,
+location, and associative networks (plan): towards a uniﬁed
+theory of cognitive mapping. Cognitive Science 19:1–51.
+Cover, T. M. and Thomas, J. A. 1991. Elements of Information
+
+Theory. Wiley, New York.
+
+Csorba, M. 1997. Simultaneous Localization and Map Build-
+ing. PhD thesis, Department of Engineering Science, Uni-
+versity of Oxford, Oxford, UK.
+
+Deans, M. and Hebert, M. 2000. Invariant ﬁltering for si-
+multaneous localization and mapping. Proceedings of the
+IEEE International Conference on Robotics and Automa-
+tion (ICRA), San Francisco, CA, April 24–28, pp. 1042–
+1047.
+
+Dissanayake, G., Newman, P., Clark, S., Durrant-Whyte,
+H. F., and Csorba, M. 2001. A solution to the simultane-
+ous localization and map building (SLAM) problem. IEEE
+Transactions of Robotics and Automation 17(3):229–241.
+Doucet,A., de Freitas, J. F. G., and Gordon, N. J. editors. 2001.
+Sequential Monte Carlo Methods In Practice. Springer
+Verlag, New York.
+
+Guivant, J., and Nebot, E. 2001. Optimization of the simul-
+taneous localization and map building algorithm for real
+time implementation. IEEE Transactions of Robotics and
+Automation 17(3):242–257.
+
+Gupta, A., Karypis, G., and Kumar, V. 1997. Highly scal-
+able parallel algorithms for sparse matrix factorization.
+IEEE Transactions on Parallel and Distributed Systems
+8(5):502–520.
+
+Gutmann, J.-S., and Konolige, K. 1999. Incremental mapping
+of large cyclic environments. Proceedings of the IEEE In-
+ternational Symposium on Computational Intelligence in
+Robotics and Automation (CIRA), Monterey, CA.
+
+Gutmann, J.-S., and Nebel, B. 1997. Navigation mo-
+biler roboter mit laserscans. Autonome Mobile Systeme.
+Springer Verlag, Berlin.
+
+Hähnel, D., Burgard, W., Wegbreit, B., and Thrun, S. 2003a.
+Towards lazy data association in SLAM. Proceedings of
+the 11th International Symposium of Robotics Research
+(ISRR’03), Sienna, Italy.
+
+Hähnel, D., Fox, D., Burgard, W., and Thrun, S. 2003b. A
+highly efﬁcient FastSLAM algorithm for generating cyclic
+maps of large-scale environments from raw laser range
+measurements. Proceedings of the Conference on Intelli-
+gent Robots and Systems (IROS), Las Vegas, NV, October
+27–31.
+
+Hähnel, D., Triebel, R., Burgard, W., and Thrun, S. 2003c.
+Map building with mobile robots in dynamic environ-
+ments. Proceedings of the IEEE International Conference
+on Robotics and Automation (ICRA), Taipei, Taiwan.
+Julier, S. J., and Uhlmann, J. K. 2000. Building a million
+beacon map. Sensor Fusion and Decentralized Control in
+Robotic Systems IV, Bellingham, WA, Proceedings of the
+SPIE 4571.
+
+Kuipers, B., and Byun,Y.-T. 1988.A robust qualitative method
+for spatial learning in unknown environments. Proceeding
+of the 8th National Conference on Artiﬁcial Intelligence
+AAAI-88, Menlo Park, Cambridge.
+
+Kuipers, B., and Byun, Y.-T. 1991. A robot exploration and
+mapping strategy based on a semantic hierarchy of spa-
+tial representations. Journal of Robotics and Autonomous
+Systems 8:47–63.
+
+Leonard, J. J. and Durrant-Whyte, H. F. 1992. Directed Sonar
+Sensing for Mobile Robot Navigation. Kluwer Academic,
+Boston, MA.
+
+Leonard, J. J. and Feder, H. J. S. 1999. A computationally
+efﬁcient method for large-scale concurrent mapping and
+localization. Proceedings of the 9th International Sympo-
+sium on Robotics Research, Salt Lake City, Utah.
+
+Leonard, J., Tardós, J. D., Thrun, S., and Choset, H. edi-
+tors. Proceedings of the IEEE International Conference
+on Robotics and Automation (ICRA), Workshop Notes of
+the ICRA Workshop on Concurrent Mapping and Local-
+ization for Autonomous Mobile Robots (W4), Washington,
+DC, May 11–15.
+
+Lomet, D. B. and Salzberg, B. 1990. The hb-tree: a multiat-
+tribute indexing method. ACM Transactions on Database
+Systems 15(4):625–658.
+
+Lu, F., and Milios, E. 1997. Globally consistent range scan
+alignment for environment mapping. Autonomous Robots
+4:333–349.
+
+Matari´c, M. J. 1990. A Distributed Model for Mobile Robot
+Environment-Learning and Navigation. Master’s thesis,
+
+Thrun et al. / Simultaneous Localization and Mapping
+
+715
+
+MIT, Cambridge, MA. Also available as MIT Artiﬁcial
+Intelligence Laboratory Tech Report AITR-1228.
+
+Maybeck, P. 1979. Stochastic Models, Estimation, and Con-
+
+trol, Vol. 1. Academic, New York.
+
+Montemerlo, M., and Thrun, S. 2003. Simultaneous local-
+ization and mapping with unknown data association using
+FastSLAM. Proceedings of the IEEE International Confer-
+ence on Robotics and Automation (ICRA), Taipei, Taiwan.
+Montemerlo, M., Thrun, S., Koller, D., and Wegbreit, B. 2002.
+FastSLAM: a factored solution to the simultaneous local-
+ization and mapping problem. Proceedings of the AAAI
+National Conference on Artiﬁcial Intelligence, Edmonton,
+Canada.
+
+Montemerlo, M., Thrun, S., Koller, D., and Wegbreit, B. 2003.
+FastSLAM 2.0: An improved particle ﬁltering algorithm
+for simultaneous localization and mapping that provably
+converges. Proceedings of the 16th International Joint
+Conference on Artiﬁcial Intelligence (IJCAI), Acapulco,
+Mexico.
+
+Moravec, H. P. 1988. Sensor fusion in certainty grids for mo-
+
+bile robots. AI Magazine 9(2):61–74.
+
+Moutarlier, P., and Chatila, R. 1989. An experimental sys-
+tem for incremental environment modeling by an au-
+tonomous mobile robot. Proceedings of the 1st Interna-
+tional Symposium on Experimental Robotics, Montreal,
+Canada, June.
+
+Murphy, K. 2000. Bayesian map learning in dynamic environ-
+ments. Advances in Neural Information Processing Sys-
+tems (NIPS). MIT Press, Cambridge, MA.
+
+Murphy, K. P., Weiss, Y., and Jordan, M. I. 1999. Loopy be-
+lief propagation for approximate inference: an empirical
+study. Proceedings of the Conference on Uncertainty in AI
+(UAI), Stockholm, Sweden, pp. 467–475.
+
+Neira, J., Tardós, J. D., and Castellanos, J. A. 2003. Lin-
+ear time vehicle relocation in SLAM. Proceedings of the
+IEEE International Conference on Robotics and Automa-
+tion (ICRA), Taipei, Taiwan.
+
+Nettleton, E. W., Gibbens, P. W., and Durrant-Whyte, H. F.
+2000. Closed form solutions to the multiple platform si-
+multaneous localization and map building (slam) problem.
+Sensor Fusion: Architectures, Algorithms, and Applica-
+tions IV, Bellingham, WA, Vol. 4051, Bulur V. Dasarathy,
+editor. pp. 428–437.
+
+Nettleton, E., Durrant-Whyte, H., Gibbens, P., and Goktoˇgan,
+A. 2000. Multiple platform localization and map building.
+Sensor Fusion and Decentralized Control in Robotic Sys-
+tems III, Bellingham, WA, Vol. 4196, G.T. McKee and P.S.
+Schenker, editors, pp. 337–347.
+
+Nettleton, E., Thrun, S., and Durrant-Whyte, H. 2002. A
+constant time communications algorithm for decentralized
+SLAM. Submitted for publication.
+
+Nettleton, E., Thrun, S., and Durrant-Whyte, H. 2003. Decen-
+tralized SLAM with low-bandwidth communication for
+teams of airborne vehicles. Proceedings of the Interna-
+
+716 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / July–August 2004
+
+tional Conference on Field and Service Robotics, Lake
+Yamanaka, Japan.
+
+Newman, P. 2000. On the Structure and Solution of the Si-
+multaneous Localization and Map Building Problem. PhD
+thesis, Australian Centre for Field Robotics, University of
+Sydney, Sydney, Australia.
+
+Paskin, M. A. 2002. Thin junction tree ﬁlters for simultaneous
+localization and mapping. Technical Report UCB/CSD-
+02-1198, University of California, Berkeley, CA.
+
+Pearl, J. 1988. Probabilistic Reasoning in Intelligent Systems:
+Networks of Plausible Inference. Morgan Kaufmann, San
+Mateo, CA.
+
+Procopiuc, O., Agarwal, P. K., Arge, L., and Vitter, J. S. 2003.
+Bkd-tree: a dynamic scalable kd-tree. Advances in spatial
+and temporal awareness, T. Hadzilacos, Y. Manolopoulos,
+J. F. Roddick and Y. Theodoridis, editors. Springer-Verlag,
+Santorini Island, Greece.
+
+Shatkay, H., and Kaelbling, L. 1997. Learning topological
+maps with weak local odometric information. Proceedings
+of the International Joint Conference on Artiﬁcial Intelli-
+gence (IJCAI).
+
+Simmons, R.,Apfelbaum, D., Burgard, W., Fox, M., an Moors,
+D., Thrun, S., andYounes, H. 2000. Coordination for multi-
+robot exploration and mapping. Proceedings of the AAAI
+National Conference on Artiﬁcial Intelligence, Austin, TX.
+Smith, R. C. and Cheeseman, P. 1985. On the representa-
+tion and estimation of spatial uncertainty. Technical Report
+4760 and 7239, SRI International, Menlo Park, CA.
+
+Smith, R. C. and Cheeseman, P. 1986. On the representation
+and estimation of spatial uncertainty. International Journal
+of Robotics Research 5(4):56–68.
+
+Smith, R., Self, M., and Cheeseman, P. 1990. Estimating un-
+certain spatial relationships in robotics. Autonomous Robot
+Vehicles, I.J. Cox and G.T. Wilfong, editors. Springer-
+Verlag, Berlin, pp. 167–193.
+
+Stewart, B., Ko, J., Fox, D., and Konolige, K. 2003. A hier-
+archical bayesian approach to mobile robot map structure
+estimation. Proceedings of the Conference on Uncertainty
+in AI (UAI), Acapulco, Mexico.
+
+Tardós, J. D., Neira, J., Newman, P. M., and Leonard, J. J.
+2002. Robust mapping and localization in indoor environ-
+ments using sonar data. International Journal of Robotics
+Research 21(4):311–330.
+
+Thorpe, C. and Durrant-Whyte, H. 2001. Field robots. Pro-
+ceedings of the 10th International Symposium of Robotics
+Research (ISRR’01), Lorne, Australia.
+
+Thrun, S. 2000. Towards programming tools for robots that
+integrate probabilistic computation and learning. Proceed-
+
+ings of the IEEE International Conference on Robotics and
+Automation (ICRA), San Francisco, CA, April 24–28.
+Thrun, S. 2001. A probabilistic on-line mapping algorithm for
+teams of mobile robots. International Journal of Robotics
+Research 20(5):335–363.
+
+Thrun, S. 2002. Robotic mapping: a survey. Exploring Arti-
+ﬁcial Intelligence in the New Millennium, G. Lakemeyer
+and B. Nebel, editors. Morgan Kaufmann, San Mateo, CA.
+Thrun, S., and Liu, Y. 2003. Multi-robot SLAM with sparse
+extended information ﬁlers. Proceedings of the 11th In-
+ternational Symposium of Robotics Research (ISRR’03),
+Sienna, Italy.
+
+Thrun, S., Fox, D., and Burgard, W. 1998. A probabilistic
+approach to concurrent mapping and localization for mo-
+bile robots. Machine Learning 31:29–53. Also appeared in
+Autonomous Robots 5:253–271 (joint issue).
+
+Thrun, S., Hähnel, D., Ferguson, D., Montemerlo, M., Triebel,
+R., Burgard, W., Baker, C., Omohundro, Z., Thayer, S., and
+Whittaker, W. 2003. A system for volumetric robotic map-
+ping of abandoned mines. Proceedings of the IEEE Inter-
+national Conference on Robotics and Automation (ICRA),
+Taipei, Taiwan.
+
+Wainwright, M. J. 2002. Stochastic Processes on Graphs With
+Cycles: Geometric and Variational Approaches. PhD the-
+sis, Department of Electrical Engineering and Computer
+Science, MIT, Cambridge, MA.
+
+Wang, C.-C., Thorpe, C., and Thrun, S. 2003. On-line si-
+multaneous localization and mapping with detection and
+tracking of moving objects: theory and results from a
+ground vehicle in crowded urban areas. Proceedings of
+the IEEE International Conference on Robotics and Au-
+tomation (ICRA), Taipei, Taiwan.
+
+Weiss,Y., and Freeman, W.T. 2001. Correctness of belief prop-
+agation in gaussian graphical models of arbitrary topology.
+Neural Computation 13(10):2173–2200.
+
+Williams, S., and Dissanayake, G. 2002. Efﬁcient simulta-
+neous localisation and mapping using local submaps. Pro-
+ceedings of the IEEE International Conference on Robotics
+and Automation (ICRA), Workshop Notes of the ICRA
+Workshop on Concurrent Mapping and Localization for
+Autonomous Mobile Robots (W4), Washington, DC, May
+11–15.
+
+Williams, S. B., Dissanayake, G., and Durrant-Whyte, H.
+2002. An efﬁcient approach to the simultaneous localiza-
+tion and mapping problem. Proceedings of the IEEE Inter-
+national Conference on Robotics and Automation (ICRA),
+Washington, DC, May 11–15, pp. 406–411.
+
+

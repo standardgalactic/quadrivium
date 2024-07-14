@@ -1,0 +1,2166 @@
+Lin Liao
+Dieter Fox
+Henry Kautz
+Department of Computer Science & Engineering
+University of Washington
+Seattle, WA 98195
+{liaolin,fox,kautz}@cs.washington.edu
+
+Extracting Places
+and Activities from
+GPS Traces Using
+Hierarchical
+Conditional Random
+Fields
+
+Abstract
+
+Learning patterns of human behavior from sensor data is extremely
+important for high-level activity inference. This paper describes how
+to extract a person’s activities and signiﬁcant places from traces
+of GPS data. The system uses hierarchically structured conditional
+random ﬁelds to generate a consistent model of a person’s activities
+and places. In contrast to existing techniques, this approach takes
+the high-level context into account in order to detect the signiﬁcant
+places of a person. Experiments show signiﬁcant improvements over
+existing techniques. Furthermore, they indicate that the proposed
+system is able to robustly estimate a person’s activities using a model
+that is trained from data collected by other persons.
+
+KEY WORDS—activity recognition, conditional random
+ﬁelds, belief propagation, maximum pseudo-likelihood
+
+1. Introduction
+
+The problem of learning patterns of human behavior from
+sensor data arises in many applications, including intelligent
+environments (Brumitt et al. 2000), surveillance (Bui et al.
+2001; Dee and Hogg 2005), human robot interaction (Ben-
+newitz et al. 2005), and assistive technology for the disabled
+(Patterson et al. 2002). A focus of recent interest is the use
+of data from wearable sensors, and in particular, GPS (global
+positioning system) location data, to learn to recognize the
+high-level activities in which a person is engaged over a pe-
+riod of many weeks, and further, to determine the relation-
+ship between activities and places that are important to the
+user (Ashbrook and Starner 2003; Liao et al. 2004, 2005a,
+
+The International Journal of Robotics Research
+Vol. 26, No. 1, January 2007, pp. 119-134
+DOI: 10.1177/0278364907073775
+©2007 SAGE Publications
+
+2005c; Gogate et al. 2005). The goal of this research is to seg-
+ment a user’s day into everyday activities such as “working,”
+“visiting,” or “travel,” and to recognize and label signiﬁcant
+places such as “workplace,” “friend’s house,” or “bus stop.”
+However, previous approaches to automated activity and place
+labeling suffer from design decisions that limit their accuracy
+and ﬂexibility:
+
+Restricted activity models: Previous approaches
+
+to
+location-based activity recognition have rather limited
+models of a person’s activities. Ashbrook and col-
+leagues (2003) only reason about moving between sig-
+niﬁcant places, without considering different types of
+places or different routes between places. In the con-
+text of indoor mobile robotics, Bennewitz et al. (2005)
+showed how to learn different motion paths between
+places. However, their approach does not model dif-
+ferent types of places and does not estimate the user’s
+activities when moving between places. In our previ-
+ous work (Liao et al. 2004; Patterson et al. 2004) we
+developed a hierarchical dynamic Bayesian network
+model that can reason about different transportation
+routines between signiﬁcant places. Gogate and col-
+leagues (2005) showed how to use deterministic con-
+straints to more efﬁciently reason in such models. In
+separate work, we developed an approach that can learn
+to distinguish between different types of signiﬁcant
+places, such as workplace, home, or restaurant (Liao
+2005c). However, this model is limited in that it is
+not able to consider information about motion between
+places and about activities occurring at each point in
+time.
+
+Inaccurate place detection: Virtually all previous ap-
+proaches address the problem of determining a person’s
+signiﬁcant places by assuming that a geographic loca-
+
+119
+
+120 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+tion is signiﬁcant if and only if the user spends at least
+θ minutes there, for some ﬁxed threshold θ (Ashbrook
+and Starner 2003; Liao et al. 2004, 2005c; Gogate et al.
+2005; Bennewitz et al. 2005). In practice, unfortunately,
+there is no threshold that leads to a satisfying detection
+of all signiﬁcant places. For instance, locations such as
+the place where the user drops off his children at school
+may be visited only brieﬂy, and so would be excluded
+when using a high threshold θ. A low threshold, on the
+other hand, would include too many insigniﬁcant loca-
+tions, for example, a street intersection where the user
+waited at a trafﬁc light. Such detection errors can only
+be resolved by taking additional context information
+into account, such as the user’s current activity.
+
+In this paper we present a novel, uniﬁed approach to auto-
+mated activity and place labeling which overcomes these lim-
+itations. Key features of our system are:
+
+(cid:127) It achieves high accuracy in detecting signiﬁcant places
+by taking a user’s context into account when determin-
+ing which places are signiﬁcant. This is done by si-
+multaneously estimating a person’s activities over time,
+identifying places that correspond to signiﬁcant activi-
+ties, and labeling these places by their type. This estima-
+tion is performed in a uniﬁed, discriminatively trained
+graphical model (conditional random ﬁeld). As a result,
+our approach does not rely on arbitrary thresholds re-
+garding the time spent at a location or on a pre-speciﬁed
+number of signiﬁcant places.
+
+(cid:127) It creates a rich interpretation of a user’s data, including
+transportation activities as well as activities performed
+at particular signiﬁcant places. It allows different kinds
+of activities to be performed at the same location, and
+vice versa.
+
+(cid:127) This complex estimation task requires efﬁcient, approx-
+imate inference and learning algorithms. Our system
+performs inference using loopy belief propagation, and
+parameter learning is done using pseudo-likelihood. In
+order to efﬁciently reason about aggregations, such as
+how many different places are labeled as a person’s
+home, we apply Fast Fourier Transforms to compute
+aggregation messages within belief propagation.
+
+This paper is organized as follows. We begin with an expla-
+nation of the basic concepts in our activity model. We then
+provide background on conditional random ﬁelds (CRFs) as
+well as the inference and parameter learning algorithms in
+CRFs. In Section 4, we show how to apply CRFs to the prob-
+lem of location-based activity recognition. Finally, we present
+experimental results on real-world data that demonstrate sig-
+niﬁcant improvement in coverage and accuracy over previous
+work.
+
+2. Hierarchical Activity Model
+
+The basic concept underlying our activity model is shown in
+Figure 1. Each circle in the model indicates an object such as
+a GPS reading, an activity, or a signiﬁcant place. The edges
+illustrate probabilistic dependencies between these objects.
+
+GPS readings are the input to our model—a typical trace
+consists of approximately one GPS reading per second;
+each reading is a point in 2D space. We segment a GPS
+trace in order to generate a discrete sequence of activity
+nodes at the next level of the model. This segmentation
+is done spatially, that is, each activity node represents
+a set of consecutive GPS readings that are within a cer-
+tain area. If a street map is available, then we perform
+the segmentation by associating the GPS readings to a
+discretized version of the streets in the map (in our ex-
+periments we used 10 m for discretization). This spatial
+segmentation is very compact and convenient for esti-
+mating high-level activities. For instance, our model
+represents a 12 hour stay at a location by a single node.
+Our model can also reason explicitly about the duration
+of a stay, for which dynamic models such as standard
+dynamic Bayesian networks or hidden Markov mod-
+els have only limited support (Gopalratnam et al. 2005;
+Pfeffer and Tai 2005).
+
+Activities are estimated for each node in the spatially seg-
+mented GPS trace, as illustrated in Figure 1. In other
+words, our model labels a person’s activity whenever
+she passes through or stays at a 10 m patch of the envi-
+ronment. We distinguish two main groups of activities,
+navigation activities and signiﬁcant activities. Activi-
+ties related to navigation include walking, driving car,
+and riding bus. Signiﬁcant activities are typically per-
+formed while a user stays at a location, such as work,
+leisure, sleep, visit, drop off/pickup, or when the user
+switches transportation modes, such as getting on/off a
+bus, or getting in/out of a car. To determine activities,
+our model relies heavily on temporal features, such as
+duration or time of day, and geographic information,
+such as locations of restaurants, stores, and bus stops.
+
+Signiﬁcant places are those locations that play a signiﬁcant
+role in the activities of a person. Such places include a
+person’s home and workplace, the bus stops and parking
+lots the person typically uses, the homes of friends,
+stores the person frequently shops in, and so on. Note
+that our model allows different activities to occur at
+the same signiﬁcant place. Furthermore, due to signal
+loss and noise in the GPS readings, the same signiﬁcant
+place can comprise multiple, different locations.
+
+Our activity model poses two key problems for probabilis-
+tic inference. First, the model can become rather complex,
+
+Liao, Fox, and Kautz / Hierarchical Conditional Random Fields
+
+121
+
+p 1
+
+p 2
+
+Significant places
+home, work, bus stop, parking lot, friend
+
+a 1
+
+a 2
+
+a 3
+
+g 1
+
+g 2
+
+g 3
+
+g 4
+
+g 5
+
+g 6
+
+g 7
+
+...
+
+...
+
+a I−1
+
+a I
+
+Activity sequence
+walk, drive, visit, sleep, pickup, get on bus
+
+g r
+
+g r
+
+g r+1
+
+...
+
+g T−1
+
+g T
+
+GPS trace
+association to street map 
+
+Fig. 1. The concept hierarchy for location-based activity recognition. For each day of data collection, the lowest level typically
+consists of several thousand GPS measurements, the next level contains around one thousand discrete activity cells, and the
+place level contains around ﬁve places.
+
+including thousands of probabilistic nodes with non-trivial
+probabilistic constraints between them. Second, a person’s
+signiﬁcant places depend on his activities and it is therefore
+not clear how to construct the model deterministically from
+a GPS trace. We solve the ﬁrst problem by building on and
+extending approximate inference algorithms for conditional
+random ﬁelds. The second problem is solved by constructing
+the model as part of this inference. We do this by generat-
+ing the highest level of the activity model (signiﬁcant places)
+based on the outcome of inference in the lower level (activity
+sequence). Inference is then repeated using both levels con-
+nected appropriately (see Section 4.3). Before we explain our
+approach in detail, we will ﬁrst give an overview of condi-
+tional random ﬁelds.
+
+3. Preliminaries: Conditional Random Fields
+
+In this section, we will provide the background of conditional
+random ﬁelds and the algorithms for inference and learning.
+
+3.1. Overview
+
+Our goal is to develop a probabilistic temporal model that can
+extract high-level activities from sequences of GPS readings.
+One possible approach is to use generative models such as hid-
+den Markov models (HMM) (Rabiner 1989; Bui et al. 2001) or
+dynamic Bayesian networks (Kanazawa et al. 1995; Murphy
+2002, Liao et al. 2004). However, discriminative models such
+as conditional random ﬁelds (CRF), have recently been shown
+to outperform generative techniques in areas such as natural
+language processing (Lafferty et al. 2001; Sha and Pereira
+2003), information extraction (Peng and McCallum 2004;
+Kristjannson et al. 2004), web page classiﬁcation (Taskar et al.
+2002), and computer vision (Kumar and Herbert 2003; Quat-
+toni et al. 2004). We therefore decided to investigate the ap-
+plicability of such models for activity recognition.
+
+CRFs are undirected graphical models that were devel-
+oped for labeling sequence data (Lafferty et al. 2001). In-
+stead of relying on Bayes rule to estimate the distribution over
+
+hidden states from observations, CRFs directly represent the
+conditional distribution over hidden states given the obser-
+vations. Unlike HMMs, which assume that observations are
+independent given the hidden state, CRFs make no assump-
+tions about the dependency structure between observations.
+CRFs are thus especially suitable for classiﬁcation tasks with
+complex and overlapped attributes or observations.
+
+Similar to HMMs and Markov random ﬁelds, the nodes in
+CRFs represent a sequence of observations (e.g., GPS read-
+ings), denoted as x = (cid:1)x1, x2, . . . , xT (cid:2), and corresponding hid-
+den states (e.g., activities), denoted as y = (cid:1)y1, y2, . . . , yT (cid:2).
+These nodes, along with the connectivity structure imposed
+by undirected edges between them, deﬁne the conditional dis-
+tribution p(y|x) over the hidden states y. The fully connected
+sub-graphs of a CRF, called cliques, play a key role in the def-
+inition of the conditional distribution represented by a CRF.
+Let C be the set of all cliques in a given CRF. Then, a CRF
+factorizes the conditional distribution into a product of clique
+potentials φc(xc, yc), where every c ∈ C is a clique of the
+graph and xc and yc are the observed and hidden nodes in
+such a clique. Clique potentials are functions that map vari-
+able conﬁgurations to non-negative numbers. Intuitively, a
+potential captures the “compatibility” among the variables in
+the clique: the larger the potential value, the more likely the
+conﬁguration. Using clique potentials, the conditional distri-
+bution over the hidden state is written as
+
+p(y | x) =
+
+1
+Z(x)
+
+(cid:1)
+
+c∈C
+
+φc(xc, yc),
+
+(1)
+
+(cid:2)
+
+(cid:3)
+
+y
+
+where Z(x) =
+c∈C φc(xc, yc) is the normalizing parti-
+tion function. The computation of this partition function is
+exponential in the size of y since it requires summation over
+all possible conﬁgurations of hidden states y. Hence, exact
+inference is possible for a limited class of CRF models only.
+Without loss of generality, potentials φc(xc, yc) are de-
+scribed by log-linear combinations of feature functions fc(),
+i.e.,
+
+φc(xc, yc) = exp
+
+(cid:4)
+
+wT
+c
+
+· fc(xc, yc)
+
+(cid:5)
+
+,
+
+(2)
+
+122 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+where wT
+c is the transpose of a weight vector wc, and fc(xc, yc)
+is a function that extracts a vector of features from the variable
+values. The feature functions, which are often binary or real
+valued, are typically designed by the user (combinations of
+such functions can be learned from data (McCallum 2003)).
+As we will show in Section 3.2, the weights are learned from
+labeled training data. Intuitively, the weights represent the
+importance of different features for correctly identifying the
+hidden states. The log-linear feature representation (2) is very
+compact and guarantees the non-negativeness of potential val-
+ues. We can now rewrite the conditional distribution (1) as
+
+3.2.1. Sum-product for Marginal Estimation
+
+In the BP algorithm, we introduce a “message” mij (yj ) for
+each pair of neighbors yi and yj , which is a distribution (not
+necessarily normalized) sent from node i to its neighbor j
+about which state variable yj should be in. The messages
+propagate through the CRF graph until they (possibly) con-
+verge, and the marginal distributions can be estimated from
+the stable messages. A complete BP algorithm deﬁnes how to
+initialize messages, how to update messages, how to schedule
+the message updates, and when to stop passing messages.
+
+(cid:127) Message initialization: All messages mij (yj ) are ini-
+
+(3)
+
+tialized as uniform distributions over yj .
+
+p(y | x) =
+
+=
+
+1
+Z(x)
+
+1
+Z(x)
+
+(cid:1)
+
+(cid:4)
+
+exp
+
+c∈C
+
+(cid:6)
+
+exp
+
+(cid:7)
+
+c∈C
+
+wT
+c
+
+· fc(xc, yc)
+
+(cid:5)
+
+(cid:8)
+
+wT
+c
+
+· fc(xc, yc)
+
+.
+
+(4)
+
+(4) follows by moving the products into the exponent.
+
+3.2. Inference
+
+In this section we will explain the inference techniques for
+CRFs. We will use x to denote observations and y to denote
+hidden states. Given a set of observations, inference in a CRF
+can have two tasks: to estimate the marginal distribution of
+each hidden variable, or to estimate the most likely conﬁgu-
+ration of the hidden variables (i.e., the maximum a posteriori,
+or MAP, estimation). Both tasks can be solved under a frame-
+work called belief propagation (BP), which works by send-
+ing local messages through the graph structure of the model.
+The BP algorithm was originally proposed in the context of
+Bayesian networks (Pearl 1988) and was formulated equiv-
+alently in models such as factor graphs (Kschischang et al.
+2001) and Markov networks (including CRFs) (Yedidia et al.
+2001). BP generates provably correct results if the graph has
+no loops, such as trees or polytrees (Pearl 1988). If the graph
+contains loops, in which case BP is called loopy BP, then the
+algorithm is only approximate and might not converge to the
+correct probability distribution (Murphy et al. 1999).
+
+Without loss of generality, we only describe the BP algo-
+rithm for pairwise CRFs, which are CRFs that only contain
+cliques of size two. We will brieﬂy discuss how to use BP
+in non-pairwise CRFs in the last paragraph of this section.
+Before running the inference algorithm in a pair-wise CRF, it
+is possible to remove all observed nodes x by merging their
+values into the corresponding potentials; that is, a potential
+φ(x, y) can be written as φ(y) because x is ﬁxed to one value.
+Therefore, the only potentials in a pair-wise CRF are local
+potentials, φ(yi), and pair-wise potentials, φ(yi, yj ). Corre-
+sponding to the two types of inference problems, there are two
+types of BP algorithms: sum-product for marginal estimation
+and max-product for MAP estimation.
+
+(cid:127) Message update rule: The message mij (yj ) sent from
+node i to its neighbor j is updated based on local po-
+tentials φ(yi), the pair-wise potential φ(yi, yj ), and all
+the messages to i received from i’s neighbors other
+than j (denoted as n(i) \ j ). More speciﬁcally, for sum-
+product, we have
+
+mij (yj ) =
+
+(cid:7)
+
+yi
+
+(cid:1)
+
+φ(yi)φ(yi, yj )
+
+mki(yi) (5)
+
+k∈n(i)\j
+
+(cid:127) Message update order: The algorithm iterates the
+message update rule until it (possibly) converges. Usu-
+ally, at each iteration, it updates each message once, and
+the speciﬁc order is not important (although it might af-
+fect the convergence speed).
+
+(cid:127) Convergence conditions: To test whether the algo-
+rithm converged, BP measures the difference between
+the previous messages and the updated ones. The con-
+vergence condition is met when all the differences are
+below a given threshold (cid:3). More formally, the condition
+is
+
+||mij (yj )(k) − mij (yj )(k−1)|| < (cid:3), ∀i, and ∀j ∈ n(i)
+
+(6)
+
+where mij (yj )(k) and mij (yj )(k−1) are the messages after
+and before iteration k, respectively.
+
+In the sum-product algorithm, after all messages are con-
+verged, it is easy to calculate the marginals of each node and
+each pair of neighboring nodes as
+
+b(yi) ∝ φ(yi)
+
+(cid:1)
+
+j ∈n(i)
+
+mj i(yi)
+
+b(yi, yj ) ∝ φ(yi)φ(yj )φ(yi, yj )
+
+(7)
+
+(cid:1)
+
+(cid:1)
+
+mki(yi)
+
+mlj (yj )
+
+k∈n(i)\j
+
+l∈n(j )\i
+
+(8)
+
+The above algorithm can be applied to any topology of pair-
+wise CRFs. When the network structure does not have a loop
+(for example, when it is a tree), the obtained marginals are
+
+Liao, Fox, and Kautz / Hierarchical Conditional Random Fields
+
+123
+
+guaranteed to be exact. When the structure has loops, the BP
+algorithm usually cannot obtain exact marginals, or it may
+even not converge. Fortunately, empirical experiments show
+that loopy belief propagation often converges to a good ap-
+proximation of the correct posterior.
+
+In practice, when the network structure does not have any
+loops, we do not have to initialize all the messages as uni-
+forms. Instead, we start BP with the nodes at the edge of the
+graph (i.e., nodes with only one neighbor), and compute a
+message mij (yj ) only when all the messages on the right side
+of (5) are available. By doing this, the algorithm converges
+by only computing each message once, and the results are
+guaranteed to be exact.
+
+3.2.2. Max-product for MAP Estimation
+
+We denote the messages sent in the max-product algorithm as
+mmax
+(yj ). The whole algorithm of max-product is very sim-
+ij
+ilar to the sum-product, except that in the message update
+rule summation is replaced by maximization. The new rule
+becomes
+
+(cid:1)
+
+mmax
+ij
+
+(yj ) = max
+
+yi
+
+φ(yi)φ(yi, yj )
+
+mmax
+
+ki (yi)
+
+(9)
+
+k∈n(i)\j
+
+We run the max-product algorithm in the same way as sum-
+product. After the algorithm converges, we calculate the MAP
+belief at each node yi as
+
+(cid:1)
+
+b(yi) ∝ φ(yi)
+
+mmax
+
+j i (yi)
+
+(10)
+
+j ∈n(i)
+
+Suppose there is a unique MAP conﬁguration y∗. Then each
+component of y∗ is simply the most likely value according to
+the MAP belief:
+
+y∗
+
+i
+
+= argmaxyi b(yi)
+
+(11)
+
+So far, we explained the two BP algorithms in the context
+of pairwise CRFs. For non-pairwise CRFs, there is a stan-
+dard way to convert them to pairwise ones (Yeddidia et al.
+2001). Intuitively, this conversion generates a new node for
+each clique of size greater than two. The state space of the
+new node consists of the joint state of the nodes it was gen-
+erated from. Thus, the complexity of belief propagation is
+exponential in the number of nodes in the largest clique of the
+CRF.
+
+3.3. Parameter Learning
+
+The goal of parameter learning is to determine the weights
+of the feature functions used in the conditional likelihood (4).
+CRFs learn these weights discriminatively, that is, the weights
+are determined so as to maximize the conditional likelihood
+p(y|x) of labeled training data. This is in contrast to generative
+learning, which aims to learn a model of the joint probabil-
+ity p(y, x). Ng and Jordan (2002) present a discussion and
+
+comparison of these two learning regimes, concluding that
+discriminative learning asymptotically reaches superior per-
+formance but might require more training examples until its
+performance converges. The reader may notice that discrim-
+inative learning can also be performed for generative models
+such as hidden Markov models (Collins 2002), Kalman ﬁl-
+ters (Abbeel et al. 2005), or Markov random ﬁelds (Anguelov
+et al. 2005).
+
+3.3.1. Maximum Likelihood (ML) Estimation
+
+As can be seen in (4), given labeled training data (x, y), the
+conditional likelihood p(y|x) only depends on the feature
+weights wc. In the derivation of the learning algorithm it will
+be convenient to re-write (4) as
+
+p(y | x, w) =
+
+1
+Z(x)
+
+exp
+
+(cid:8)
+
+wT
+c
+
+· fc(xc, yc)
+
+(12)
+
+(cid:6)
+
+(cid:7)
+
+c∈C
+(cid:4)
+
+=
+
+1
+Z(x, w)
+
+exp
+
+wT · f(x, y)
+
+(cid:5)
+
+,
+
+(13)
+
+where w and f are the vectors resulting from “stacking”
+the weights and the feature functions for all cliques in the
+CRF, respectively. In order to make the dependency on
+w more explicit, we will write the conditional likelihood
+from now on as p(y|x, w). A common parameter estimation
+method is to search for the w that maximizes this likelihood,
+or equivalently, that minimizes the negative log-likelihood,
+− log p(y|x, w) (Lafferty et al. 2001; Taskar et al. 2002; Liao
+et al. 2005c). To avoid overﬁtting, one typically imposes a
+so-called shrinkage prior on the weights to keep them from
+getting too large. More speciﬁcally, we deﬁne the objective
+function to minimize as follows:
+
+L(w) ≡ − log p(y | x, w) + wT w
+2σ 2
+
+= −wT · f(x, y) + log Z(x, w) + wT w
+2σ 2
+
+(14)
+
+(15)
+
+The rightmost term in (14) serves as a zero-mean, Gaussian
+prior with variance σ 2 on each component of the weight vec-
+tor. (15) follows directly from (14) and (13). While there is
+no closed-form solution for maximizing (15), it can be shown
+that (15) is convex relative to w. Thus, L has a global optimum
+which can be found using numerical gradient algorithms. The
+gradient of the objective function L(w) is given by
+
+∇L(w) = −f(x, y) +
+
+= −f(x, y) +
+
+= −f(x, y) +
+
+∇Z(x, w)
++ w
+Z(x, w)
+σ 2
+(cid:2)
+y(cid:9) exp{wT · f(x, y(cid:9))}f(x, y(cid:9))
+Z(x, w)
+
+(cid:7)
+
+y(cid:9)
+
+P (y(cid:9) | x, w)f(x, y(cid:9)) + w
+σ 2
+
+= −f(x, y) + EP (y(cid:9)|x,w)[f(x, y(cid:9))] + w
+σ 2
+
+(16)
+
++ w
+σ 2
+(17)
+
+(18)
+
+(19)
+
+124 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+(cid:2)
+
+where (17) follows from the deﬁnition of the partition func-
+tion, Z(x, w) =
+y(cid:9) exp{wT · f(x, y(cid:9))}, (18) follows from the
+deﬁnition of the conditional likelihood by putting Z(x, w)
+inside the summation, and in (19), the second term is ex-
+pressed as an expectation over the distribution P (y(cid:9) | x, w).
+Therefore, the gradient is just the difference between the em-
+pirical feature values f(x, y) and the expected feature values
+EP (y(cid:9)|x,w)[f(x, y(cid:9))], plus a prior term. To compute the expecta-
+tion over the feature values it is necessary to run inference in
+the CRF using the current weights w. This can be done via
+belief propagation as discussed in the previous section. Sha
+and Pereira (2003) showed that straightforward gradient de-
+scent often converges slowly during learning, but that modern
+numerical optimization algorithms, such as conjugate gradi-
+ent or quasi-Newton techniques (as used in our experiments),
+can be much faster.
+
+3.3.2. Maximum Pseudo-Likelihood (MPL) Estimation
+
+Maximizing the likelihood requires running an inference pro-
+cedure at each iteration of the optimization, which can be
+very expensive. An alternative is to maximize the pseudo-
+likelihood of the training data (Besag 1975), which is the fol-
+lowing approximation to the conditional likelihood:
+
+p(y | x, w) ≈
+
+n(cid:1)
+
+i=1
+
+p(yi | MB(yi), w)
+
+(20)
+
+Here, MB(yi) is the Markov blanket of variable yi, which con-
+tains the immediate neighbors of yi in the CRF graph (note that
+the value of each node is known during learning). Thus, the
+pseudo-likelihood is the product of all the local likelihoods,
+p(yi | MB(yi)). The pseudo-likelihood can be re-written as
+
+n(cid:1)
+
+p(yi | MB(yi), w) =
+
+i=1
+
+n(cid:1)
+
+i=1
+
+1
+Z(MB(yi), w)
+
+exp{wT · f(yi, MB(yi))},
+
+(21)
+
+exp{wT · f(y(cid:9)
+
+where f(yi, MB(yi)) is the local feature counts involving vari-
+(cid:2)
+able yi, and Z(MB(yi), w) =
+i))} is
+y(cid:9)
+i
+the local normalizing function. Therefore, computing pseudo-
+likelihood is much more efﬁcient than computing likelihood
+p(y|x, w), because pseudo-likelihood only requires comput-
+ing local normalizing functions and avoids computing the
+global partition function Z(x, w).
+
+i, MB(y(cid:9)
+
+As with ML, in practice we minimize the negative log-
+pseudo-likelihood and a shrinkage prior, and the objective
+function becomes
+
+n(cid:7)
+
+P L(w) ≡ −
+
+i=1
+(cid:9)
+
+n(cid:7)
+
+log p(yi | MB(yi), w) + wT w
+2σ 2
+
+(22)
+
+=
+
+−wT · f(yi, MB(yi))
+
+i=1
+
++ log Z(MB(yi), w)) + wT w
+2σ 2
+
+(23)
+
+Again, P L(w) is a convex function and it is possible to
+use gradient-based algorithms to ﬁnd the w that minimizes
+P L(w). The gradient can be computed as
+
+n(cid:7)
+
+∇P L(w) =
+
+(−f(yi, MB(yi))
+
+i=1
++EP (y(cid:9)
+
+i
+
+|MB(yi ),w)
+
+[f(y(cid:9)
+
+i, MB(yi))]
+
+(cid:10)
+
++ w
+σ 2
+
+.
+
+(24)
+
+As we can see, (24) can be expressed as the difference between
+empirical feature values and expected feature values, similar
+to (19). However, the key difference is that (24) can be eval-
+uated very efﬁciently without running a complete inference
+procedure. Learning by maximizing pseudo-likelihood has
+been shown to perform very well in several domains (Kumar
+and Herbert 2003; Richardson and Domingos 2004). In our
+experiments we found that this type of learning is extremely
+efﬁcient and consistently achieves good results.
+
+3.3.3. Parameter Sharing
+
+The deﬁnition of the weight vector and its gradient described
+above does not support parameter sharing, which requires
+the learning algorithm to learn the same parameter values
+(weights) for different cliques in the CRF. For instance, as
+we will describe, the CRF in Section 4.1 only contains three
+different weights, one for each type of feature (see eq. (26)).
+Thus, the same weight wm is used for each clique containing
+a street patch node st and a GPS reading node gt . Without
+parameter sharing, a CRF would learn for each location/GPS
+combination the weights that are best in classifying that spe-
+ciﬁc location. However, we want to learn a generic model that
+can take any GPS trace and classify the locations in that trace,
+even if the trace is collected by a different person visiting very
+different locations. Parameter sharing enforces learning such
+kind of models since the parameters are independent of the
+individual locations. Parameter sharing can be achieved by
+making sure that all the weights belonging to a certain type of
+feature are identical. As it turns out, the gradients with respect
+to these shared weights are almost identical to the gradients
+(19) and (24). The only difference lies in the fact that the
+gradient for a shared weight is given by the sum of all the
+gradients computed for the individual cliques in which this
+weight occurs (Taskar et al. 2002; Liao et al. 2005c).
+
+Liao, Fox, and Kautz / Hierarchical Conditional Random Fields
+
+125
+
+Parameter sharing can be modeled conveniently using
+probabilistic relational models such as relational Markov net-
+works (Taskar et al 2002; Liao et al. 2005c). These techniques
+allow the automatic speciﬁcation and construction of CRF
+models using so-called clique templates, which enable the
+speciﬁcation of parameter sharing for inference and learning.
+
+4. Conditional Random Fields for Activity
+Recognition
+
+In this section, we will describe the application of CRFs to
+activity recognition from location data. Speciﬁcally, we will
+explain how we construct from raw GPS traces the CRFs that
+encodes the hierarchical activity model, and how we simulta-
+neously label all the types of activities and signiﬁcant places.
+
+4.1. GPS to Street Map Association
+
+As mentioned above, we segment GPS traces by grouping
+consecutive GPS readings based on their spatial relationship.
+Without a street map, this segmentation can be performed by
+simply combining all consecutive readings that are within a
+certain distance from each other (10 m in our implementa-
+tion). However, it might be desirable to associate GPS traces
+to a street map, for example, in order to relate locations to
+addresses in the map. Street maps are represented by directed
+graphs, where a vertex typically is an intersection between
+streets, and an edge usually represents a city block section of
+a street and is associated with a direction either up or down
+the street (Liao et al. 2004).
+
+To jointly estimate the GPS to street association and the
+trace segmentation, we associate each GPS measurement to
+a 10 m patch on a street edge.1 As shown in Figure 5(a) in
+Section 5, GPS traces can deviate signiﬁcantly from the street
+map, mostly because of measurement errors and inaccuracies
+in street maps. One straightforward way to perform this asso-
+ciation is to snap each GPS reading to the nearest street patch.
+However, such an approach would clearly give wrong results
+in situations such as the one shown in Figure 5(a). To gen-
+erate a consistent association, we construct a CRF that takes
+into account the spatial relationship between GPS readings.
+The structure of this CRF is shown in Figure 2. The observed,
+solid nodes correspond to GPS readings gt where the subscript
+t indicates the index of time, and the white nodes represent
+the street patches st , which correspond to the hidden state y in
+Section 3. The values of each st range over the street patches in
+the map that are within a certain distance of the GPS reading
+gt . The lines in Figure 2 deﬁne the clique structure of the CRF.
+
+1. In Liao et al. (2004) we showed how to perform such an association us-
+ing Rao–Blackwellised particle ﬁlters with multiple Kalman ﬁlters moving
+through the street graph. Since the focus of this work is on high level activities
+and places rather than accurate tracking, we use this more straightforward
+and efﬁcient approach to trace segmentation.
+
+We distinguish three types of cliques, for which potentials are
+deﬁned via the following feature functions:
+
+(cid:127) Measurement cliques (dark grey in Figure 2): GPS
+noise and map uncertainty are considered by cliques
+whose features measure the squared distance between
+a GPS measurement and the center of the patch it is
+associated with:
+
+fmeas(gt , st ) =
+
+||gt − st ||2
+σ 2
+
+where gt is the location of the tth GPS reading. With
+slight abuse of notation, we denote by st the center of
+one of the street patches in the vicinity of gt . σ is used
+to control the scale of the distance (note that this fea-
+ture function corresponds to a Gaussian noise model
+for GPS measurements). Obviously, when combined
+with a negative weight, this feature prefers associations
+in which GPS readings are snapped to nearby patches.
+The feature fmeas is used for the potential of all cliques
+connecting GPS readings and their street patches.
+
+(cid:127) Consistency cliques (light grey in Figure 2): Temporal
+consistency is ensured by four node cliques that com-
+pare the spatial relationship between consecutive GPS
+readings and the spatial relationship between their as-
+sociated patches. The more similar these relationships,
+the more consistent the association. This comparison is
+done via a feature function that compares the vectors
+between GPS readings and associated patches:
+
+fcons(gt , gt+1, st , st+1) =
+
+||(gt+1 − gt ) − (st+1 − st )||2
+σ 2
+
+Here, st and st+1 are the centers of street patches asso-
+ciated at two consecutive times.
+
+(cid:127) Smoothness cliques (medium grey in Figure 2): These
+cliques prefer traces that do not switch frequently be-
+tween different streets. For instance, it is very unlikely
+that a person drives down a street and switches for
+two seconds to another street at an intersection. To
+model this information, we use binary features that test
+whether consecutive patches are on the same street, on
+neighboring streets, or in the same direction. For exam-
+ple, the following binary feature examines if both street
+blocks and directions are identical:
+
+fsmooth(st , st+1) = δ(st .street, st+1.street)
+
+· δ(st .direction, st+1.direction) (25)
+
+where δ(u, v) is the indicator function which equals 1
+if u = v and 0 otherwise.
+
+126 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+Street patches
+
+GPS trace
+
+s 1
+
+s 2
+
+s 3
+
+s T−2
+
+s T−1
+
+s T
+
+....
+
+....
+
+Fig. 2. CRF for associating GPS measurements to street patches. The shaded areas indicate different types of cliques.
+
+g 1
+
+g 2
+
+g 3
+
+g T−2
+
+g T−1
+
+g T
+
+During inference, the CRF uses these features to estimate
+distributions over the association between the GPS trace and
+street patches. Using the feature functions deﬁned above, this
+conditional distribution can be written as
+
+p(s|g) = 1
+Z(x)
+
+exp
+
+(cid:6)
+
+T(cid:7)
+
+t=1
+
+wm ·fmeas(gt , st )
+
++
+
+T −1(cid:7)
+
+t=1
+
+(wc ·fcons(gt , gt+1, st , st+1)
+
+(cid:11)
+
++ws ·fsmooth(st , st+1))
+
+,
+
+(26)
+
+where wm, wc and ws are the corresponding feature function
+weights. The reader may notice that the weights and feature
+functions are independent of the time index, and this indepen-
+dence is achieved using parameter sharing discussed in Sec-
+tion 3.3.3. Figure 5(a) illustrates the maximum a posteriori
+association of a GPS trace to a map. Intuitively, this sequence
+corresponds to the MAP sequence that results from tracking a
+person’s location on the discretized street map. Such an asso-
+ciation also provides a unique segmentation of the GPS trace.
+This is done by combining consecutive GPS readings that are
+associated to the same street patch.
+
+4.2. Inferring Activities and Types of Signiﬁcant Places
+
+Once a GPS trace is segmented, our system estimates the ac-
+tivity performed at each segment and a person’s signiﬁcant
+places. To do so, it generates a new CRF that contains a hid-
+den activity node for every segment extracted from the GPS
+trace. This CRF consists of the two lower levels of the one
+shown in Figure 3. Each activity node is connected to various
+features, summarizing information resulting from the GPS
+segmentation. These features include:
+
+(cid:127) Temporal information such as time of day, day of week,
+and duration of the stay. These measures are discretized
+in order to allow more ﬂexible feature functions. For
+
+example, time of day can be Morning, Noon, After-
+noon, Evening, or Night. The feature functions for the
+cliques connecting each activity node to one of the solid
+nodes in the CRF shown in Figure 3 are binary indi-
+cator functions, one for each possible combination of
+temporal feature and activity. For instance, the follow-
+ing function returns 1 if the activity is work and the
+time of day is morning, and 0 otherwise: f(ai, di) =
+δ(ai, W ork) · δ(di, Morning).
+
+(cid:127) Average speed through a segment, which is important
+for discriminating different transportation modes. The
+speed value is also discretized and indicator features are
+used, just as with temporal information. This discretiza-
+tion has the advantage over a linear feature function that
+it is straightforward to model multi-modal velocity dis-
+tributions.
+
+(cid:127) Information extracted from geographic databases, such
+as whether a patch is on a bus route, whether it is close to
+a bus stop, and whether it is near a restaurant or grocery
+store. Again, we use indicator features to incorporate
+this information.
+
+(cid:127) Additionally, each activity node is connected to its
+neighbors. These features measure compatibility be-
+tween types of activities at neighboring nodes in the
+trace. For instance, it is extremely unlikely that a person
+will get on the bus at one location and drive a car at the
+neighboring location right afterwards. The correspond-
+ing feature function is f(ai, ai+1) = δ(ai, OnBus) ·
+δ(ai+1, Car), where ai and ai+1 are speciﬁc activities at
+two consecutive activity nodes. The weight of this fea-
+ture should be a negative value after supervised learn-
+ing, thereby giving a labeling that contains this combi-
+nation a lower probability.
+
+Our model also aims to determine those places that play a
+signiﬁcant role in the activities of a person, such as home,
+workplace, friend’s home, grocery stores, restaurants, and bus
+stops. The nodes representing such signiﬁcant places com-
+prise the upper level of the CRF shown in Figure 3. However,
+
+Liao, Fox, and Kautz / Hierarchical Conditional Random Fields
+
+127
+
+Place type
+
+Activity
+
+p 1
+
+p 2
+
+p K
+
+....
+
+a1
+
+2a
+
+....
+
+a
+N−2
+
+aN−1
+
+aN
+
+Local evidence
+
+....
+
+1
+
+e 1
+
+E
+
+e 1
+
+....
+
+e 1
+N
+
+E
+
+e N
+
+Fig. 3. CRF for labeling activities and places. Activity nodes ai range over activities, and place nodes pi range over types of
+places. Each activity node is connected to E observed local evidence nodes e1
+i . Local evidence comprises information
+such as time of day, duration, and motion velocity. Place nodes are generated based on the activities inferred at the activity
+level. Each place is connected to all activity nodes that are within a certain range.
+
+i to eE
+
+since these places are not known a priori, we must addition-
+ally detect a person’s signiﬁcant places. To incorporate place
+detection into our system, we use an iterative algorithm that
+re-estimates activities and places. Before we describe this al-
+gorithm, let us ﬁrst look at the features that are used to de-
+termine the types of signiﬁcant places under the assumption
+that the number and locations of these places are known. In
+order to infer place types, we use the following features for
+the cliques connected to the place nodes pi in the CRF:
+
+(cid:127) The activities that occur at a place strongly indicate the
+type of the place. For example, at grocery stores peo-
+ple mainly do shopping, and at a friend’s home people
+either visit or pick up/drop off someone. Our features
+consider the weekly frequency of the different activi-
+ties occurring at a place. This is done by generating a
+clique for each place that contains all activity nodes in
+its vicinity. For example, the nodes p1, a1, and aN−2 in
+Figure 3 form such a clique. The model then counts the
+different activities occurring at each place. In our ex-
+periments, we discretize the counts into four categories:
+count = 0, count = 1, 2 ≤ count ≤ 3, and count ≥ 4.
+Then for each combination of type of place, type of
+activity, and frequency category, we have an indicator
+feature.
+
+(cid:127) A person usually has only a limited number of different
+homes or workplaces. To use this knowledge to im-
+prove labeling places, we add two additional summa-
+tion cliques that count the number of different homes
+and workplaces. These counts provide soft constraints
+that bias the system to generate interpretations that
+result in reasonable numbers of different homes and
+workplaces. The features are simply the counts, which
+make the likelihood of labellings decrease exponen-
+tially as the counts increase.
+
+Note that the above two types of features can generate very
+large cliques in the CRF. This is because we must build a
+clique for all the activities at a place to count the frequen-
+cies of activities, and connect all the place nodes to count
+the number of homes or workplaces. Standard belief propa-
+gation would be intractable for such cliques. Fortunately, it is
+possible to convert cliques generated for summation features
+to tree-structured CRFs. In such structures, BP inference can
+be done in polynomial time, and for sum-product it is even
+possible to apply the Fast Fourier Transform (FFT) to further
+speed up message passing (see Liao et al. 2005b for details).
+
+4.3. Place Detection and Labelling Algorithm
+
+The CRF discussed so far assumes that the number and loca-
+tions of a person’s signiﬁcant places are known in advance.
+Since these places are not known, however, it is necessary to
+infer the structure of the hierarchical CRF. Table 1 summa-
+rizes our algorithm for efﬁciently constructing this CRF. The
+algorithm takes as input a GPS trace. In Step 3, this trace is seg-
+mented into activity nodes ai. Each such node is characterized
+by local evidence ej
+i , which is extracted from the GPS readings
+associated to it. As discussed above, segmentation of a trace is
+performed by either clustering consecutive GPS readings that
+are nearby or associating the GPS trace to a discretized street
+map using the CRF shown in Figure 2. The activity nodes
+and their evidence are then used in Step 4 to generate a CRF
+such as the one shown in Figure 3. However, since signiﬁcant
+places are not yet known at this stage, CRF0 contains no place
+nodes. Maximum a posteriori inference is then performed in
+this restricted CRF so as to determine the MAP activity se-
+quence a∗
+0, which consists of a sequence of locations and the
+activity performed at that location (Step 5). Within each iter-
+ation of the loop starting at Step 6, such an activity sequence
+is used to extract a set of signiﬁcant places. This is done by
+classifying individual activities in the sequence according to
+
+128 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+Table 1. Algorithm for Jointly Detecting Signiﬁcant Places and Inferring Activities and
+Types of Places
+
+1.
+
+2.
+
+3.
+
+4.
+
+Input: GPS trace (cid:1)g1, g2, . . . , gT (cid:2)
+i := 0
+
+// Generate activity segments and local evidence by grouping consecutive GPS readings
+(cid:12)
+(cid:1)a1, . . . , aN (cid:2), (cid:1)e1
+
+:= spatial_segmentation((cid:1)g1, g2, . . . , gT (cid:2))
+
+1, . . . , eE
+
+1 , . . . , e1
+
+N , . . . , eE
+N
+
+(cid:10)
+
+(cid:2)
+
+// Generate CRF containing activity and local evidence nodes (lower two levels in Figure 3)
+(cid:12)
+CRF0 := instantiate_crf
+
+(cid:1) (cid:2), (cid:1)a1, . . . , aN (cid:2), (cid:1)e1
+
+1, . . . , eE
+
+1 , . . . , e1
+
+N , . . . , eE
+N
+
+(cid:10)
+
+(cid:2)
+
+5.
+
+// Determine MAP sequence of activities
+a∗
+0
+6. do
+
+:= MAP_inference( CRF0)
+
+7.
+
+8.
+
+9.
+
+i := i + 1
+
+// Generate places by clustering signiﬁcant activities
+(cid:1)p1, . . . , pK (cid:2)i := generate_places(a∗
+// Generate complete CRF with instantiated places
+(cid:12)
+CRFi := instantiate_crf
+
+(cid:1)p1, . . . , pK (cid:2)i , (cid:1)a1, . . . , aN (cid:2), (cid:1)e1
+
+i−1)
+
+1, . . . , eE
+
+1 , . . . , e1
+
+N , . . . , eE
+N
+
+(cid:10)
+
+(cid:2)
+
+10.
+
+// Perform MAP inference in complete CRF
+i , p∗
+(cid:1)a∗
+(cid:2) := MAP_inference( CRFi )
+11. until a∗
+i
+
+i
+= a∗
+i−1
+i , p∗
+(cid:2)
+
+i
+
+12.
+
+return (cid:1)a∗
+
+whether or not they belong to a signiﬁcant place. For instance,
+while walking, driving a car, or riding a bus is not associated
+with signiﬁcant places, working or getting on or off the bus
+indicates a signiﬁcant place. All instances at which a signif-
+icant activity occurs generate a place node. Because a place
+can be visited multiple times within a sequence, we perform
+spatial clustering and merge duplicate places into the same
+place node. This classiﬁcation and clustering is performed
+by the algorithm generate_places(), which returns a set of K
+place nodes pj in Step 8. These places, along with the activity
+nodes ai and their local evidence ej
+i are used to generate a
+complete CRF. Step 10 performs MAP estimation in this new
+CRF. Since this CRF has a different structure than the initial
+CRF0, it might generate a different MAP activity sequence.
+If this is the case, then the algorithm returns to Step 6 and
+re-generates the set of places using this improved activity se-
+quence. This process is repeated until the activity sequence
+does not change, which is tested in Step 11. Finally, the al-
+gorithm returns the MAP activity sequence along with the set
+of places and their MAP types. In our experiments we ob-
+served that this algorithm converges very quickly, typically
+after three or four iterations.
+
+Our experiments show that this algorithm is extremely efﬁ-
+cient and robust. We are currently investigating an alternative
+approach that performs a search through the space of CRF
+
+structures by replacing the MAP sequences generated in Steps
+5 and 10 by multiple sequences generated from the posterior.
+This can be done via MCMC sampling (Gilks et al. 1996)
+or k-best algorithms for graphical models (Yanova and Weiss
+2003). Each sample would correspond to a CRF structure,
+which can then be evaluated according to the data likelihood.
+
+5. Experimental Results
+
+In our experiments we evaluate how well our system can ex-
+tract and label a person’s activities and signiﬁcant places.
+Furthermore, we demonstrate that it is feasible to learn mod-
+els from data collected by a set of people and to apply this
+model to another person. That is, our system can recognize a
+person’s activities without requiring any manual labeling of
+that person’s data.
+
+Speciﬁcally, we collected GPS data traces from four differ-
+ent persons, approximately seven days of data per person. The
+data from each person consisted of roughly 40,000 GPS mea-
+surements, resulting in about 10,000 segments. We then manu-
+ally labeled all activities and signiﬁcant places in these traces.2
+We used leave-one-out cross-validation for evaluation, that is,
+
+2. Even though we performed the manual labeling as thoroughly as possible,
+we might have “missed” some signiﬁcant places and activities. This might
+result in a slightly lower false negative rate in our experiments.
+
+Liao, Fox, and Kautz / Hierarchical Conditional Random Fields
+
+129
+
+learning was performed based on the data collected by three
+persons and the learned model was evaluated on the fourth
+person. We used maximum pseudo-likelihood for learning,
+which took (on a 1.5 GHz PC) about one minute to converge
+on the training data. Pseudo-likelihood converged in all our
+experiments. We did not use maximum likelihood for learn-
+ing since it did not always converge (even after several hours).
+This is most likely due to the fact that the approximation of
+the loopy BP inference is not good enough to provide accurate
+gradients for learning. However, we successfully used loopy
+BP as inference approach in all our evaluation runs. For each
+evaluation, we used the algorithm described in Table 1, which
+typically extracted the MAP activities and places from one
+week’s trace within one minute of computation. When a street
+map was used, the association between GPS trace and street
+map performed in Step 3 of the algorithm took an additional
+four minutes (see also Section 4.1).
+
+5.1. Example Analysis
+
+The different steps involved in the analysis of a GPS trace
+are illustrated in Figure 4. The second panel (b) shows the
+GPS trace snapped to 10 m patches on the street map. This
+association is performed by Step 3 of the algorithm given in
+Table 1, using the CRF discussed in Section 4.1. The visited
+patches, along with local information such as time of day or
+duration, are used to generate the activity CRF. This is done
+by Step 4 in Table 1, generating the activity level of Figure 3.
+MAP inference in this CRF determines one activity for each
+patch visit, as shown in panel (c) of Figure 4 (Step 5 of the
+algorithm). Note that this example analysis misses the get-
+off-bus activity at the left end of the bus trip. The signiﬁcant
+activities in the MAP sequence are clustered and generate ad-
+ditional place nodes in a new CRF (Steps 8 and 9 in Table 1).
+MAP inference in this CRF provides labels for the detected
+places, as shown in Figure 4(d). The algorithm repeats gener-
+ation of the CRFs until the MAP activity sequence does not
+change any more. In all experiments, this happens within the
+ﬁrst four iterations of the algorithm.
+
+Figure 5(a) provides another example of the quality
+achieved by our approach to snapping GPS traces to street
+maps. Note how the complete trace is snapped consistently to
+the street map. Table 2 shows a typical summary of a person’s
+day provided by the MAP sequence of activities and visited
+places. Note that the system determines where the signiﬁcant
+places are, how the person moves between them, and what
+role the different places play for this person.
+
+5.2. Extracting Signiﬁcant Places
+
+In this experiment we compare our system’s ability to detect
+signiﬁcant places to the results achieved with a widely-used
+approach that applies a time threshold to determine whether
+or not a location is signiﬁcant (Ashbrook and Starner 2003;
+
+Hariharan and Toyama 2004; Liao et al. 2004,2005c,Gogate
+et al. 2005). Our approach was trained on data collected by
+three people and tested on the fourth person. For the threshold
+method, we generated results for different thresholds from 1
+minute to 10 minutes. The data contained 51 different signif-
+icant places. Figure 5(b) shows the false positive and false
+negative rates achieved with the two approaches. As can seen,
+our approach clearly outperforms the threshold method. Any
+ﬁxed threshold is not satisfactory: low thresholds have many
+false negatives, and high thresholds result in many false pos-
+itives. In contrast, our model performs much better: it only
+generates 4 false positives and 3 false negatives.
+
+5.3. Labeling Places and Activities using Models Learned
+from Others
+Table 3 through Table 5 summarize the results achieved with
+our system on the cross-validation data. Table 3 shows ac-
+tivity estimation results on the signiﬁcant activities only. An
+instance was considered a false positive (FP) if a signiﬁcant
+activity was detected when none occurred, and was consid-
+ered false negative (FN) if a signiﬁcant activity occurred but
+was labeled as non-signiﬁcant such as walking. The results
+are given for models with and without taking the detected
+places into account. More speciﬁcally, without places are re-
+sults achieved by CRF0 generated by Step 5 of the algorithm
+in Table 1, and results with places are those achieved after
+model convergence. When the results of both approaches are
+identical, only one number is given; otherwise, the ﬁrst num-
+ber gives results achieved with the complete model. The table
+shows two main results. First, the accuracy of our approach is
+quite high, especially when considering that the system was
+evaluated on only one week of data and was trained on only
+three weeks of data collected by different persons. Second,
+performing joint inference over activities and places increases
+the quality of inference. The reason for this is that a place node
+connects all the activities occurring in its spatial area so that
+these activities can be labeled in a more consistent way.
+
+These results were generated when taking a street map into
+account. We also performed an analysis of the system without
+using the street map. In this case, the GPS trace was seg-
+mented into 10 m segments solely based on the raw GPS val-
+ues. We found that the results achieved without the street map
+were consistently almost identical to those achieved when a
+street map is available. Table 4 provides the activity inference
+accuracy of the different evaluations. Again, we only show
+signiﬁcant activities, the system achieves above 90% accu-
+racy for navigation activities such as car, walk, or bus. The
+ﬁrst two rows provide the accuracy values for the confusion
+matrix shown in Table 3. The last row shows the values when
+no street map is available (note that the number of activities
+is slightly different, since the GPS trace is segmented dif-
+ferently). As can be seen, our approach achieves above 85%
+accuracy in estimating signiﬁcant activities, both with and
+without a street map.
+
+130 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+(a)
+
+(b)
+
+(c)
+
+(d)
+
+Fig. 4. Illustration of inference on part of a GPS trace, which visited this 4 km x 2 km area several times. (a) The raw GPS
+data has substantial variability due to sensor noise. (b) GPS trace snapped to 10 m street patches, multiple visits to the same
+patch are plotted on top of each other. (c) Activities estimated for each patch. (d) Places generated by clustering signiﬁcant
+activities, followed by a determination of place types.
+
+Liao, Fox, and Kautz / Hierarchical Conditional Random Fields
+
+131
+
+Table 2. Summary of a Typical Day Based on the Inference Results
+
+Time
+
+8:15am - 8:34am
+8:34am - 5:44pm
+5:44pm - 6:54pm
+6:54pm - 6:56pm
+6:56pm - 7:15pm
+7:15pm - 9:01pm
+9:01pm - 9:20pm
+9:20pm - 9:21pm
+9:21pm - 9:50pm
+9:50pm - 8:22am
+
+Activity and transportation
+
+Drive from home1 to parking lot2, walk to workplace1;
+Work at workplace1;
+Walk from workplace1 to parking lot2, drive to friend3’s place;
+Pick up/drop off at friend3’s place;
+Drive from friend3’s place to other place2;
+Other activity at other place2;
+Drive from other place2 to friend1’s place;
+Pick up/drop off at friend1’s place;
+Drive from friend1’s place to home1;
+Sleep at home1.
+
+10
+
+10 min
+
+Threshold method
+Our model
+
+e
+v
+i
+t
+a
+g
+e
+n
+e
+s
+l
+a
+F
+
+8
+
+6
+
+4
+
+2
+
+0
+0
+
+(a)
+
+3 min
+
+5 min
+
+10
+
+20
+
+30
+False positive
+
+1 min
+40
+
+(b)
+
+Fig. 5. (a) GPS trace (gray circles) and the associated grid cells (black circles) on the street map (lines). (b) Accuracy of
+extracting signiﬁcant places.
+
+Table 3. Activity Confusion Matrix of Cross-Validation Data With (Left Values) and Without
+(Right Values) Considering Places for Activity Inference
+
+Inferred labels
+
+Truth
+Work
+Sleep
+Leisure
+Visiting
+Pickup
+On/Off car
+Other
+FP
+
+Work
+12 / 11
+0
+2
+0
+0
+0
+0
+0
+
+Sleep Leisure
+
+0
+21
+0
+0
+0
+0
+0
+0
+
+0 / 1
+1
+20 / 17
+0 / 2
+0
+0
+0
+0
+
+Visit
+0
+2
+1 / 4
+7 / 5
+0
+0
+0
+0
+
+Pickup On/off car Other
+0
+0
+0
+0
+0
+13 / 12
+0
+2
+
+1
+0
+3
+2
+0
+0
+37
+3
+
+0
+0
+0
+0
+1
+1
+0
+2
+
+FN
+0
+0
+0
+0
+2
+2 / 3
+1
+-
+
+Table 4. Performance of Activity Estimation Using Different Variants of Our Approach
+
+Experiment
+Activities and places, with street map
+Activities only, with street map
+Activities and places, without street map
+
+No. of activities Correctly labeled
+
+129
+129
+135
+
+111 (86.0 %)
+104 (80.6 %)
+115 (85.2 %)
+
+FP
+7
+7
+7
+
+FN
+5
+6
+5
+
+ 
+132 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+Table 5. Place Confusion Matrix
+
+Parking Other
+
+Truth Work Home
+Work
+5
+0
+Home
+0
+Friend
+0
+Parking
+0
+Other
+0
+FP
+
+0
+4
+0
+0
+0
+0
+
+Inferred labels
+Friend
+0
+0
+3
+0
+0
+1
+
+0
+0
+0
+8
+0
+1
+
+0
+0
+2
+0
+28
+2
+
+FN
+0
+0
+0
+2
+1
+-
+
+Finally, the confusion matrix shown in Table 5 summa-
+rizes the results achieved on detecting and labeling signiﬁcant
+places. As can be seen, the approach commits zero errors in
+labeling the home and work locations of the persons used for
+testing. The overall accuracy in place detection and labeling
+is 90.6%. The place detection results were identical with and
+without using a street map.
+
+6. Conclusions
+
+We provide a novel approach to performing location-based
+activity recognition. In contrast to existing techniques, our
+approach uses one consistent framework for both low-level
+inference and the extraction of a person’s signiﬁcant places.
+This is done by iteratively constructing a hierarchical condi-
+tional random ﬁeld, where the upper level is generated based
+on MAP inference on the lower level. Once a complete model
+is constructed, we perform joint inference in the complete
+CRF. Discriminative learning using pseudo-likelihood and in-
+ference using loopy belief propagation can be performed ex-
+tremely efﬁciently in our model: The analysis of a GPS trace
+collected over a week takes approximately one minute on a
+standard desktop PC.
+
+Our experiments based on traces of GPS data show that our
+system signiﬁcantly outperforms existing approaches. In ad-
+dition to being able to learn a person’s signiﬁcant locations, it
+can infer low-level activities such as walking, working, or get-
+ting into a bus. We demonstrate that the model can be trained
+from a group of persons and then applied successfully to a
+different person, achieving more than 85% accuracy in de-
+termining low-level activities and above 90% accuracy in de-
+tecting and labeling signiﬁcant places. Our model achieves
+virtually identical accuracy both with and without a street
+map. The output of our system can also be used to generate
+textual summaries of a person’s daily activities.
+
+The system described here opens up various research direc-
+tions. For instance, our algorithm constructs the hierarchical
+CRF using MAP estimation. We are currently investigating
+
+a technique that generates multiple models using an MCMC
+or a k-best approach. The different models can then be eval-
+uated based on their overall data likelihood. We expect this
+more ﬂexible model searching approach to generate better
+results especially with more complex models. We are cur-
+rently adding more types of sensors to our model, including
+data collected by a wearable multi-sensor board (Lester et al.
+2005; Raj et al. 2006). This sensor device collects measure-
+ments such as 3-axis acceleration, audio signals, barometric
+pressure, and light. Using the additional information provided
+by these sensors, we will be able to perform extremely ﬁne-
+grained activity recognition.
+
+Acknowledgments
+
+This work has partly been supported by DARPA’sASSIST and
+CALO Programmes (contract numbers: NBCH-C-05-0137,
+SRI subcontract 27-000968).
+
+References
+
+Abbeel, P., Coates, A., Montemerlo, M., Ng, A., and Thrun,
+S. (2005). Discriminative training of Kalman ﬁlters. Pro-
+ceedings of Robotics: Science and Systems.
+
+Anguelov, D., Taska, B., Chatalbashev, V., Koller, D., Gupta,
+D., Heitz, G., and Ng, A. (2005). Discriminative learning of
+Markov random ﬁelds for segmentation of 3d range data.
+Proceedings of the IEEE Computer Society Conference on
+Computer Vision and Pattern Recognition (CVPR).
+
+Ashbrook, D. and Starner, T. (2003). Using GPS to learn sig-
+niﬁcant locations and predict movement across multiple
+users. Personal and Ubiquitous Computing, 7(5).
+
+Bennewitz, M., Burgard, W., Cielniak, G., and Thrun, S.
+(2005). Learning motion patterns of people for compliant
+robot motion. International Journal of Robotics Research,
+24(1).
+
+Besag, J. (1975). Statistical analysis of non-lattice data. The
+
+Statistician, 24.
+
+Liao, Fox, and Kautz / Hierarchical Conditional Random Fields
+
+133
+
+Brumitt, B., Meyers, B., Krumm, J., Kern, A., and Shafer, S.
+(2000). Easyliving: Technologies for intelligent environ-
+ments. Handheld and Ubiquitous Computing.
+
+Bui, H. H., Venkatesh, S., and West, G. (2001). Tracking and
+surveillance in wide-area spatial environments using the
+abstract hidden markov model. International Journal of
+Pattern Recognition and Artiﬁcial Intelligence, 15(1).
+Collins, M. (2002). Discriminative training methods for hid-
+den Markov models: Theory and experiments with percep-
+tron algorithms. Proceedings of the Conference on Empir-
+ical Methods in Natural Language Processing.
+
+Dee, H. and Hogg, D. 2005. On the feasibility of using a cog-
+nitive model to ﬁlter surveillance data. Proceedings of the
+IEEE International Conference on Advanced Video and
+Signal Based Surveillance.
+
+Gilks, W. R., Richardson, S., and Spiegelhalter, D. J. (eds)
+(1996). Markov Chain Monte Carlo in Practice. Chapman
+and Hall/CRC.
+
+Gogate, V., Dechter, R., Rindt, C., and Marca, J.. (2005) Mod-
+eling transportation routines using hybrid dynamic mixed
+networks. Proceedings of the Conference on Uncertainty
+in Artiﬁcial Intelligence (UAI).
+
+Gopalratnam, K., Kautz, H., and Weld, D. (2005). Extend-
+ing continuous time bayesian networks. Proceedings of
+the National Conference on Artiﬁcial Intelligence (AAAI).
+Hariharan, R. and Toyama, K. (2004). Project Lachesis: pars-
+ing and modeling location histories. Geographic Informa-
+tion Science.
+
+Kanazawa, K., Koller, D., and Russell, S. J. (1995) Stochastic
+simulation algorithms for dynamic probabilistic networks.
+Proceedings of the 11th Annual Conference on Uncertainty
+in AI (UAI), Montreal, Canada.
+
+Kristjannson, T., Culotta, A., Viola, P., and McCallum, A.
+(2004). Interactive information extraction with constrained
+conditional random ﬁelds. Proceedings of the National
+Conference on Artiﬁcial Intelligence (AAAI).
+
+Kschischang, F. R., Frey, B. J., and Loeliger, H.-A. (2001).
+Factor graphs and the sum-product algorithm. IEEE Trans-
+actions on Information Theory.
+
+Kumar, S. and Hebert, M. (2003). Discriminative random
+ﬁelds: A discriminative framework for contextual inter-
+action in classiﬁcation. Proceedings of the International
+Conference on Computer Vision (ICCV).
+
+Lafferty, J., McCallum, A., and Pereira, F. (2001). Conditional
+random ﬁelds: Probabilistic models for segmenting and
+labeling sequence data. Proceedings of the International
+Conference on Machine Learning (ICML).
+
+Lester, J., Choudhury, T., Kern, N., Borriello, G., and Han-
+naford, B. (2005). A hybrid discriminative-generative ap-
+proach for modeling human activities. Proceedings of the
+International Joint Conference on Artiﬁcial Intelligence
+(IJCAI).
+
+ring transportation routines. Proceedings of the National
+Conference on Artiﬁcial Intelligence (AAAI).
+
+Liao, L., Fox, D., and Kautz, H. (2005a). Hierarchical con-
+ditional random ﬁelds for GPS-based activity recognition.
+Proceedings of the International Symposium of Robotics
+Research (ISRR).
+
+Liao, L., Fox, D., and Kautz, H. (2005b). Location-based ac-
+tivity recognition. Advances in Neural Information Pro-
+cessing Systems (NIPS).
+
+Liao, L., Fox, D., and Kautz, H. (2005c). Location-based ac-
+tivity recognition using relational Markov networks. Pro-
+ceedings of the International Joint Conference on Artiﬁcial
+Intelligence (IJCAI).
+
+McCallum, A. (2003). Efﬁciently inducing features of con-
+ditional random ﬁelds. Proceedings of the Conference on
+Uncertainty in Artiﬁcial Intelligence (UAI).
+
+Murphy, K. (2002). Dynamic Bayesian Networks: Represen-
+tation, Inference and Learning. PhD thesis, UC Berkeley,
+Computer Science Division.
+
+Murphy, K., Weiss, Y., and Jordan, M. (1999). Loopy be-
+lief propagation for approximate inference: An empirical
+study. Proceedings of the Conference on Uncertainty in
+Artiﬁcial Intelligence (UAI).
+
+Ng, A. and Jordan, M. On discriminative vs. generative clas-
+siﬁers: A comparison of logistic regression and naive
+Bayes. Advances in Neural Information Processing Sys-
+tems (NIPS).
+
+Patterson, D., Etzioni, O., Fox, D., and Kautz, H. (2002).
+Intelligent ubiquitous computing to support Alzheimer’s
+patients: Enabling the cognitively disabled. UbiCog ’02:
+First International Workshop on Ubiquitous Computing for
+Cognitive Aids.
+
+Patterson, D., Liao, L., Gajos, K., Collier, M., Livic, N., Ol-
+son, K., Wang, S., Fox, D., and Kautz, H. (2004). Oppor-
+tunity Knocks: a system to provide cognitive assistance
+with transportation services. International Conference on
+Ubiquitous Computing (UbiComp).
+
+Pearl, J. (1988). Probabilistic Reasoning in Intelligent Sys-
+tems: Networks of Plausible Inference. Morgan Kaufmann
+Publishers, Inc.
+
+Peng, F. and McCallum, A. (2004). Accurate information ex-
+traction from research papers using conditional random
+ﬁelds. HLT-NAACL.
+
+Pfeffer, A. and Tai, T. (2005). Asynchronous dynamic
+bayesian networks. Proceedings of the Conference on Un-
+certainty in Artiﬁcial Intelligence (UAI).
+
+Quattoni, A., Collins, M., and Darrell, T. (2004). Conditional
+random ﬁelds for object recognition. Advances in Neural
+Information Processing Systems (NIPS).
+
+Rabiner, L. R. (1989). A tutorial on hidden Markov models
+and selected applications in speech recognition. Proceed-
+ings of the IEEE. IEEE Log Number 8825949.
+
+Liao, L., Fox, D., and Kautz, H. (2004). Learning and infer-
+
+Raj, A., Subramanya, A., Bilmes, J., and Fox, D. (2006).
+
+134 THE INTERNATIONAL JOURNAL OF ROBOTICS RESEARCH / January 2007
+
+Rao-Blackwellized particle ﬁlters for recognizing activi-
+ties and spatial context from wearable sensors. Experimen-
+tal Robotics: The 10th International Symposium, Springer
+Tracts in Advanced Robotics (STAR), Springer Verlag.
+Richardson, M. and Domingos, P. (2004). Markov logic net-
+works. Technical report, Department of Computer Science
+and Engineering, University of Washington, Seattle, WA.
+Conditionally accepted for publication in Machine Learn-
+ing.
+
+Sha, F. and Pereira, F. (2003). Shallow parsing with condi-
+tional random ﬁelds. Proceedings of Human Language
+Technology-NAACL.
+
+Taskar, B., Abbeel, P., and Koller, D. (2002). Discriminative
+probabilistic models for relational data. Proceedings of the
+Conference on Uncertainty in Artiﬁcial Intelligence (UAI).
+Yanover, C. and Weiss, Y. (2001). Most probable conﬁgura-
+tions using loopy belief propagation. Advances in Neural
+Information Processing Systems (NIPS).
+
+Yedidia, J. S., Freeman, W. T., and Weiss, Y. (2001). Un-
+derstanding belief propagation and its generalizations. In
+Exploring Artiﬁcial Intelligence in the New Millennium,
+Morgan Kaufmann.
+
+

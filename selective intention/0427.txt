@@ -1,0 +1,1257 @@
+Type-aware Embeddings for Multi-Hop Reasoning over Knowledge Graphs
+
+Zhiwei Hu1 , V´ıctor Guti´errez-Basulto2 , Zhiliang Xiang2 , Xiaoli Li3 , Ru Li1(cid:3) , Jeff Z. Pan4(cid:3)
+1School of Computer and Information Technology, Shanxi University, China
+2School of Computer Science and Informatics, Cardiff University, UK
+3Institute for Infocomm Research/Centre for Frontier AI Research, A*STAR, Singapore
+4ILCC, School of Informatics, University of Edinburgh, UK
+zhiweihu@whu.edu.cn, {gutierrezbasultov, xiangz6}@cardiff.ac.uk, xlli@i2r.a-star.edu.sg,
+liru@sxu.edu.cn, j.z.pan@ed.ac.uk
+
+Abstract
+
+Multi-hop reasoning over
+real-life knowledge
+graphs (KGs) is a highly challenging problem as
+traditional subgraph matching methods are not ca-
+pable to deal with noise and missing informa-
+tion. To address this problem,
+it has been re-
+cently introduced a promising approach based on
+jointly embedding logical queries and KGs into a
+low-dimensional space to identify answer entities.
+However, existing proposals ignore critical seman-
+tic knowledge inherently available in KGs, such as
+type information. To leverage type information,
+we propose a novel TypE-aware Message Passing
+(TEMP) model, which enhances the entity and rela-
+tion representations in queries, and simultaneously
+improves generalization, deductive and inductive
+reasoning. Remarkably, TEMP is a plug-and-play
+model that can be easily incorporated into existing
+embedding-based models to improve their perfor-
+mance. Extensive experiments on three real-world
+datasets demonstrate TEMP’s effectiveness.
+
+Introduction
+
+1
+In recent years, the multi-hop reasoning problem of answer-
+ing ﬁrst-order logic queries (FOL) on large-scale incomplete
+knowledge graphs (KGs) [Pan et al., 2016] has gained a lot
+of attention in the AI community. A major challenge for tra-
+ditional subgraph matching methods for query answering is
+that KGs are inevitably incomplete and noisy. Indeed, when
+schema [Wiharja et al., 2020] and triples are incomplete in
+the KG, correct answers are not guaranteed to be found un-
+der normal deductive reasoning, leading to empty or wrong
+answers. Another problem is their intrinsic high computa-
+tional complexity as they need to keep track of all interme-
+diate entities occurring on reasoning paths, leading to an ex-
+ponential blow-up. For instance, to answer the query “List
+the presidents of Asian countries that have held the Summer
+Olympics” shown in Fig. 1, we require two traversing-steps
+(many more for other queries): one to identify countries that
+have held the summer Olympics and another one to identify
+Asian countries, each producing intermediate countries.
+
+(cid:3)Contact Authors
+
+To address these challenges, a query embedding (QE) ap-
+proach to query answering has been recently introduced as an
+alternative to subgraph matching methods. The main idea is
+to embed entities and queries into a joint low-dimensional
+vector space such that entities that answer the query are
+close to the embedding of the query. Several QE mod-
+els for query answering, showing very promising perfor-
+mance, have been proposed so far [Hamilton et al., 2018;
+Ren et al., 2020; Ren and Leskovec, 2020; Zhang et al., 2021;
+Choudhary et al., 2021b; Luus et al., 2021]. However, these
+models fail to leverage semantic knowledge inherently avail-
+able in KGs, such as entity description [Yao et al., 2019;
+Daza et al., 2021] or entity type information [Niu et al., 2020;
+Pan et al., 2021]. Advantages of introducing type informa-
+tion are that: 1) it can enhance the representation of entities
+or relations; e.g., the types sports and event can enrich the
+representation of the entity Summer Olympics in the context
+of sport events (cf. Fig. 1). 2) It can also help tackling the in-
+ductive query answering problem where entities used in test
+queries cannot be observed at training time; e.g., consider the
+queries in Figure 1: “List the presidents of Asian countries
+that have held the Summer Olympics” and “List the presidents
+of European countries that have held the Winter Olympics”,
+which are generated from two KGs with disjoint sets of en-
+tities: Train KG and Test KG, respectively. Even if the en-
+tities Summer Olympics and Winter Olympics are different,
+they have similar type information, such as sports and event.
+Consequently, after using type information to represent enti-
+ties, the model associated to the query generated from Train
+KG is also effective on the query generated from Test KG.
+
+The goal of this paper is to introduce a type-aware plug-
+and-play model which makes full use of type information in
+the knowledge graph, and can be easily embedded into ex-
+isting QE-based models. To this aim, we propose a novel
+TypE-aware Message Passing (TEMP) model, which con-
+tains two key components. 1) Type-aware Entity Repre-
+sentations (TER), aggregating type information of entities
+to strengthen their vector representation (cf. Section 4.1).
+2) Type-aware Relation Representations (TRR), using entity
+type information to construct a global type graph to enhance
+the relation representation, and simultaneously integrate it
+with its type representation and existing entity type informa-
+tion (cf. Section 4.2). Importantly, some queries have vari-
+able nodes in the query paths (see Figure 1), which increase
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3078Considering QE-based methods are the mainstream in the
+current CQA ﬁeld, we mainly focus on how to construct a
+plug-and-play model to embed the type information for exist-
+ing QE-based methods.
+Other Methods. Besides the QE-based approach, the path-
+based approach is another method for CQA, but it faces an
+exponential growth of the search space with the number of
+hops. For instance, CQD [Arakelyan et al., 2021] uses a beam
+search method to explicitly track intermediate entities, and
+repeatedly combines scores from a pretrained link predictor
+via t-norms to search answers while tracking intermediaries.
+However, CQD does not support the full set of FOL queries.
+Inductive KG Completion (KGC).
+In the context of KGC,
+there have been some works on inductive settings where test
+entities are not seen in the training stage. Based on the
+source of information used, they can be split into two cat-
+egories: Using graph structure information, e.g., subgraph
+or topology structures [Teru et al., 2020; Chen et al., 2021;
+Wang et al., 2021], or using external information, e.g., tex-
+tual descriptions of entities [Daza et al., 2021]. However, all
+these methods focus on the inductive KGC task, which can be
+seen as answering simpler one-hop queries.
+Type-aware Tasks. Type information was previously used
+in other tasks such as KGC or entity typing [Yao et al., 2019;
+Zhao et al., 2020; Daza et al., 2021; Niu et al., 2020; Pan
+et al., 2021]. However, these works cannot be directly used
+for answering FOL queries because this requires multi-hop
+reasoning, producing intermediate uncertain entities.
+
+3 Background
+In this paper, a knowledge graph [Pan et al., 2016] is repre-
+sented in a standard format for graph-structured data such as
+RDF. A knowledge graph G is a tuple (E; R; C; T ), where E
+is a set of entities, R is a set of relation types, C is a set of
+entity types, and T is a set of triples. Triples in T are either
+relation assertions (h; r; t), where h; t ∈ E are respectively
+the head and tail entities of the triple, and r ∈ R is the edge
+of the triple connecting head and tail, or entity type assertions
+(e, type, c), where e ∈ E is an entity, c ∈ C is an entity type
+and type is the instance-of relation [Pan, 2009].
+
+We consider FOL queries that use existential quantiﬁcation
+(∃), conjunction (∧), disjunction (∨) and negation (¬) opera-
+tions. We will work with FOL queries in Disjunctive Normal
+Form, i.e. represented as a disjunction of conjunctions. To in-
+troduce FOL queries, we assume that Va ⊂ E represents a set
+of non-variable input anchor entities, V1; : : : ; Vm denote ex-
+istentially quantiﬁed variables and V? is the target variable.
+A FOL query Q is a formula of the following form:
+
+Q[V?] = V? : ∃V1; : : : ; Vm : c1 ∨ c2 ∨ : : : ∨ cn
+where ci = ei1 ∧ : : : ∧ eik, k ≤ m such that each eij is of
+one of the following forms: r(Va; V ), ¬r(Va; V ), r(V;V 0)
+or ¬r(V; V 0), with Va ∈ Va, V ∈ {V?; V1; : : : ; Vm}, V 0 ∈
+{V1; : : : ; Vm}, V 6= V 0:
+
+The dependency graph (DG) of a query Q is a graphical
+representation of Q, where nodes correspond to variable or
+non-variable arguments in Q and edges correspond to rela-
+tions in Q. Figure 1 shows an example of a DG.
+
+Figure 1: Inductive setting for FOL queries. The left part shows the
+query “List the presidents of Asian countries that have held the Sum-
+mer Olympics”. The right part shows the query “List the presidents
+of European countries that have held the Winter Olympics”. rel 1,
+rel 2, and rel 3 represent relations: Hold, Locate, and President of,
+respectively.
+
+the difﬁculty of subsequent reasoning steps in the chain, as
+variable nodes are unknown. To address this, the TRR com-
+ponent uses a bidirectional mechanism for the anchor node to
+supervise the relations in the query path, and vice versa. Fur-
+thermore, as mentioned, after using type information to rep-
+resent entities and relations, the model becomes inherently
+inductive as the occurrence of new entities or relations will
+not affect the type-based representations.
+
+Our main contributions can be summarized as follows:
+• We propose TEMP, a novel type-aware plug-and-play
+model for multi-hop reasoning over KGs, that can be
+easily incorporated into the existing QE-based models.
+• We design a new bidirectional integration mechanism
+that
+incorporates the pairwise dependencies among
+{entity, relation, type} information, even in the absence
+of schema axioms like domain and range.
+
+• Extensive experiments demonstrate that after incorpo-
+rating TEMP into four state-of-the-art baselines, their
+generalization, deductive and inductive reasoning abil-
+ities are signiﬁcantly improved across three benchmark
+datasets consistently.
+
+Data, code, and an extended version with appendix is avail-
+
+able at https://github.com/SXUNLP/QE-TEMP
+
+2 Related Work
+Query Embeddings. QE models ﬁrst embed entities and
+FOL queries into a joint low-dimensional vector space, and
+subsequently compute a similarity score between the entity
+representation and query representation in the latent embed-
+ding space. In general, according to the type of embedding
+spaces, QE-based methods can be divided into four cate-
+gories: (i) geometric-based methods, such as GQE [Hamil-
+ton et al., 2018], Q2B [Ren et al., 2020], HypE [Choudhary
+et al., 2021b], and ConE [Zhang et al., 2021], where logical
+queries and KG entities are embedded into a geometric vector
+space as points, boxes, hyperbolic, and cone shapes, respec-
+tively; (ii) distribution-based methods, such as BETAE [Ren
+and Leskovec, 2020], embedding queries to beta distributions
+with bounded support, and PERM [Choudhary et al., 2021a],
+using Gaussian densities to reason over KGs; (iii) logic-based
+methods, relating so-called set logic with FOL [Luus et al.,
+2021]; (iv) neural-based methods, e.g., EMQL [Sun et al.,
+2020] using neural retrieval to implement logical operations.
+
+Anchor nodeVariable node?Target nodeRelationAsia?rel_3Train KGEurope?rel_3Test KGsportsprojectsbookeventorganizationbookbusinessSummer OlympicsTypegovernmentWinter OlympicsDependency graphDependency graphProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3079Figure 2: TEMP’s Architecture. The left top part is the dependency graph for query “List the presidents of Asian countries that have held the
+Summer Olympics”, rel 1, rel 2, and rel 3 represent the relations Hold, Locate, and President of, respectively.
+
+We are interested in the multi-hop reasoning problem of
+answering queries Q on KGs, which aims to ﬁnd a set of
+entities
+
+iff Q[a] holds true.
+
+⊆ E such that a ∈
+
+Q
+
+Q
+
+J
+
+K
+
+J
+
+K
+
+g = (cid:27)(WiHi
+s + b0
+i Hi
+
+s + bi)
+i) + (1 − g) ∗ Hi
+s
+
+Hi+1
+
+s = g ∗ (W 0
+
+(1)
+
+(2)
+
+4 Semantically-enriched Embeddings
+Our model TEMP is composed of two sub-models: Type-
+aware Entity Representations (TER), which uses type infor-
+mation of an entity to enrich its vector representation, and
+Type-aware Relation Representations (TRR), which further
+integrates entity representations, relation types, and relation
+representations to strengthen the entity and relation vector
+representations simultaneously.
+Interestingly, as we only
+leverage type information to perform an in-depth character-
+ization of entities and relations without modifying the train-
+ing target of existing QE-based models, TEMP can be easily
+embedded into them in a plug-and-play fashion.
+
+4.1 TER: Type-aware Entity Representations
+The main intuition behind TER is that the types of an
+entity provide valuable information about what
+it rep-
+if an entity contains
+resents in the KG. For instance,
+types such as sports/multi event tournament,
+time/event,
+olympics/olympic games, it is plausible to infer that the cor-
+responding entity represents Olympics. To capture this intu-
+ition, we design an iterative multi-highway layer [Srivastava
+et al., 2015] to aggregate the type information in entity type
+assertions to get a more accurate and comprehensive repre-
+s ∈ Rd(cid:2)n denote the hidden state of
+sentation of it1. Let Hi
+type information of an entity in iteration i ≥ 1, where d and n
+respectively represent the vector size and the number of types
+of an entity. The highway-based type fusion representation of
+a given entity can be calculated as follows:
+
+1See appendix for other aggregation alternatives.
+
+gHK
+
+s = W HK
+
+s + b
+
+i }∈ Rd(cid:2)d, {bi; b0
+
+(3)
+H1
+s is the initial feature of types of an entity, (cid:27) is an element-
+i}∈ Rd(cid:2)1
+wise sigmoid function, {Wi; W 0
+are learnable matrices, and g∈ Rd(cid:2)n is the reset gate. Af-
+ter iterating K times (we set K=2), the ﬁnal message HK
+s ∈
+Rd(cid:2)n (undergoing a linear operation to obtain gHK
+s ∈ Rd(cid:2)1)
+is taken as the representation for the types of a given entity.
+We further concatenate the initial entity and its type aggrega-
+tion representation to get an enhanced entity representation.
+
+0
+
+0
+
+(4)
+
+s ; H0
+
+∈ Rd(cid:2)d and b
+
+He = W 0[gHK
+
+s] + b0;
+∈
+where [·] is the concatenation function, W
+Rd(cid:2)1 are the parameters to learn. He ∈ Rd(cid:2)1 is the ﬁnal
+representation of the entity. It is important to note that for
+inductive reasoning, we will not concatenate with the initial
+entity information H0
+s as the entities seen during training are
+not presented in the test phase. The process is shown in top
+center of Figure 2.
+4.2 TRR: Type-aware Relation Representations
+Performing TER on entities is useful for queries without ex-
+istentially quantiﬁed variables. However, for queries with
+chained existential variables (chain of variable nodes in the
+DG) it is not enough to only perform TER on the anchor en-
+tity or target variable. Intuitively, the problem is that in the
+long-chain reasoning process, the correlation between the an-
+chor entity and target variable may not be strong enough after
+several relation projections. Besides, continuous relational
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3080projections may cause exponential growth in the search space,
+further increasing the complexity of the model.
+
+We start by observing that the types of a relation are corre-
+lated with its representation in the KG. For example, assum-
+ing a relation r has types government/ political appointer and
+organization/role, then we can plausibly infer that the rela-
+tion r represents President of. In long-chain queries, type-
+enhancement on relations can help to reduce the answer en-
+tity space and cascading errors caused by multiple projec-
+tions. However, in most existing KGs, relations lack spe-
+ciﬁc type annotations (such as domain and range). We ad-
+dress this problem by building, based on the original KG, a
+novel type graph with types as nodes and relations as edges
+(see bottom left of Fig. 2). In a subsequent step, we aggre-
+gate the type information on the type graph to obtain the type
+embedding corresponding to a speciﬁc relation. Finally, we
+integrate the entity representation, the aggregated type infor-
+mation of a relation and its representation by a bidirectional
+attention mechanism, so that the intermediate variable nodes
+can perceive the message of anchor or target nodes and of the
+relations in the chain of reasoning (see right of Fig. 2). This
+will help to avoid the weakening of the connection between
+anchor and target entity caused by long-chain reasoning.
+
+Step 1: Type Graph Construction
+We formally deﬁne a type graph Gtp. Let G = (E; R; C; T )
+be a KG. For a relation r ∈ R, Tr ⊆ T denotes the set of
+relation assertions in which r occurs. For a relation assertion
+t ∈ S
+r2R Tr, hd(t) and tl(t) respectively denote the head and
+tail entities of t, and tpt(hd(t)) = {c | (hd(t); type; c) ∈ T }
+denotes the set of types of the head of t; tpt(tl(t)) is deﬁned
+analogously. Since r may occur in multiple relation asser-
+tions, we will compute the type information of r by taking
+the intersection of the types of the head and tail entities of
+relation assertions in which r occurs. For r ∈ R, we deﬁne
+
+tphd
+
+r (G) =
+
+\
+
+t2Tr
+
+tpt(hd(t));
+
+tptl
+
+r (G) =
+
+\
+
+t2Tr
+
+tpt(tl(t)):
+
+r2R tphd
+
+r (G) ∪ tptl
+
+r (G) ∪ tptl
+
+In addition, we deﬁne Gtp = (V; E; T ) by setting V =
+S
+r (G) , E = R, and (v; r; v0) ∈ T if there
+exists t ∈ Tr such that v = tpt(hd(t)) and v0 = tpt(tl(t)).
+Step 2: Relation Type Aggregation
+For a given relation r ∈ E, we deﬁne the types associated
+with a relation as tpr(Gtp) = tphd
+r (G). We ﬁx an
+arbitrary linear order on the elements of tpr(Gtp), and de-
+note by tpi
+r(Gtp) the i-th type, for all 1 ≤ i ≤ |tpr(Gtp)|.
+Note that not all types in tpr(Gtp) are relevant for answering
+a given query. For example, assume that the relation has part
+contains the types {vehicle, animal, universe}. For the query
+“What organs are parts of a cat?”, we should give type ani-
+mal more attention, but for the query “What components are
+parts of a car?” we should concentrate on the type vehicle.
+So, instead of simply concatenating (or averaging) all the type
+information associated to a relation, we model the relation
+type aggregation as an attention neural network, deﬁned as:
+X
+
+(5)
+
+Hs =
+
+ai (cid:12) Hi
+s
+
+i
+
+ai =
+
+exp(MLP(Hi
+r))
+j exp(MLP(Hj
+
+r))
+
+P
+
+(6)
+
+Hs is the vector representation of the aggregated type infor-
+s ∈ Rd(cid:2)1 is the vector representation of
+mation tpr(Gtp); Hi
+the i-th type tpi
+r(Gtp), which is initialized to a uniform dis-
+r(Gtp)|; ai ∈ Rd(cid:2)1
+tribution with dimension d, 1 ≤ i ≤ |tpi
+is a positive weight vector that satisﬁes Pn
+i=1[ai]j = 1 for
+all 1 ≤ j ≤ d; and MLP(·) : Rd → Rd is a multi-layer
+perceptron network.
+
+Step 3: Pairwise Representation Integration
+When embedding queries, integrating the information of enti-
+ties, relations, and types can help to smooth decision bound-
+aries, but this needs to be done in a way that the intended
+match of the query into the KG is captured. For exam-
+ple, for the query “Which countries have held the Sum-
+mer Olympics?”, we need to concentrate on Held connec-
+tions from Summer Olympics, rather than e.g., Watch con-
+nections. Analogously, we should only consider Held con-
+nections starting at Summer Olympics, rather than e.g., at
+World Cup. To properly capture this restriction in the triple
+{He, Hr, Hs} (He and Hs deﬁned as in Equations (4) and
+(5), and Hr is the initialization relation vector), we introduce
+a bidirectional attention mechanism [Zhang et al., 2020] to
+integrate each state of pairwise representation pairs: entity-
+relation, entity-type, and relation-type. Here, we show how to
+do this for entity-relation pair. Bidirectional integration rep-
+resentation between He and Hr can be calculated as follows:
+
+Ger = Relu(W1
+
+Gre = Relu(W2
+
+(cid:21)
+
+(cid:21)
+
+(cid:20)He (cid:9) Hr
+He ⊗ Hr
+(cid:20)Hr (cid:9) He
+Hr ⊗ He
+
++ b1)
+
++ b2)
+
+(7)
+
+(8)
+
+{W1; W2} ∈ R2d(cid:2)2d and {b1; b2} ∈ R2d(cid:2)1 are learnable
+parameters. We use element-wise subtraction (cid:9) and multi-
+plication ⊗ to build better matching representations [Tai et
+al., 2015]. Ger ∈ R2d(cid:2)1 is the result of integrating entity
+relation information. Through bidirectional integration of en-
+tities and relations, we simultaneously get a relation-aware
+entity representation and an entity-aware relation representa-
+tion, capturing the interaction between entities and relations.
+We then use a gated mechanism to combine the results pro-
+duced by bidirectional fusion as it better regulates the infor-
+mation ﬂow [Srivastava et al., 2015]. Take the entity fusion
+representation as an example, using the relation-aware entity
+Ger and type-aware entity Ges representations as input, the
+ﬁnal representation of entity is computed as
+
+g = (cid:27)(W3Ger + W4Ges + b3 + b4)
+
+(9)
+
+fGe = g ∗ Ger + (1 − g) ∗ Ges
+(10)
+{W3, W4} ∈ R2d(cid:2)2d and {b3, b4} ∈ R2d(cid:2)1 are the parame-
+ters to learn. g is the reset gate, and fGe ∈ R2d(cid:2)1 is the ﬁnal
+entity representation.
+
+To transform the fused feature to the original vector size,
+we use one linear layer: He = W5fGe + b5, where W5 ∈
+Rd(cid:2)2d and b5 ∈ Rd(cid:2)1 are learnable parameters. He is the
+ﬁnal entity representation enhanced by relation and type.
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3081Method
+GQE
++TEMP
+Q2B
++TEMP
+BETAE
++TEMP
+LOGICE
++TEMP
+
+GQE
++TEMP
+Q2B
++TEMP
+BETAE
++TEMP
+LOGICE
++TEMP
+
+1p
+41.3
+47.6
+47.1
+45.7
+42.6
+43.3
+45.6
+46.6
+
+56.4
+76.3
+58.5
+87.2
+77.9
+84.7
+81.5
+84.5
+
+(a) Generalization on FB15k-237 (Q2B datasets)
+
+ip
+8.8
+13.4
+11.3
+11.7
+9.2
+10.6
+12.0
+13.5
+
+3i
+38.5
+48.4
+46.4
+49.6
+43.3
+47.5
+46.5
+47.9
+
+2i
+26.5
+36.3
+33.2
+36.9
+30.2
+35.3
+34.7
+35.8
+
+pi
+16.7
+25.5
+21.8
+22.9
+20.7
+24.3
+23.5
+24.9
+
+3p
+15.2
+24.7
+19.4
+23.4
+21.6
+22.7
+24.1
+25.0
+
+2p
+21.5
+29.6
+24.9
+27.8
+25.4
+27.2
+27.8
+29.2
+(b) Deductive Reasoning on FB15k-237 (Q2B datasets)
+30.1
+48.6
+34.3
+59.6
+52.6
+58.3
+54.2
+59.8
+
+35.9
+49.7
+44.7
+67.2
+59.0
+62.3
+58.1
+59.3
+
+25.1
+36.9
+23.9
+49.1
+42.2
+45.3
+44.0
+47.0
+
+51.2
+60.4
+62.1
+72.7
+67.8
+68.8
+67.1
+68.1
+
+24.5
+39.0
+28.1
+47.9
+44.5
+49.4
+46.0
+51.9
+
+13.0
+22.1
+11.7
+29.8
+23.5
+28.5
+28.5
+33.4
+
+2u
+17.1
+30.2
+25.3
+27.6
+24.2
+26.7
+27.1
+28.7
+
+25.8
+59.0
+40.5
+78.6
+63.7
+74.5
+66.6
+70.8
+
+up
+15.8
+21.0
+19.3
+18.9
+18.3
+18.2
+20.8
+21.0
+
+22.0
+36.3
+22.0
+43.4
+35.1
+41.1
+40.8
+45.4
+
+Avg
+22.4
+30.7
+27.6
+29.4
+26.2
+28.4
+29.1
+30.3
+
+31.6
+47.6
+36.2
+59.5
+51.8
+57.0
+54.1
+57.8
+
+FB15k
+Avg
+40.1
+56.6
+51.2
+55.4
+50.6
+53.6
+54.2
+55.7
+FB15k
+43.7
+71.4
+43.7
+69.6
+60.6
+60.6
+65.5
+67.1
+
+NELL
+Avg
+23.5
+38.2
+31.1
+37.3
+33.4
+34.5
+39.1
+39.1
+NELL
+49.8
+75.5
+51.1
+90.4
+80.2
+81.5
+85.3
+84.6
+
+Table 1: Hits@3 results on the Q2B datasets testing generalization and deductive reasoning. Please see appendix for full results on FB15k
+and NELL.
+
+5 Experiments
+
+Our aim is to analyse the impact of adding TEMP to existing
+QE models on their generalization, deductive and inductive
+reasoning abilities.
+
+Datasets and Queries. For generalization and deductive
+reasoning, we use three standard benchmark KGs with
+training/validation/test splits: FB15k [Bordes et
+ofﬁcial
+al., 2013], FB15k-237 [Toutanova and Chen, 2015], and
+NELL995 (NELL) [Xiong et al., 2017], and two query
+datasets: one with 9 query structures without negation from
+Query2Box (Q2B) [Ren et al., 2020] and another with 14 (9
+positive + 5 with negation) from BETAE [Ren and Leskovec,
+2020]. To test inductive reasoning, we use the datasets
+FB15k-237-V2 and NELL-V3 provided by GraIL [Teru et
+al., 2020], ensuring that the test and training sets have a dis-
+joint set of entities. Note that we generate queries over these
+datasets as done for BETAE datasets. We choose Hit@K and
+Mean Reciprocal Rank (MRR) as two evaluation metrics2.
+
+Baselines. We embed TEMP on four state-of-the-art base-
+lines for complex QA on KGs: Q2B, BETAE, GQE [Hamil-
+ton et al., 2018], and LOGICE [Luus et al., 2021].
+
+Generalization. The goal is to ﬁnd non-trivial answers to
+FOL queries over incomplete KGs, i.e. answers cannot get
+using subgraph matching. We follow the evaluation protocol
+in [Ren and Leskovec, 2020]. Brieﬂy, three KGs are built:
+Gtrain containing only training triples, Gvalid containing Gtrain
+plus validation triples, and Gtest containing Gvalid as well as
+test triples. The models are trained using Gtrain to evaluate the
+generalization ability because queries have at least one edge
+to predict to ﬁnd an answer.
+
+2Refer to appendix for details on datasets, queries, and metrics.
+
+Deductive Reasoning. The goal is to test the ability of
+ﬁnding answers only using standard reasoning.
+Follow-
+ing [Sun et al., 2020], we train models using the full KG
+(Gtrain ∪ Gvalid ∪ Gtest), so only inference (not generalization)
+is used to get correct answers.
+
+Inductive Reasoning. All baseline models have inductive
+ability at the query level as they can answer queries with
+structures that are not seen during training. For example,
+the Q2B and BETAE datasets consider ﬁve query structures
+during the training and validation phase and four ‘unseen’
+structures are used during testing. However, it is not known
+whether they have entity-level inductive ability, i.e. during
+testing, the query structure has entities that do not appear
+in the training phase. We will analyse this for the ﬁrst time.
+
+5.1 Main Results
+We compare the performance of the four baseline models
+with their counterparts after adding our TEMP model in four
+different aspects: 1) generalization, 2) deductive reasoning,
+3) inductive reasoning, and 4) queries with negation.
+
+for
+
+Generalization. Table 1(a) shows that
+long-chain
+queries 2p and 3p, the improvement brought by TEMP ex-
+ceeds that of short-chain 1p, conﬁrming the suitability of type
+information for dealing with long-chain queries.
+In addi-
+tion, TEMP-enhanced models also achieve improvements on
+queries ip/pi/2u/up, which do not occur in the training KG,
+showing that type information is also helpful to improve in-
+ductive ability at the query-level structure. Notably, for GQE,
+adding type information can shorten the gap or even surpass
+the state-of-the-art baseline models (without TEMP).
+
+Deductive Reasoning. Table 1(b) shows that after adding
+type information, the reasoning ability of the baselines are
+signiﬁcantly improved on all datasets consistently. Speciﬁ-
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3082Data Method 1p 2p 3p
+
+2i
+
+3i
+
+pi
+
+ip 2u up Avg
+
+Models TER TRR FB15k-237
+
+2
+V
+-
+7
+3
+2
+-
+k
+5
+1
+B
+F
+
+3
+V
+-
+L
+L
+E
+N
+
+GQE
+0.5 5.5 1.8 0.5 0.6 7.1 13.1 2.1 6.1 4.1
++TEMP 14.6 22.1 14.1 13.9 14.4 15.7 22.0 9.7 20.1 16.3
+
+0.5 5.5 1.7 0.7 0.7 7.8 12.9 2.7 6.1 4.3
+Q2B
++TEMP 12.9 12.7 12.3 10.0 10.4 13.7 10.7 7.8 9.5 11.1
+
+BETAE 0.9 0.5 0.4 0.7 0.3 0.7 0.4 1.0 0.3 0.6
++TEMP 10.8 15.0 10.6 10.8 10.1 11.3 13.6 5.5 13.6 11.3
+
+LOGICE 0.7 2.5 1.1 1.0 0.9 1.0 3.1 0.3 1.6 1.4
++TEMP 15.7 17.1 15.1 14.6 13.8 13.6 16.3 7.0 14.2 14.2
+
+GQE
+0.3 2.3 0.6 0.4 0.1 3.2 4.9 1.8 3.2 1.9
++TEMP 9.6 5.7 6.0 7.2 8.1 4.7 6.2 4.0 4.0 6.2
+
+Q2B
+0.2 2.2 0.5 0.3 0.2 2.6 4.8 1.8 2.8 1.7
++TEMP 8.0 5.6 6.0 7.6 7.1 4.6 5.3 4.1 3.2 5.7
+
+BETAE 0.4 0.1 0.1 0.5 0.1 0.2 0.1 0.3 0.2 0.2
++TEMP 8.4 4.7 5.7 5.6 5.8 4.1 4.5 4.5 3.0 5.1
+
+LOGICE 0.2 0.5 0.3 0.1 0.3 0.2 0.3 0.2 0.4 0.3
++TEMP 10.7 5.0 5.8 7.6 8.1 5.3 5.5 4.7 3.4 6.2
+
+Table 2: Hits@10 results on queries generated from the FB15k-237-
+V2 and NELL-V3 inductive datasets from GraIL.
+
+FB15k
+
+BETAE
+
+LOGICE
+
+Datasets Model Our model 2in 3in inp pin pni Avg
+14.3 14.7 11.5 6.5 12.4 11.8
+15.2 15.6 11.5 6.8 13.4 12.5
+15.1 14.2 12.5 7.1 13.4 12.5
+15.2 14.7 12.7 7.6 13.7 12.8
+5.1 7.9 7.4 3.6 3.4 5.4
+4.3 8.0 7.6 3.5 2.9 5.3
+4.9 8.2 7.7 3.6 3.5 5.6
+5.4 8.7 7.9 4.0 3.8 6.0
+5.1 7.8 10.0 3.1 3.5 5.9
+5.1 7.5 10.5 3.1 3.3 5.9
+5.3 7.5 11.1 3.3 3.8 6.2
+5.4 7.6 11.3 3.4 3.9 6.3
+
+None
++TEMP
+None
++TEMP
+None
++TEMP
+None
++TEMP
+None
++TEMP
+None
++TEMP
+
+LOGICE
+
+LOGICE
+
+BETAE
+
+BETAE
+
+NELL
+
+FB15k-237
+
+Table 3: MRR Results on the BETAE Datasets for BETAE and LOG-
+ICE on queries with negation. See appendix for results for other
+query structures.
+
+cally, the improvement of embedding models based on geo-
+metric operations (GQE, Q2B) is more signiﬁcant than that of
+BETAE or LOGICE. Remarkably, Q2B + TEMP surpasses the
+state-of-the-art baseline models (without TEMP). The main
+reason for the modest gain for BETAE and LOGICE is that
+they impose excessive restrictions on the embedding of enti-
+ties and relations. For instance, in LOGICE, the logic embed-
+dings with bounded support change the type-enriched vector
+representations, thus affecting the effect of type information.
+
+Inductive Reasoning. Table 2 shows that the addition of
+TEMP signiﬁcantly outperforms all baselines in the (entity-
+level) inductive setting, by 12.2%, 6.8%, 10.7%, and 12.8%,
+in terms of Hits@10 in the FB15k-237-V2 dataset. The main
+reason is that in TEMP entity and relation representations are
+mainly characterized by the type information. So, newly
+emerging entities or relations can be captured through their
+type information, making unnecessary the coupling between
+entities and entity set, and relations and relation set.
+
+GQE
+
+Q2B
+
+$
+"
+$
+"
+
+$
+"
+$
+"
+
+$
+$
+"
+"
+
+$
+$
+"
+"
+
+19.4
+23.5
+26.3
+28.2
+24.2
+24.7
+25.8
+26.8
+
+FB15k NELL
+19.3
+26.8
+33.2
+34.5
+25.7
+29.1
+33.4
+33.9
+
+32.8
+42.1
+50.8
+50.9
+43.4
+44.3
+47.7
+49.7
+
+Table 4: Average MRR results on the Q2B datasets with TER or
+TRR. See appendix for detailed results.
+
+Figure 3: MRR results with
+different entity type aggrega-
+tors.
+
+Figure 4: MRR results with
+different relation type aggre-
+gators.
+
+Queries with Negation. Table 3 shows the results of BE-
+TAE and LOGICE on queries with negation in the BETAE
+dataset. The main reason for the small gains is that, unlike
+BETAE and LOGICE, TEMP does not have speciﬁc mecha-
+nisms to deal with negation. Speciﬁcally, TEMP lacks mech-
+anisms to associate type information to the negation of a re-
+lation, i.e., a way to ‘negate’ a type. Boosting queries with
+negation using type information is left as an interesting fu-
+ture work.
+
+5.2 Ablation Studies
+We select GQE and Q2B, as they beneﬁt the most by adding
+type information, and conduct ablation experiments on the
+three datasets to study the effect of separately using type-
+enhancement on entities or relations, see Table 4. We further
+study different implementations of entity and relation type ag-
+gregation models, see Figure 3 and Figure 4.
+
+Type-enhancement on relations is consistently better than
+on entities, this is explained by the fact that enhancing re-
+lation representations is more helpful for queries with long
+chains of existentially quantiﬁed variables as it better deals
+with cascading errors introduced by relation projections. We
+also show that using type-enhancement on both entities and
+relations usually leads to even better performance.
+
+6 Conclusions
+We proposed TEMP, a type-aware plug-and-play model for
+answering FOL queries on incomplete KGs. We experimen-
+tally show that TEMP can signiﬁcantly improve four state-
+of-the-art models in terms of generalization, deductive and
+inductive reasoning abilities across three benchmark datasets
+consistently.
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3083Acknowledgments
+
+by
+
+has
+
+been
+
+supported
+
+the National
+This work
+Key Research and Development Program of China
+(No.2020AAA0106100), by the National Natural Sci-
+ence Foundation of China (No.61936012), by the Chang
+Jiang Scholars Program (J2019032), by a Leverhulme Trust
+Research Project Grant (RPG-2021-140), and by the Centre
+for Artiﬁcial Intelligence, Robotics and Human-Machine
+Systems (IROHMS) at Cardiff University.
+
+References
+[Arakelyan et al., 2021] Erik Arakelyan, Daniel Daza,
+Pasquale Minervini, and Michael Cochez. Complex query
+answering with neural link predictors. In ICLR, 2021.
+[Bordes et al., 2013] Antoine Bordes, Nicolas Usunier,
+and Oksana
+Translating embeddings for modeling
+
+Alberto Garc´ıa-Dur´an,
+Yakhnenko.
+multi-relational data. In NeurIPS, 2013.
+
+Jason Weston,
+
+[Chen et al., 2021] Jiajun Chen, Huarui He, Feng Wu, and
+Jie Wang. Topology-aware correlations between relations
+for inductive link prediction in knowledge graphs.
+In
+AAAI, pages 6271–6278, 2021.
+
+[Choudhary et al., 2021a] Nurendra Choudhary, Nikhil Rao,
+Sumeet Katariya, Karthik Subbian, and Chandan Reddy.
+Probabilistic entity representation model for reasoning
+over knowledge graphs. In NeurIPS, 2021.
+
+[Choudhary et al., 2021b] Nurendra Choudhary, Nikhil Rao,
+Sumeet Katariya, Karthik Subbian, and Chandan K Reddy.
+Self-supervised hyperboloid representations from logical
+queries over knowledge graphs. In WWW, 2021.
+
+[Daza et al., 2021] Daniel Daza, Michael Cochez, and Paul
+Groth. Inductive entity representations from text via link
+prediction. In WWW, 2021.
+
+[Hamilton et al., 2018] William L Hamilton, Payal Bajaj,
+Marinka Zitnik, Dan Jurafsky, and Jure Leskovec. Em-
+bedding logical queries on knowledge graphs. In NeurIPS,
+2018.
+
+[Luus et al., 2021] Francois Luus, Prithviraj Sen, Pavan Ka-
+panipathi, Ryan Riegel, Ndivhuwo Makondo, Thabang
+Lebese, and Alexander Gray. Logic embeddings for com-
+plex query answering. In NeurIPS, 2021.
+
+[Niu et al., 2020] Guanglin Niu, Bo Li, Yongfei Zhang, Shil-
+iang Pu, and Jingyang Li. Autoeter: Automated entity
+In
+type representation for knowledge graph embedding.
+EMNLP, 2020.
+
+[Pan et al., 2016] J.Z. Pan, G. Vetere, J.M. Gomez-Perez,
+and H. Wu. Exploiting Linked Data and Knowledge
+Graphs for Large Organisations. Springer, 2016.
+
+[Pan et al., 2021] Weiran Pan, Wei Wei, and Xianling Mao.
+Context-aware entity typing in knowledge graphs.
+In
+EMNLP, 2021.
+
+[Pan, 2009] Jeff Z. Pan. Resource description framework. In
+
+Handbook on Ontologies, pages 71–90. 2009.
+
+[Ren and Leskovec, 2020] Hongyu Ren and Jure Leskovec.
+reasoning in
+
+Beta embeddings for multi-hop logical
+knowledge graphs. In NeurIPS, 2020.
+
+[Ren et al., 2020] Hongyu Ren, Weihua Hu,
+
+and Jure
+Leskovec. Query2box: Reasoning over knowledge graphs
+in vector space using box embeddings. In ICLR, 2020.
+[Srivastava et al., 2015] Rupesh Kumar Srivastava, Klaus
+Greff, and J¨urgen Schmidhuber. Highway networks. arXiv
+preprint arXiv:1505.00387, 2015.
+
+[Sun et al., 2020] Haitian Sun, Andrew O. Arnold, Tania
+Bedrax-Weiss, Fernando Pereira, and William W. Co-
+hen. Faithful embeddings for knowledge base queries. In
+NeurIPS, 2020.
+
+[Tai et al., 2015] Kai Sheng Tai, Richard Socher,
+
+and
+Improved semantic represen-
+Christopher D. Manning.
+tations from tree-structured long short-term memory net-
+works. In ACL, pages 1556–1566, 2015.
+
+[Teru et al., 2020] Komal Teru, Etienne Denis, and Will
+Hamilton. Inductive relation prediction by subgraph rea-
+soning. In ICML, pages 9448–9457, 2020.
+
+[Toutanova and Chen, 2015] Kristina Toutanova and Danqi
+Chen. Observed versus latent features for knowledge base
+and text inference. In ACL, pages 57–66, 2015.
+
+[Wang et al., 2021] Hongwei Wang, Hongyu Ren, and Jure
+Leskovec. Relational message passing for knowledge
+graph completion. In SIGKDD, pages 1697–1707, 2021.
+[Wiharja et al., 2020] Kemas Wiharja, Jeff Z. Pan, Martin J.
+Kollingbaum, and Yu Deng.
+Schema Aware Iterative
+Knowledge Graph Completion. Journal of Web Seman-
+tics, 2020.
+
+[Xiong et al., 2017] Wenhan Xiong, Thien Hoang, and
+William Yang Wang. Deeppath: A reinforcement learn-
+ing method for knowledge graph reasoning. In EMNLP,
+2017.
+
+[Yao et al., 2019] Liang Yao, Chengsheng Mao, and Yuan
+Luo. Kg-bert: Bert for knowledge graph completion.
+arXiv preprint arXiv:1909.03193, 2019.
+
+[Zhang et al., 2020] Shuailiang Zhang, Hai Zhao, Yuwei
+Wu, Zhuosheng Zhang, Xi Zhou, and Xiang Zhou.
+Dcmn+: Dual co-matching network for multi-choice read-
+ing comprehension. In AAAI, 2020.
+
+[Zhang et al., 2021] Zhanqiu Zhang, Jie Wang, Jiajun Chen,
+Shuiwang Ji, and Feng Wu. Cone: Cone embeddings for
+multi-hop reasoning over knowledge graphs. In NeurIPS,
+2021.
+
+[Zhao et al., 2020] Yu Zhao, Anxiang Zhang, Ruobing Xie,
+Kang Liu, and Xiaojie Wang. Connecting embeddings for
+knowledge graph entity typing. In ACL, 2020.
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3084

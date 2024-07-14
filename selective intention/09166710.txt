@@ -1,0 +1,1424 @@
+See discussions, stats, and author profiles for this publication at: https://www.researchgate.net/publication/343643978
+
+Learning to Estimate the Body Shape Under Clothing From a Single 3-D Scan
+
+Article  in  IEEE Transactions on Industrial Informatics · August 2020
+
+DOI: 10.1109/TII.2020.3016591
+
+CITATIONS
+24
+
+4 authors, including:
+
+Pengpeng Hu
+
+Coventry University
+
+27 PUBLICATIONS   159 CITATIONS   
+
+SEE PROFILE
+
+READS
+608
+
+V. Dadarlat
+
+Universitatea Tehnica Cluj-Napoca
+
+70 PUBLICATIONS   236 CITATIONS   
+
+SEE PROFILE
+
+Some of the authors of this publication are also working on these related projects:
+
+AI-based point cloud processing View project
+
+Special Issue: 3D Reconstruction with RGB‐D Cameras and Multi-Sensors View project
+
+All content following this page was uploaded by Pengpeng Hu on 26 January 2021.
+
+The user has requested enhancement of the downloaded file.
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+1
+
+Learning to Estimate the Body Shape Under
+Clothing from a Single 3D Scan
+
+Pengpeng Hu, Nastaran Nourbakhsh Kaashki, Vasile Dadarlat, and Adrian Munteanu
+
+Abstract—Estimating the 3D human body shape and pose un-
+der clothing is important for many applications, including virtual
+try-on, non-contact body measurement, and avatar creation for
+virtual reality. Existing body shape estimation methods formulate
+this task as an optimization problem by ﬁtting a parametric body
+model to a single dressed-human scan or a sequence of dressed-
+human meshes for a better accuracy. This is impractical for many
+applications that require fast acquisition such as gaming and
+virtual try-on due to the expensive computation. In this paper, we
+propose the ﬁrst learning-based approach to estimate the human
+body shape under clothing from a single dressed-human scan,
+dubbed Body PointNet. The proposed Body PointNet operates
+directly on raw point clouds and predicts the undressed body in
+a coarse-to-ﬁne manner. Due to the nature of the data – aligned
+paired dressed scans and undressed bodies; and genus-0 manifold
+meshes (i.e. single-layer surfaces) – we face a major challenge of
+lacking training data. To address this challenge, we propose a
+novel method to synthesize the dressed-human pseudo-scans and
+corresponding ground truth bodies. A new large-scale dataset,
+dubbed BUG (Body Under virtual Garments)
+is presented,
+employed for the learning task of body shape estimation from 3D
+dressed-human scans. Comprehensive evaluations show that the
+proposed Body PointNet outperforms the state-of-the-art methods
+in terms of both accuracy and running time.
+
+Index Terms—Body PointNet, Body shape under clothing,
+Body Pose Estimation, OffsetNet, 3D scanning, dressed human
+dataset.
+
+I. INTRODUCTION
+
+A CCURATE estimation of shape under clothing is a
+
+crucial task to quite a number of emerging promising
+applications such as virtual try-on tools, non-contact body
+measurement, and avatar creation for virtual reality. Despite
+the fact that accurate geometry of a body can be directly
+obtained by scanning undressed people [1], [2], the procedure
+is inconvenient to most people and is also an infringement of
+the right to privacy. This is also the case when people need to
+wear skin-tight clothes to get scanned. Therefore, predicting
+shape and pose of a body under clothing is highly motivated.
+This task is extremely challenging due to the complicated
+non-rigid clothing deformations resulting from variations in
+the subject pose and shape spaces. Hence, estimation of
+shape under clothing is an ill-posed problem. Besides, data
+
+Pengpeng Hu is with the Department of Electronics and Informatics,Vrije
+
+Universiteit Brussel, Brussels, Belgium, email: phu@etrovub.be.
+
+Nastaran Nourbakhsh Kaashki
+
+is with the Department of Electron-
+ics and Informatics,Vrije Universiteit Brussel, Brussels, Belgium, email:
+nknourba@etrovub.be.
+
+Vasile Dadarlat is with the Department of Computer Science, Technical
+
+University Cluj, Romania, email: vasile.dadarlat@cs.utcluj.ro
+
+Adrian Munteanu
+
+is with
+
+Informatics,Vrije Universiteit
+acmuntea@etrovub.be (see: http://www.etrovub.be/acmuntea).
+
+Brussels,
+
+the Department
+Brussel,
+
+of Electronics
+Belgium,
+
+and
+email:
+
+acquisition and body prediction model also highly effects on
+the prediction accuracy.
+To overcome the aforementioned, a limited number of meth-
+ods have been proposed to predict the body under clothing.
+Typically, these methods formulate this task as an optimization
+problem and incorporate constraints such as the body should
+lie inside the clothing surface. In [6] a parametric shape model
+named SCAPE [7] was used in order to ﬁt the dressed-human
+scan sequence by optimizing the shape using different poses.
+As the SCAPE model
+is overly-smooth and lacks feature
+details, in [8] the SMPL [9] model was used in order to ﬁt the
+dressed-human temporal sequence based on an optimization
+procedure. The approach in [25] jointly captures clothing
+geometry and body shape using separate meshes from the
+3D mesh sequence. However, all these methods require mesh
+sequences as input, and this can be obtained using expensive
+capture systems under controlled conditions, severely limiting
+their use in practical applications. [5] deformed a body tem-
+plate to a single dressed mesh based on ICP (iterated closest
+point) registration and Laplacian mesh deformation. Even
+though this method can take a single dressed scan as input, it is
+still an optimization-based method, which is time-consuming.
+Besides, its simple clothing ﬁtting solution applies different
+weights to tight and wide clothing, which limits the precision
+and yields limited accuracy of the biometric measurements. In
+contrast to these 3D approaches, some methods also explored
+reconstructing body models from 2D images or videos [26],
+[27], [28]. However, these methods are much less accurate
+than 3D-based methods due to the ambiguity that cannot be
+avoided when converting from 2D to 3D.
+Although deep learning has been successfully applied on 3D
+data [3], [4], no existing learning-based method has been
+proposed so far for body shape estimation from 3D dressed-
+there are two main reasons
+human scans. We argue that
+for this. First, traditional deep networks convert the irregular
+point clouds to data structures suitable for CNN operations,
+such as a collection of 2D images corresponding to different
+views, or 3D voxel grids; however, this will result in un-
+necessarily voluminous data. Moreover, converting geometric
+data is not time- and memory-efﬁcient, thereby not usable
+in real world applications. Recently, due to the contribution
+of PointNet [10], point clouds can be directly provided as
+input to neural networks. Second reason has to do with the
+lack of a 3D dataset of dressed/undressed human bodies.
+Training a neural network for body shape estimation requires
+a large-scale dataset consisting of dressed-human bodies and
+their corresponding undressed bodies. Limited by scanning
+technology, 3D scanners can only obtain the outmost surface of
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+2
+
+the subject, therefore, it is impossible to concurrently capture
+the underlying body geometry occluded by the clothes. One
+intuitive solution is to ﬁrst ask a subject to take off their clothes
+keeping in a static pose or perform a motion during scanning,
+and then ask this subject to put their clothes back on and
+take the same static pose or perform the same motion during
+scanning [1]. To scan the static pose this way is possible if
+the subject is trained to keep absolutely still during scanning
+or if a fast-enough scanner is used. However, due to the very
+large size requirement of the training dataset, it is extremely
+expensive and time-consuming to do data collection in this
+way. Furthermore, to scan a motion sequence in this way,
+replicating identical movements with and without clothes, is
+nearly impossible for a human subject and the result cannot
+be perfect [8] because nobody can perform the absolute same
+motion twice in the real world. Pose ﬁtting and penetration
+resolving can only visually “ﬁx” this issue [1], but will
+introduce additional errors.
+Inspired by the recent success of geometric deep neural
+networks [10], [18], in this paper we aimed at learning a
+non-linear function that converts dressed-human scans to the
+corresponding undressed body shapes. Point clouds are the
+raw data produced by 3D scanners. Converting point clouds
+to other representations may lead to artifacts due to incomplete
+information in the scanned 3D data. The alternative is to
+propose deep networks speciﬁcally designed for point clouds.
+Considering this, we propose Body PointNet to estimate body
+shape and pose from a single dressed-human scan. Body
+PointNet is an Encoder-Decoder architecture. Given a single
+dressed-human scan, the encoder outputs a feature descrip-
+tor. Subsequently, constrained by the feature descriptor, the
+decoder progressively predicts the complete undressed body
+points. Body PointNet is trained in an end-to-end manner.
+When the ground truth is difﬁcult or impossible to be obtained
+from the real world, a synthetic dataset is the second-best
+solution, which has been proved to be successful in training
+networks, such as [11], [12]. To generate realistic clothes
+for virtual characters, one can use numerous methods [13],
+[14] and commercial software programs, one of which being
+Clo3D(www.clo3d.com).
+As mentioned above, the goal of this study is to estimate body
+shape and pose from a dressed-human scan that has only a
+single-layer point cloud. However, the virtual dressed-human
+body generated by any cloth simulation software has two or
+more layers—at least the body skin surface and one clothing
+layer; these should not and cannot be both directly provided
+as input to a neural network for body shape estimation. The
+reason is that one has to simulate the restriction of real-
+world scanning systems having access to only the outermost
+surface. Besides, these methods are time-consuming hence
+they are not suitable for dressing a large-scale body dataset. To
+address these two main issues, we propose a novel method to
+synthesize dressed scans and paired bodies. We also propose a
+new dataset, termed Body Under virtual Garments (BUG), for
+training and quantitative evaluation. BUG contains 0.6 million
+high resolution clothed pseudo-scans and 0.2 million ground
+truth bodies.
+The main contributions in this paper include:
+
+• Body PointNet, a novel deep learning framework of body
+shape estimation from a single dressed-human 3D scan.
+To our best knowledge, this is the ﬁrst paper estimating
+the body shape from dressed-human scans via deep
+learning in an end-to-end manner.
+
+• A novel method of fast synthesizing the dressed human
+
+scans.
+
+• A novel large-scale dressed-human dataset consisting of
+100,000 male and 100,000 female subjects with various
+shapes and poses under 3 clothing styles, which is used
+for training machine learning algorithms and to quantita-
+tively evaluate human body estimations.
+
+II. RELATED WORK
+
+A. Body Shape and Pose Under Clothing
+
+Parametric body models are commonly used to reconstruct
+body models under clothing. Existing methods can be mainly
+classiﬁed into ﬁve categories according to the type of input:
+a) 3D sequences; b) single 3D scans; c) single RGB images;
+d) multi-view RGB images; and e) others. [15], [16] ﬁt
+the SCAPE model to a Microsoft Kinect capture sequence
+by locking some parameters controlling identity over the
+duration of the sequence. These methods assume that
+the
+human captured in the sequence is only wearing tight clothing
+which does not deform depending on pose. [6], [8], [25]
+addressed estimation of body under wide clothing. However,
+these methods are sensitive to temporal alignment, which
+is usually difﬁcult and computationally expensive. In [5],
+a body template is deformed to ﬁt the scan based on ICP
+registration and Laplacian mesh deformation. However, its
+simple cloth ﬁtting solution applies different weights to tight
+and wide clothing, yielding limited accuracy of the resulting
+biometric measurements. Employing simple RGB images as
+input attracts many researchers with the goal of reconstructing
+body shapes and poses from it. However,
+these methods
+focus only on ﬁtting a parametric body model to joints and
+silhouettes of the clothed-body images [26], [27] and are
+prone to uncertainties. In [17], the SCAPE model is ﬁtted
+to a set of calibrated multi-view images or video sequences.
+The clothing styles worn on the subjects can be arbitrary, but
+the subjects must be captured in a number of different poses
+or in a long dynamic sequence. [31] presented a method
+of estimating body from front- and side-view silhouettes
+of the dressed person images. This method highly depends
+on regressing 3D body landmarks from the silhouettes,
+assuming that the body is only in an A-pose. [29] trained four
+regressors to regress the SMPL parameters from the selected
+body measurements. In [30] a process called crowd-shaping
+was proposed to implement body shape reconstruction from
+standard linguistic descriptions of a 3D shape. Similar to
+[31], [29], [30] cannot obtain the target pose.
+Existing methods formulate body shape reconstruction as
+a constrained optimization problem, which proves to be
+computationally expensive and sensitive to the initialization
+parameters. Unlike these methods, we re-formulate this task
+as a learning-based problem. Our approach learns a mapping
+directly from the dressed-human domain to the body shape
+domain without any initialization. We fully automatically
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+3
+
+jointly solve the body shape estimation problem in an end-to-
+end manner. Extensive experimental evaluations demonstrate
+that our method works well for both tight and loose clothing
+and outperforms the existing state of the art.
+
+B. Deep learning in Point Clouds
+
+Inspired by the signiﬁcant success of applying deep learning
+to 2D images, deep learning attracted a lot of attention in
+the context of geometric data analysis and processing. Several
+methods have been proposed speciﬁcally to deal with point
+cloud data. The seminal work in this area is PointNet [10],
+which takes as input the point cloud, each point being repre-
+sented by its (x, y, z) coordinates. PointNet is composed of
+three main modules: a Spatial Transformer Network (STN)
+module, an Multi-Layer Perceptron (MLP) module, and a
+symmetric function designed to be invariant to the permutation
+of points, which is necessary for feature learning from point
+clouds.
+Based on PointNet, several deep networks targetig various
+applications were proposed in the recent past. These include
+3D-CODED [18] to determine 3D correspondences, PCN [35]
+designed for shape completion tasks, Dynamic Graph CNNs
+[19] for shape segmentation and classiﬁcation, and PU-Net
+[20] for point cloud upsampling. We are the ﬁrst to apply
+a PointNet-based method to body shape estimation. We also
+show through extensive experiments that our approach is
+applicable to 3D scans of humans wearing both tight and
+loose clothing, in static poses or in motion, without any user
+intervention.
+
+III. PROPOSED METHOD
+
+A. Overview
+
+The proposed deep learning approach, dubbed Body PointNet,
+aims at estimating the body shape of a subject under clothing
+from a single 3D scan. The proposed model
+is depicted
+in Figure 1. Body PointNet can be roughly split into two
+parts: one that processes existing points to generate an initial
+undressed body; and the other part that operates on the initial
+undressed body points to reﬁne the estimated shape.
+
+B. Body PointNet
+
+this approach, called 3D-CODED,
+
+A work that shares some similarity to ours was proposed
+in [18];
+trains a deep
+network to deform a template and to ﬁt it to a scan. The
+output produced by the network is not sufﬁciently precise
+as the resulting biometric measurements are not sufﬁciently
+accurate. The authors of [18] reﬁne the reconstruction by
+performing a regression step that minimizes the Chamfer
+distance between the deformed template and input point
+cloud data. However, by directly applying 3D-CODED the
+template is deformed to align to the dressed body scan. In
+this way one overestimates the biometrics, obtaining a fatter
+body compared to reality. In addition, the need for solving an
+optimization problem increases the computational complexity
+and ultimately the processing speed.
+In contrast to 3D-CODED, we propose Body PointNet, which
+avoids the use of a template and the additional optimization
+step. Given a dressed-human scan S, our goal is to design
+
+a neural network that will take S as input and predict the
+undressed body B. Body PointNet mainly consists of a virtual
+scanner, OffsetNet, FeatureNet and the MLP-based decoder.
+In a ﬁrst stage, given a dressed body mesh, a virtual scanner
+is employed to generate an input point cloud of n points with
+coordinates (x, y, z). The input point cloud is normalized
+using OBB normalization [24]. Then m subsamples of the
+normalized points are feed into thee OffsetNet to learn a set
+of m offsets for each of the points in the subsampled point
+cloud and a deep feature f1. The residual difference between
+the m normalized points and offsets represents the initial
+body points (see Figure 1). FeatureNet consumes these initial
+body points and learns a global deep feature f2 on them. The
+feature of the dressed body f1 and the feature of the initial
+body f2 are fused to obtain a ﬁnal global feature f . Then
+a decoder (implemented with MLP layers) uses this global
+feature to predict a dense output. Finally, a de-normalization
+step is performed to recover the original scale and orientation
+of the ouput.
+In terms of implementation, OffsetNet consists of a simpliﬁed
+PointNet [10] architecture with hidden feature sizes of 128,
+512, 512, 1024 extracting a 1024-size feature f1, and a
+multi-layer perceptron with 1024, 1024 and m × 3 neurons
+leading to an m × 3 offset matrix. FeatureNet is a simpliﬁed
+PointNet with hidden feature sizes of 128, 256, 512 and 1024,
+leading to the 1024-size feature f2. Following the strategy of
+coarse-to-ﬁne reconstruction [35], [36], we use a multi-layer
+perceptron with hidden layers of size 1024,1024 and 6890 × 3
+to estimate ﬁnal undressed body points. In order to output a
+watertight mesh representation of the prediction, our decoder
+directly regress 6890 points preserving the same order with
+SMPL bodies.
+C. Loss functions
+We train Body PointNet in a supervised manner. The following
+loss functions are incorporated in the training procedure.
+Initial
+body
+reconstruction is dependent on the predicted offset. We
+deﬁne a loss term to jointly supervise the learning of the
+offset estimation and the initial body reconstruction. We
+deﬁne this loss using Symmetric Chamfer distance (SCD) as:
+
+reconstruction
+
+loss. The
+
+initial
+
+body
+
+Linitial = SCD(V b
+1
+(cid:88)
+initial|
+
+min
+y∈V b
+
+GT
+
+x∈V b
+
+initial
+
+|V b
+
+1
+|V b
+GT |
+
+(cid:88)
+
+y∈V b
+
+GT
+
+min
+
+x∈V b
+
+initial
+
+initial, V b
+
+GT ) =
+
+||x − y||2+
+
+||y − x||2
+
+(1)
+
+SCD measures the average closest point distance between
+the estimated initial undressed body points V b
+initial and the
+ground truth body points V b
+Fine reconstruction loss. We deﬁne the ﬁne reconstruction
+loss as:
+
+GT .
+
+Lf ine =
+
+1
+V b
+
+f ine
+
+(cid:88)
+
+x∈V b
+
+f ine
+
+||x − y||2
+
+min
+V b
+
+GT
+
+(2)
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+4
+
+Fig. 1. Overview of the proposed Body PointNet design. Given a dressed body scan, the proposed virtual scanner is applied to generate an input point
+cloud of n points with XYZ coordinates. OffsetNet (implemented using PointNet and MLP layers) subsamples m normalized points (implemented with OBB
+normalization [24]) and learns the feature f1 and a set of m offsets. The initial undressed body points, which is the residual difference between the normalized
+points and the offsets, is fed into FeatureNet (implemented with PointNet layers) to learn a deep feature f2 on the initial body points. Then the concatenated
+feature f is further fed into MLP layers to output dense body points followed by a de-normalization module.
+
+GT = {vi ∈ R3, i = 1, ..., 6890} is ground truth
+where V b
+vertices of the mesh from the SMPL model, and V b
+f ine contains
+6890 predicted points preserving the same order as the SMPL
+body.
+Complete loss. Our ﬁnal loss function is deﬁned as:
+
+Loss = winitial × Linitial + wf ine × Lf ine
+
+(3)
+
+where winitial and wf ine are the weights that control the
+contribution of each term.
+
+IV. DATASET
+
+In this section, we describe our method of synthesizing the
+BUG dataset for training and validation, including the dressed-
+human scans and the ground truth bodies. We start by review-
+ing the existing dressed human datasets.
+
+A. Existing Datasets
+
+Fig. 2.
+body shape for (c); (e) overlay of (c) and (d).
+
+INRIA Dataset: (a), (b) and (c) scan samples; (d) estimated target
+
+There are three main publicly available datasets for the task of
+estimating body shape under clothing: INRIA [6], BUFF [8]
+and the dataset from [31]. The ﬁrst two are scanned datasets,
+and the last one is a synthetic dataset. The INRIA dataset by
+[6] is a collection of mesh sequences of 6 individuals, equal
+number of male and female, in 3 various motion sequences
+
+and 3 clothing styles. The “ground truth shape and pose” of a
+subject is obtained by ﬁtting the S-SCAPE model [21] to the
+“tight clothes” sequence. However, as shown in Figure 2, the
+undressed body penetrates the dressed-human scan, which is
+not suitable for training our neural network. In addition, only 6
+types of body shapes are included, which is not suitable to train
+a network for body shape estimation. The BUFF dataset by [8],
+also contains mesh sequences of 6 subjects, equal number of
+male and female, in 2 clothing styles and 2 different motion
+sequences. Similar to the INRIA dataset, the “ground truth
+shape” of a subject is obtained by ﬁtting the SMPL model [9]
+to the designed “tight clothes” sequence, and the mean of these
+ﬁtted bodies is considered as the “ground truth shape”.The
+BUFF dataset also lacks the ground truth of the pose and is
+thereby inapplicable for training our deep network. In [31] its
+authors have built 1081 A-pose SCAPE-based models using
+46 real bodies and synthesized more 637 body models via
+interpolation. A long-sleeved shirt and long pants were dressed
+onto these 1718 bodies via physically-based simulation. This
+synthetic dataset is designed for the task of estimating body
+shape under clothing from dressed-human silhouettes. This
+dataset is too small to train our network. Besides, the lack
+of pose variations and the issue of multi-layer dressed bodies
+make it not to be a good choice.
+B. The proposed BUG dataset
+
+As mentioned above, to prepare a dataset for training our
+network is not straightforward. Typically, we should solve the
+following three main challenges:
+
+• Perfect alignment between the undressed bodies and
+
+dressed bodies
+
+• The input should be single-layer;
+• The dataset should be large-scale to train a deep network.
+To address it, we propose a novel synthetic method consisting
+of two main modules: Dressing and Scanning modules. Figure
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+5
+
+TABLE I
+AVERAGE TIME OF OUR DRESSING METHOD.
+
+Clothing style
+
+Garments (including shoes) vertex number
+
+Dressing time
+
+A
+B
+C
+
+23478
+17763
+28192
+
+0.6s
+0.4s
+0.9s
+
+Fig. 3. Overview of our synthetic method. We ﬁrst design garments on
+a template body based on expensive physically-based simulation. Next, we
+transfer garments from a template body to SMPL bodies. Then, pseudo-scans
+are generated by our scanning module.
+
+Fig. 4. BUG dataset samples: (a) body mesh samples; (b) dressed-human
+mesh samples for (a).
+
+3 illustrates the overview of our synthetic method.
+Dressing. To obtain realistic human body shapes and poses,
+we sampled 100,000 SMPL [9] parameters estimated in the
+SURREAL dataset [11] for males and females respectively.
+To dress the 200,000 bodies is not a straightforward task.
+Despite the impressive progress on garment modeling, the
+common processing pipeline requires a designer to manually
+create 2D patterns, to align them to the 3D body, and then
+to adjust the parameters of physically-based simulation to
+attain realistic garments. Such a time-consuming processing
+pipeline makes it extremely expensive to dress an extensive
+dataset of body models needed for training deep models. To
+reduce the labor intensity, automatic dressing techniques such
+as [32], [33] were proposed. These methods usually need to
+solve an objective function to have an alignment followed by a
+reﬁnement processing to address the penetration issue. Despite
+automation, these methods are still computationally expensive.
+Our redressing method is illustrated in Figure 3. We create a
+male and a female reference bodies in A-pose from SMPL
+model. Three clothing styles including long-sleeved shirts and
+pants (type A), football suits (type B), and shirt, pants and
+coat (type C) are ﬁrst put on the two reference bodies using
+the Clo3D software (www.clo3d.com). A pair of shoes is also
+designed for the sake of completeness. Inspired by the work
+of [34], we bind each vertex of garments to triangles of the
+reference body. The main difference is that we choose to bind
+each vertex of garments onto six closest triangles of the body
+rather than only one triangle. This simple improvement can
+result in a smooth surface of the redressed garments. Due to
+the same semantic vertices and triangles among SMPL body
+meshes, the deformed garments can be fast inferred by the
+shape and pose of a target body. As this binding is a local
+operation, more realistic clothing details such as wrinkles will
+be synthesized during transferring the garment to a target
+body. Table I shows the average time of dressing a body.
+Scanning. Directly using the synthetic dressed-human model
+in the training procedure is not possible due to the multi-
+layer problem, as shown in Figure 4(b). In addition, noise is
+an important perturbation that affects point clouds captured in
+real human 3D scanning scenarios, which should be accounted
+
+for.
+To address this problem, we propose a virtual scanning
+methodology which simulates a realistic 3D scanner and
+incorporates the inherent noise perturbations affecting the
+measurements. Our virtual scanner is a four-camera (Time-
+of-Flight) system which captures four depth images of the
+subject from four different points of view (see Figure 5(a)). We
+note that thanks to the Central Limit Theorem, various sources
+of noise in the acquisition pipeline combine to a Gaussian
+noise distribution. Hence, the resulting depth data is corrupted
+by Gaussian noise, simulating the noise in the acquisition
+procedure. We subsequently back-project the captured depth
+images into 3D point clouds, and align them by making use
+of the extrinsic parameters of the cameras (see Figure 5(b))
+using the following equation:
+
+S =
+
+m
+(cid:88)
+
+i=1
+
+RiCi
+
+(4)
+
+where S is the resulting dressed-human pseudo-scan, Ri, Ci
+are the extrinsic matrix and the point cloud data obtained by
+camera i respectively, and m is the number of cameras.
+By means of our virtual scanner, we generate single-layer point
+clouds for the multi-layer dressed bodies. The virtual scanner
+is implemented in Blender, an open source 3D computer
+graphics software (www.blender.org).
+
+V. EXPERIMENTAL RESULTS
+
+In this section, we explain the training setup in the ex-
+periments. We conduct experiments on public datasets, the
+proposed dataset as well as real-world scanned data, and
+quantitively and qualitatively compare our results with those
+obtained with state-of-the-art methods in the literature. The
+ablation study is also performed to demonstrate the contribu-
+tion of components in our networks.
+
+A. Training setup
+
+In the training stage, we split
+into training,
+validation, and testing by 97%, 2% and 1% respectively.
+The training is done using the Adam optimizer [22] with
+
+the dataset
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+6
+
+TABLE III
+INRIA SAMPLES.
+
+Input ID
+
+Subject ID
+
+Gender
+
+Clothing
+
+(cid:93)6
+(cid:93)7
+(cid:93)8
+(cid:93)9
+(cid:93)10
+(cid:93)11
+
+Subject 1
+Subject 2
+Subject 3
+Subject 4
+Subject 5
+Subject 6
+
+Male
+Male
+Male
+Female
+Female
+Female
+
+Tight
+Layered
+Layered
+Wide
+Layered
+Layered
+
+Fig. 5. Three-dimensional scanning simulation: (a) is the setup of the
+presented virtual scanner; (b) is the scan data, the point cloud captured by
+each camera is colorized by a different color.
+
+TABLE II
+BUFF SAMPLES.
+
+Input ID
+
+Subject ID
+
+Gende
+
+Clothing
+
+(cid:93)1
+(cid:93)2
+(cid:93)3
+(cid:93)4
+(cid:93)5
+
+00005
+00032
+00096
+00114
+03223
+
+Male
+Male
+Male
+Female
+Female
+
+t-shirt and long pants
+soccer outﬁt
+t-shirt and long pants
+t-shirt and long pants
+soccer outﬁt
+
+learning rate of 0.0001 for 50 epochs and a
+an initial
+batch size of 16 on a desktop PC (Intel(R) Xeon(R) Silver
+4112 CPU @ 2.60GHz 64GB RAM GPU GeForce GTX
+1080Ti) based on TensorFlow [23]. The learning rate is
+decayed by 0.7 every 50K iterations. The weight of each term
+deﬁned in Equation (5) are set to: winitial = 1 and wf ine = 1.
+
+B. Evaluation metric
+
+We employ a widely-used evaluation metric,
+the
+Chamfer Distance (CD). The CD error measures the average
+Euclidean distance between the reconstructed body mesh and
+the ground truth body mesh. The measurement unit is mil-
+limeter(mm). The CD error is deﬁned as:
+
+that
+
+is,
+
+CD(Vrec, VGT ) =
+
+1
+Vrec
+
+(cid:88)
+
+x∈Vrec
+
+min
+VGT
+
+||x − y||2
+
+(5)
+
+In our experiments, we calculate the average value µ and
+average standard derivation σ of the vertex-to-vertex error.
+
+C. Results on BUFF and INRIA
+
+In this experiment, we use two datasets: BUFF dataset and
+INRIA dataset. The BUFF dataset only provides the sequences
+of 5 subjects wearing 2 clothing styles (t-shirt and long pants,
+and soccer outﬁt). The INRIA dataset has the sequences of
+6 subjects wearing 3 clothing styles (tight, layered and wide
+clothing). Therefore, we select 5 scans from the BUFF dataset
+(Table II) and 6 scans from the INRIA dataset (Table III) to
+test our method.
+Results tested on BUFF samples using our method are shown
+in Figure 6. It can be noted that the majority of the predicted
+body is inside the input dressed scans. The gap between body
+and clothing can be clearly seen (Figure 6(b)). The penetration
+mainly exists in the shoulder, chest and upper thigh parts. The
+reason is that the cloth of these parts has much higher pressure,
+which can be understood that the cloth layer is almost the same
+as the body layer on these areas. This observation is consistent
+
+Fig. 6. Results tested on BUFF samples using our method: a) BUFF samples;
+textured meshes) and our results
+b) overlap BUFF samples (transparent
+(yellow meshes).
+
+with the actual ﬁtting in the real world.
+Figure 7 illustrates our results tested on INRIA samples. We
+can see that our method also works well for the posed input.
+Another interesting observation is that our method shows
+a very good generalization performance. For example, the
+clothing worn on (cid:93)1, (cid:93)3 ,(cid:93)5 and (cid:93)9 subjects are not included in
+our training data. Moreover, the wide dress (in Figure 7((cid:93)9))
+is totally different with our prepared clothing in BUG dataset.
+However, Body PointNet successfully generalizes the learning
+to these unseen clothing, and outputs plausible results.
+D. Results on BUG: quantitative comparisons
+
+The BUG dataset
+includes the ground truth posed body
+models, which can be used to quantitatively compare our
+method with the state-of-the-art methods. We compare with
+[5], [27], [18] and [31]. The evaluation is based on the 2,000
+BUG testing dataset(not
+included in the training dataset).
+Figure 8 shows the error map of some estimated body shapes.
+Figure 9 compares the cumulative per-vertex errors; it can
+be seen that the majority of vertices of the estimated body
+shape using our method have per-vertex errors of less than
+20 millimeters. Figure 10 illustrates the means and standard
+deviations of errors. These results show that our method
+outperforms these reference methods.
+E. Results on problematic scanned data: robustness to pertur-
+bations
+
+Now, we test the robustness of our method to sensor noise
+and missing data. Three common scanning systems including
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+7
+
+Fig. 7. Results tested on INRIA samples using our method: top) INRIA
+samples; bottom) overlap INRIA samples (transparent purple meshes) and
+our results (yellow meshes).
+
+TABLE IV
+COMPARISONS OF RUNNING TIME.
+
+Method
+
+Input
+
+Additional inputs
+
+Reconstruction time
+
+[5]
+[27]
+[31]
+[18]
+Ours
+
+1 scan
+1 photo
+2 silhouettes
+1 scan
+1 scan
+
+Prior model
+
+Camera parameters
+Prior model
+
+11 minutes
+2.5 minutes
+3.6 seconds
+1 minute
+5.8 seconds
+
+Multi-Kinect scanning [37], a Microsoft Kinect Version 2
+and a turntable scanning system [1], and a photogrammetric
+scanning system called PhotoScan (https://www.agisoft.com/)
+are used to capture three subjects. Figure 11 shows the visual
+comparisons. The scan from [37] is very noisy, incomplete and
+incorrectly aligned. The result of [6] has a terrible penetration
+problem; the result of [26] is incorrect in terms of shape and
+posture; the result of [18] is fatter and unnaturally-deformed.
+In contrary, our result is plausibly reliable. The estimated body
+(Yellow) is almost inside the garment (Fuchsia). The scan from
+[1] has missing data in the area of head, but it is a clean mesh.
+[6] generated an improved result compared to the noisy input.
+[26] still generates an incorrect result. [18] result is an overly
+estimated body shape. Our result is also improved by inputting
+a clean mesh. The scan from PhotoScan has noise in the
+areas of the arm and crotch. The performance of [6] reduces
+due to the unexpected noise. The error of [26] is large. The
+performance of [18] seems to be preserved, but the estimated
+body is again oversized compared to reality. Our result remains
+to be the best compared to these methods. In summary, our
+method can be used on scans captured by different scanners,
+proving to be robust to large noise levels and missing data.
+
+In Table IV, we compare our method with previous methods in
+terms of running time. It can be seen that our method is much
+faster than the methods proposed by [18] and [6], [26] and
+[18]. [31] runs faster than ours. However, this method needs
+the camera intrinsic and extrinsic parameters to be given.
+Similarly, [6] and [18] depends the prior model to implement
+the ﬁtting algorithm. [26] needs the 2D joints as the associated
+input. These additional inputs such as 2D joints and camera
+parameters, are not easy guaranteed in real-world applications.
+
+Fig. 8. Comparison of reconstruction error with start-of-the-art methods. The
+color of each point is colorized by per-vertex error in millimeters.
+
+F. Ablation Study
+
+We conduct ablation experiments based on the type A
+of clothing (A long-sleeved shirt and long pants) for the
+male to understand the value of our design. The following
+experimental results are based on the testing dataset (1000
+samples) which has no overlap with the training dataset.
+Global
+feature. We ﬁrst compare the
+inﬂuences of the global feature and the local feature on the
+reconstruction results. We replace PointNet with DGCNN[19]
+in the Body PointNet to extract the local feature of point
+sets. As shown in Table V, the global feature outperforms
+the local feature for the task of body shape estimation under
+clothing.
+
+feature or local
+
+Regress 3D vertices or SMPL parameters. In the proposed
+Body PointNet, we regress vertices of SMPL bodies instead
+of regressing the SMPL parameters. We replace the vertex
+decoder with two MLP decoders to regress the SMPL shape
+parameters and pose parameters respectively. Table VI shows
+the comparison. It can be seen that the reconstruction via
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+8
+
+Fig. 9. Cumulative per-vertex error of estimated body shape
+
+Fig. 10. Means and standard deviations of error
+
+TABLE V
+ABLATION STUDY ON THE FEATURE(UNIT:mm).
+
+TABLE VI
+ABLATION STUDY ON THE DECODER(UNIT:mm).
+
+Feature
+
+Global
+
+Local
+
+µ
+σ
+max
+
+0.91
+2.15
+30.18
+
+0.99
+2.79
+48.64
+
+Decoder
+
+Regress 3D vertices
+
+Regress SMPL parameters
+
+µ
+σ
+max
+
+0.91
+2.15
+30.18
+
+26.34
+23.46
+156.64
+
+regressing SMPL parameters is less accurate.
+
+VI. CONCLUSIONS
+
+With or without OffsetNet. We reconstruct the body in a
+coarse-to-ﬁne manner. As shown in Table VII, the proposed
+OffsetNet contribute to reduce the reconstruction error.
+
+In this work, we propose the ﬁrst learning-based framework
+to estimate body shape and pose under clothing from a 3D
+scan. Our method directly operates on a single scan of a
+dressed-human and outputs a point cloud that corresponds to
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+9
+
+REFERENCES
+
+[1] P. Hu, T. Komura, D. Holden, and Y. Zhong, “Scanning and animating
+characters dressed in multiple-layer garments,” The Visual Computer,
+vol. 33, no. 6-8, pp. 961–969, 2017.
+
+[2] J. Tong, J. Zhou, L. Liu, Z. Pang, and H. Hao, “Scanning 3d full human
+bodies using kinects,”in IEEE Transactions on visualization and computer
+graphics.vol. 18,no. 4,pp.643–650, 2012.
+
+[3] C. Zhang, G. Zhou, H. Yang, Z. Xiao, and X. Yang, “View-based 3d
+cad model retrieval with deep residual networks,” IEEE Transactions on
+Industrial Informatics, 2019.
+
+[4] T. Huynh-The, H. Hua-Cam, and D.-S. Kim, “Encoding pose features
+to images with data augmentation for 3d action recognition,” IEEE
+Transactions on Industrial Informatics, 2019.
+
+[5] N. Hasler, C. Stoll, B. Rosenhahn, T. Thorm¨ahlen, and H.-P. Seidel,
+“Estimating body shape of dressed humans,” Computers & Graphics,
+vol. 33, no. 3, pp. 211–216, 2009.
+
+[6] J. Yang, J.-S. Franco, F. H´etroy-Wheeler, and S. Wuhrer, “Estimation
+of human body shape in motion with wide clothing,” in European
+Conference on Computer Vision. Springer, 2016, pp. 439–454.
+
+[7] D. Anguelov, P. Srinivasan, D. Koller, S. Thrun, J. Rodgers, and J. Davis,
+“Scape: shape completion and animation of people,” in ACM transactions
+on graphics (TOG), vol. 24, no. 3. ACM, 2005, pp. 408–416.
+
+[8] C. Zhang, S. Pujades, M. J. Black, and G. Pons-Moll, “Detailed, accurate,
+human shape estimation from clothed 3d scan sequences,” in Proceedings
+of the IEEE Conference on Computer Vision and Pattern Recognition,
+2017, pp. 4191–4200.
+
+[9] M. Loper, N. Mahmood, J. Romero, G. Pons-Moll, and M. J. Black,
+“Smpl: A skinned multi-person linear model,” ACM transactions on
+graphics (TOG), vol. 34, no. 6, p. 248, 2015.
+
+[10] C. R. Qi, H. Su, K. Mo, and L. J. Guibas, “Pointnet: Deep learning on
+point sets for 3d classiﬁcation and segmentation,” in Proceedings of the
+IEEE Conference on Computer Vision and Pattern Recognition, 2017, pp.
+652–660.
+
+[11] G. Varol, J. Romero, X. Martin, N. Mahmood, M. J. Black, I. Laptev,
+and C. Schmid, “Learning from synthetic humans,” in Proceedings of the
+IEEE Conference on Computer Vision and Pattern Recognition, 2017, pp.
+109–117.
+
+[12] P. Guerrero, Y. Kleiman, M. Ovsjanikov, and N. J. Mitra, “Pcpnet
+learning local shape properties from raw point clouds,” in Computer
+Graphics Forum, vol. 37, no. 2. Wiley Online Library, 2018, pp. 75–85.
+[13] Y. Meng, P. Mok, and X. Jin, “Interactive virtual try-on clothing design
+systems,” Computer-Aided Design, vol. 42, no. 4, pp. 310–321, 2010.
+[14] T. Igarashi and J. F. Hughes, “Clothing manipulation,” in Proceedings
+of the 15th annual ACM symposium on User interface software and
+technology. ACM, 2002, pp. 91–100.
+
+[15] A. Weiss, D. Hirshberg, and M. J. Black, “Home 3d body scans
+from noisy image and range data,” in 2011 International Conference on
+Computer Vision.
+
+IEEE, 2011, pp. 1951–1958.
+[16] T. Helten, A. Baak, G. Bharaj, M. M¨uller, H.-P. Seidel, and C. Theobalt,
+“Personalization and evaluation of a real-time depth-based full body
+tracker,” in 2013 International Conference on 3D Vision-3DV 2013.
+IEEE, 2013, pp. 279–286.
+
+[17] A. O. B˘alan and M. J. Black, “The naked truth: Estimating body shape
+under clothing,” in European Conference on Computer Vision. Springer,
+2008, pp. 15–29.
+
+[18] T. Groueix, M. Fisher, V. G. Kim, B. C. Russell, and M. Aubry, “3d-
+coded: 3d correspondences by deep deformation,” in Proceedings of the
+European Conference on Computer Vision (ECCV), 2018, pp. 230–246.
+[19] Y. Wang, Y. Sun, Z. Liu, S. E. Sarma, M. M. Bronstein, and J. M.
+Solomon, “Dynamic graph cnn for learning on point clouds,” ACM
+Transactions on Graphics (TOG), vol. 38, no. 5, p. 146, 2019.
+
+[20] L. Yu, X. Li, C.-W. Fu, D. Cohen-Or, and P.-A. Heng, “Pu-net: Point
+cloud upsampling network,” in Proceedings of the IEEE Conference on
+Computer Vision and Pattern Recognition, 2018, pp. 2790–2799.
+
+[21] A. Jain, T. Thorm¨ahlen, H.-P. Seidel, and C. Theobalt, “Moviereshape:
+Tracking and reshaping of humans in videos,” in ACM Transactions on
+Graphics (TOG), vol. 29, no. 6. ACM, 2010, p. 148.
+
+[22] D. P. Kingma and J. Ba, “Adam: A method for stochastic optimization,”
+
+arXiv preprint arXiv:1412.6980, 2014.
+
+[23] M. Abadi, P. Barham, J. Chen, Z. Chen, A. Davis, J. Dean, M. Devin,
+S. Ghemawat, G. Irving, M. Isard et al., “Tensorﬂow: A system for large-
+scale machine learning,” in 12th {USENIX} Symposium on Operating
+Systems Design and Implementation ({OSDI} 16), 2016, pp. 265–283.
+
+[24] L. Ge, Y. Cai, J. Weng, and J. Yuan, “Hand pointnet: 3d hand pose
+estimation using point sets,” in Proceedings of the IEEE Conference on
+Computer Vision and Pattern Recognition, 2018, pp. 8417–8426.
+
+Fig. 11. Visual comparison of results tested on real scans with different
+methods: Top: Scan from [37]; Middle: Scan from [1]; Bottom: Scan from
+PhotoScan.
+
+TABLE VII
+ABLATION STUDY ON THE OFFSETNET(UNIT:mm).
+
+Method Without OffsetNet With OffsetNet
+
+µ
+σ
+max
+
+1.07
+2.52
+41.71
+
+0.91
+2.15
+30.18
+
+the estimated body shape. We also present a novel dataset
+(BUG) of high-resolution 3D clothing sequences with ground
+truth body shape and posture. The proposed dataset enables
+training of deep networks for body pose and body shape
+estimation as well as comprehensive quantitative evaluations.
+Extensive results show our method outperforms the state-of-
+the-art methods in terms of accuracy and running time.
+The main limitation of this work is that we do not include
+in a longer
+hair in the training dataset. This will result
+head for the estimated body, as shown in Figure 6(b) (cid:93)4
+and Figure 7(cid:93)11.
+It would be also interesting to apply
+physically-based simulation to reﬁne the geometry of the
+garment in the training dataset. It is also promising to extend
+the proposed method to investigate other applications like
+people reidentiﬁcation [38] and pose estimation [39]. These
+are topics of future investigation.
+
+VII. ACKNOWLEDGMENTS
+
+The authors would like to acknowledge the support of
+Innoviris
+the close collaboration with
+Treedy’s in the framework of this project, as well as the
+support of FWO in project G084117.
+
+(project eTailor),
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+This article has been accepted for publication in a future issue of this journal, but has not been fully edited. Content may change prior to final publication. Citation information: DOI 10.1109/TII.2020.3016591, IEEE
+Transactions on Industrial Informatics
+
+IEEE TRANSACTIONS ON INDUSTRIAL INFORMATICS
+
+10
+
+[25] G. Pons-Moll, S. Pujades, S. Hu, and M. J. Black, “Clothcap: Seamless
+4d clothing capture and retargeting,” ACM Transactions on Graphics
+(TOG), vol. 36, no. 4, p. 73, 2017.
+
+[26] F. Bogo, A. Kanazawa, C. Lassner, P. Gehler, J. Romero, and M. J.
+Black, “Keep it smpl: Automatic estimation of 3d human pose and shape
+from a single image,” in European Conference on Computer Vision.
+Springer, 2016, pp. 561–578.
+
+[27] A. Kanazawa, M. J. Black, D. W. Jacobs, and J. Malik, “End-to-
+end recovery of human shape and pose,” in Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition, 2018, pp. 7122–
+7131.
+
+[28] T. Alldieck, M. Magnor, W. Xu, C. Theobalt, and G. Pons-Moll, “Video
+based reconstruction of 3d people models,” in Proceedings of the IEEE
+Conference on Computer Vision and Pattern Recognition, 2018, pp. 8387–
+8397.
+
+[29] S. Pujades, B. Mohler, A. Thaler, J. Tesch, N. Mahmood, N. Hesse,
+H. H. B¨ulthoff, and M. J. Black, “The virtual caliper: Rapid creation of
+metrically accurate avatars from 3d measurements,” IEEE transactions
+on visualization and computer graphics, vol. 25, no. 5, pp. 1887–1897,
+2019.
+
+[30] S. Streuber, M. A. Quiros-Ramirez, M. Q. Hill, C. A. Hahn, S. Zufﬁ,
+A. O’Toole, and M. J. Black, “Body talk: crowdshaping realistic 3d
+avatars with words,” ACM Transactions on Graphics (TOG), vol. 35,
+no. 4, p. 54, 2016.
+
+[31] D. Song, R. Tong, J. Chang, X. Yang, M. Tang, and J. J. Zhang, “3d
+body shapes estimation from dressed-human silhouettes,” in Computer
+Graphics Forum, vol. 35, no. 7. Wiley Online Library, 2016, pp. 147–
+156.
+
+[32] R. Brouet, A. Sheffer, L. Boissieux, and M.-P. Cani, “Design preserving
+garment transfer,” ACM Transactions on Graphics, vol. 31, no. 4, pp.
+Article–No, 2012.
+
+[33] Y. Lee, J. Ma, and S. Choi, “Automatic pose-independent 3d garment
+ﬁtting,” Computers & Graphics, vol. 37, no. 7, pp. 911–922, 2013.
+[34] P. Hu, E. S. Ho, N. Aslam, T. Komura, and H. P. Shum, “A new method
+to evaluate the dynamic air gap thickness and garment sliding of virtual
+clothes during walking,” Textile Research Journal, p. 0040517519826930,
+2019.
+
+[35] W. Yuan, T. Khot, D. Held, C. Mertz, and M. Hebert, “Pcn: Point
+completion network,” in 2018 International Conference on 3D Vision
+(3DV).
+
+IEEE, 2018, pp. 728–737.
+
+[36] P. Mandikal and V. B. Radhakrishnan, “Dense 3d point cloud reconstruc-
+tion using a deep pyramid network,” in 2019 IEEE Winter Conference on
+Applications of Computer Vision (WACV).
+IEEE, 2019, pp. 1052–1060.
+[37] M. Kowalski, J. Naruniec, and M. Daniluk, “Livescan3d: A fast and
+inexpensive 3d data acquisition system for multiple kinect v2 sensors,”
+in 2015 International Conference on 3D Vision.
+IEEE, 2015, pp. 318–
+325.
+
+[38] J. Garc´ıa, A. Gardel, I. Bravo, and J. L. L´azaro, “Multiple view oriented
+matching algorithm for people reidentiﬁcation,” IEEE Transactions on
+Industrial Informatics, vol. 10, no. 3, pp. 1841–1851, 2014.
+
+[39] R. C. Luo and S. Y. Chen, “Human pose estimation in 3-d space using
+adaptive control law with point-cloud-based limb regression approach,”
+IEEE Transactions on Industrial Informatics, vol. 12, no. 1, pp. 51–58,
+2015.
+
+Pengpeng Hu Pengpeng Hu is post-doctoral fel-
+low at the Electronics and Informatics (ETRO) de-
+partment of the Vrije Universiteit Brussel (VUB),
+Belgium. He received the Doctorate degree in Dig-
+ital Textile Engineering from Donghua University,
+China, in 2017. He was a visiting scholar at School
+of Informatics of the Edinburgh University, UK in
+2016. He was post-doctoral fellow at Computer and
+Information Sciences Department of the Northum-
+bria University, UK in 2017. Sine 2018, he is post-
+doctoral fellow at VUB. His research interests in-
+clude geometric deep learning, 3D human body reconstruction, RGB-D image
+and digital fabrication.
+
+is a PhD student at
+
+Nastaran Nourbakhsh Kaashk Nastaran Nour-
+bakhsh Kaashki
+the Elec-
+tronics and Informatics (ETRO) department of the
+Vrije Universiteit Brussel (VUB), Belgium. She re-
+cieved her ASc (2006) at Shariaty Technical Col-
+lege, her BSc (2009) at Zanjan University, and her
+MSc (2014) at Amirkabir University of Technol-
+ogy (Tehran Polytechnic) in Computer Engineering-
+Artiﬁcial Intelligence. In the period 2014-2018, she
+was a research and development engineer in an
+artiﬁcial-intelligence-based company, Tehran, Iran.
+She has joined ETRO department in 2018. Her areas of specialty and interest
+are computer vision and deep learning approaches.
+
+Vasile Dadarlat Vasile Teodor Dadarlat is a pro-
+fessor within the Computer Science Department of
+the Technical University of Cluj Napoca (TUCN),
+Romania. He received the MSc degree in Computer
+Science from ‘Politehnica’ University of Bucharest,
+Romania,
+in 1980, and the Doctorate degree in
+Computer Science from Technical University of Cluj
+Napoca, Romania in 1995. In the period from 1986
+till now he owned different positions at TUCN,
+Romania, and since 1998, he became full professor
+in Computer Science at TUCN. He acted as invited
+lecturer at many European universities and managed important institutional
+actions. His research interests include QoS based protocols in computer
+networks, security for wireless sensor networks, Internet of Things, e-Health,
+e-Environment, E-Learning. Vasile Teodor Dadarlat is the author of more than
+150 journal and conference publications, book chapters, and contributions to
+standards. He also served as chair and member of many technical program
+comities for important IEEE conferences.
+
+Adrian Munteanu Adrian Munteanu is professor at
+the Electronics and Informatics (ETRO) department
+of the Vrije Universiteit Brussel (VUB), Belgium.
+He received the MSc degree in Electronics and
+Telecommunications from Politehnica University of
+Bucharest, Romania, in 1994, the MSc degree in
+Biomedical Engineering from University of Patras,
+Greece, in 1996, and the Doctorate degree in Ap-
+plied Sciences from Vrije Universiteit Brussel, Bel-
+gium, in 2003. In the period 2004-2010 he was post-
+doctoral fellow with the Fund for Scientiﬁc Research
+– Flanders (FWO), Belgium, and since 2007, he is professor at VUB. Adrian
+Munteanu contributed to more than 350 publications and holds 7 patents.
+He is the recipient of the 2004 BARCO-FWO prize for his PhD work, the
+(co-)recipient of the Most Cited Paper Award from Elsevier for 2007. Adrian
+Munteanu served as Associate Editor for IEEE Transactions on Multimedia
+and currently serves as Associate Editor for IEEE Transactions on Image
+Processing.
+
+1551-3203 (c) 2020 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission. See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+Authorized licensed use limited to: Vrije Universiteit Brussel. Downloaded on January 26,2021 at 13:49:26 UTC from IEEE Xplore.  Restrictions apply. 
+
+View publication stats
+
+
