@@ -1,0 +1,549 @@
+start	end	text
+0	10920	This morning, we kind of covered a lot of the things at a high level, a lot of the foundations
+10920	11920	as well.
+11920	17960	And now we're going to dive into how to do stuff with language models, the technical
+17960	22040	skills you need to get them to do the things that you want them to do.
+22040	27160	So first up, I'm going to cover prompt engineering.
+27160	35840	And so the like the scope of this lecture is on how to adjust the text that goes into
+35840	41520	your language model to get the behavior that you want.
+41520	45080	And prompt engineering is the art of designing that text.
+45080	50040	This is not where that text comes from or where it goes.
+50040	55640	So it's not like anything about the retrieval augmentation that I did in the morning.
+55640	62880	It's about things like writing, you know, write a summary of this or like changing around
+62880	65000	the text that goes into that language model.
+65000	70440	So we'll cover the second lecture this afternoon, we'll cover that latter part.
+70440	75080	So we're just thinking about what kind of text do I put into my language model to get
+75080	80360	it to form the tasks that I want it to do.
+81240	85880	This is for language models, this is kind of replacing a lot of things that you would
+85880	93000	otherwise do with training, with fine tuning, with all the approaches that we've taken
+93000	97000	for constructing machine learning models in the past.
+97000	101120	And it's also, in a sense, the way that we program these language models, so it's sort
+101120	109800	of like programming in English instead of programming in Python or Rust or whatever.
+109800	117160	So there's just two components to this talk, the simplest agenda of all the talks.
+117160	122720	First is some high-level intuitions for prompting, and I'm going to present the idea that prompts
+122720	125280	are magic spells.
+125280	130760	And then to get a little bit more specific, I'm going to talk about the emerging playbook
+130760	135640	for effective prompting, a collection of sort of prompting techniques, ways to get language
+135640	137200	models to do what you want.
+137200	140000	So what do I mean when I say that prompts are magic spells?
+140000	146240	This is not literally true, they are not literally magic, it is linear algebra, which I find
+146240	150520	delightful and beautiful, but which is not actually magic.
+150520	155720	So there's not little, like, wizards inside of language models, there's not brains inside
+155720	158400	of language models, either really.
+158400	164840	Language models are just statistical models of text, like in some sense, you can statistically
+164840	170200	model your data with a bell curve, and that's a statistical model of your data, and a language
+170200	176840	model is a statistical model of data, and it just happens to be a statistical model of
+176840	185240	a more complicated statistical model of more complicated data.
+185240	189520	So there's nothing really magic about that.
+190200	195760	What do I mean when I say that it's a statistical model roughly of text?
+195760	199560	Roughly what that means is that when the model is trained, you can take some list of text
+199560	204200	that you pulled from somewhere, let's say some text you sampled from the internet, and
+204200	209920	then go through the tokens in that text, go through the pieces of that text, pass them
+209920	215000	through a model, and it'll give out a probability of what the next word is going to be.
+215000	218720	So this is called an autoregressive model.
+218720	225520	It's just a term of art, autoregressive, like predicting on itself.
+225520	231640	So we're going through the text, and we keep adding stuff to what we put into the model,
+231640	238320	generating probabilities for them, for what the next token is going to be.
+238320	243360	So we have a dictionary that for every possible token, for every possible thing that could
+243360	248560	come next, we have a probability or a law of probability for it.
+248560	258400	And then if we do that across a lot of text of sufficient length, then the language model
+258400	262760	being a model of text means that the probability it assigned to all the text that it saw would
+262760	263760	be high.
+263760	270920	So you start off with random weights, a random model, it has no idea about text, it assigns
+270920	275320	a low probability to basically everything it sees to eventually a model that assigns
+275320	279920	a high probability to pretty much any text that you can imagine like drawing from the
+279920	283680	internet or writing yourself.
+283680	288520	And so this is literally true, and this is sort of the place where you want to eventually
+288520	291840	compile down your intuitions and your understanding of models.
+291840	296640	You want to eventually get to the point where you are thinking in terms of how does this
+296640	303560	arise from statistical modeling, but it also can give you really bad intuitions to think
+303560	305800	at that level.
+305800	310760	And when you say that these are statistical models, that they learn patterns or that language
+310760	316480	models are statistical pattern matchers or static parrots, you are drawing on intuition
+316480	321360	from things like other kinds of statistical models that you have seen, so maybe statistical
+321360	328040	models of data like linear regression or Gaussian distributions, so these are very simple objects.
+328040	332400	Or you are drawing inspiration from other kinds of models of text that you have seen
+332400	338200	like Google's autocomplete or the autocomplete function on your phone, and we are well aware
+338200	345040	that these things are very dumb and not very capable and that they just pick up on surface
+345040	348880	level patterns.
+348880	355160	Whereas these language models, they have learned so much about text that it is extremely difficult
+355160	360480	to think of it as some kind of statistics, the way people normally think about probability
+360480	361480	and statistics.
+361840	370640	So I just picked one random example that I felt demonstrates this, Bing Chat can take
+370640	378640	in SVG files as text and then describe the content of that SVG file for you as an image,
+378640	385120	and very few people's intuition for what a model of text is would include that.
+385120	392640	So there is some better intuitions that come from the world of statistics of probability
+392640	398480	that are a little bit better, so probabilistic programs is probably one of the better intuitions
+398480	400200	from that world.
+400200	405360	So the idea is we often think of really simple statistical models, we think of them as being
+405360	411800	like represented by equations or the kinds of things that you can manipulate in a probability
+411920	417960	class, but a lot of complicated statistical models that people use today, even like really
+417960	424960	complicated hierarchical linear regressions, can be better thought of as programs that
+424960	429520	operate on random data, as programs that manipulate random variables.
+429520	434600	And so you can write things that you might do with a language model, like take a question,
+434600	438720	and rather than having it just directly answered, having it think of what the answer should
+438720	443400	be, like maybe like brainstorm a little bit, and then take that brainstorm and turn it
+443400	444960	into an answer.
+444960	449640	So that's what this little like Python program up here shows.
+449640	456240	Take a question, generate a thought, and then generate an answer.
+456240	462600	And because language models are probabilistic, you can actually literally sample from them,
+462600	468360	you can actually draw different possibilities each time if you wish.
+469320	475920	And this probabilistic program, all probabilistic programs can be represented with these graphical
+475920	481720	models that like, so this comes from sort of a branch of machine learning that's been
+481720	487920	eclipsed by the rise of deep learning and LLNs in particular.
+487920	492440	But this gives you like the sort of best way to think about just how complicated can you
+492440	498440	get when thinking about like a model of text, a probabilistic model of text.
+498440	502840	And so if you're interested in that, like that kind of direction, if you have that background
+502840	507360	or have that interest, the language model cascades by Dohan et al, like really dives
+507360	511480	into detail and shows how you can explain a bunch of like prompting tricks and other
+511480	515760	things that people have done in terms of probabilistic programs.
+515760	518160	That's a little bit to arcane.
+518160	523480	So what's something that is like maybe a little bit easier to understand.
+523480	528480	So I'm going to draw inspiration from Arthur C. Clark's laws of technology here.
+528480	533880	And any sufficiently advanced technology like, I don't know, machine that makes your voice
+533880	540960	really loud in a room or a machine that can show you your mother's face across the country
+540960	543360	is indistinguishable from magic.
+543360	545480	So what kind of magic are prompts?
+545480	546960	They're magic spells.
+546960	551200	They're a collection of words which we use to achieve impossible effects.
+551200	557000	But only if you follow bizarre and complex rules and it has a well-known negative impact
+557000	561560	on your mental health to spend too much time learning them.
+561560	567280	So I'm going to go through three intuitions for things that prompts can be used for that
+567280	569600	come from the world of magic.
+569600	577040	So for pre-trained models like the original GPT-3, like Lama, a prompt is a portal to
+577040	579600	an alternate universe.
+579600	588440	For instruction-tuned models, so things like chat GPT or alpaca, a prompt is a wish.
+588440	594320	And for agent simulation, the latest and greatest of uses of language models, a prompt
+594320	597360	creates a golem.
+597360	601880	So first, prompt can create a portal to an alternate universe.
+601880	608000	So the idea here is that this text that we input into the language model takes us into
+608000	611760	a world where some document that we desire exists.
+611760	616680	It's like a Reddit post answering the exact question that we had exists in this alternate
+616680	617680	universe.
+617680	622000	Unfortunately, nobody has asked my exact question in French on Reddit.
+622000	625240	And so I cannot find it in this universe.
+625240	628000	But maybe there's a nearby universe where I can find it.
+628000	635040	So imagine the movie Everything, Everywhere, All at Once, the one best picture this year
+635040	639560	has this idea of burst jumping where you can find a universe where you're a famous actress
+639560	644840	or where you're an opera singer or where you have a good relationship with your parents
+644840	648520	or where you have hot dogs for fingers.
+648520	654960	So something that's like our universe, but maybe just a little bit different.
+654960	659480	So the idea is that there's like take the collection of all possible documents, think
+659480	663560	of them as like different little universes.
+663560	667080	And so a document is a collection of words from our vocabulary.
+667080	672160	So going up and down, that's the index of our vocabulary.
+672160	675480	And going left to right, that's how far we are in the document.
+675480	680360	And then I've drawn these drawn some lines to indicate some specific documents.
+680360	684840	So picking a particular word at each position picks out a particular document.
+684840	689560	And so there's lots of documents out there, like maybe too many of them.
+689560	701240	For the full length of a Transformers context, with GPT-4, it's 32,000 by 50,000 roughly.
+701240	709600	So like, you know, hundreds of millions of documents, maybe a billion documents are possible.
+709600	715840	And we want, there's certain documents we're interested that we want to pull out.
+715840	721120	So I've highlighted a couple of them just to show like this, there's a pink document
+721120	726040	that corresponds to picking specific words in our vocabulary, corresponding to where
+726040	729240	it crosses those gray lines.
+729240	734760	So language model as a probabilistic model of text, weights all possible documents.
+734760	739280	What does it mean to have a probabilistic model of some like space of data?
+739280	744160	It means you've assigned a weight to all of them, a probability to all of them.
+744160	748120	And so there's some documents that the language model thinks are very probable and some documents
+748120	749560	that it thinks are improbable.
+749560	753720	So documents that look like things that have been seen on the internet before are more
+753720	758400	probable than ones that look very different.
+758400	764960	And prompting, adding text in to the language model and then asking it to continue generating
+764960	768080	from there, reweights those documents.
+768080	772560	So we have, we've put in a couple of words and now the language model is predicting all
+772560	776000	the words that are going to come after that in the document.
+776000	780280	And that's the probability that it assigns to the rest of the document.
+780280	785280	And so thinking about just the suffixes that come after the prompt here for this pink, red
+785280	792520	and green, these pink, red and green documents, because the prompt is more similar to the
+792520	799440	green and pink prompts, the green and pink prefixes, the beginnings of those documents.
+799440	802160	Now those documents are more probable.
+802160	808320	And that red document that used to be more probable is now less probable.
+808320	810960	So we've reweighted all of these documents.
+810960	814560	We've made certain universes more likely than others.
+814560	818200	So in technical terms, we're conditioning our probabilistic model.
+818200	824360	We're conditioning the rest of the generation on the prompt.
+824360	829080	And in this way, it's clear that prompting's primary goal is subtractive.
+829080	833760	We have this giant collection of documents that we could sample from.
+833760	840560	And as we start putting words in, we're starting to focus down the mass of our predictions.
+840560	844800	We're starting to focus in on a particular world that we're going to draw a document
+844800	845800	from.
+845800	852760	So when we first start writing, many, many things are possible.
+852760	854560	Before we write anything, many things are possible.
+854560	861240	So it could be a document about babies or pants or cones or tacos or trees.
+861240	864600	And maybe I see the first couple of tokens of this document and I see that they're David
+864600	867600	Attenborough, the famous British naturalist.
+867600	872400	And so now thinking about that, what is that future token down there indicated in blue?
+872400	874840	What is that going to be?
+874840	876160	It's probably not going to be cones.
+876160	879320	It's probably going to be something from the natural world.
+879320	884360	If I keep reading the document, so I keep putting this into the language model, and
+884360	889440	I say David Attenborough held a belief, at this point, I'm pretty sure that this token
+889440	900120	here is going to be something that is about plants, not about tacos or babies.
+900120	906800	So this intuition of sort of sculpting, taking out from the set of all possible universes
+906800	910560	and picking out the one that we want, it's a good intuition, but you have to remember
+910560	915520	that we aren't actually capable of jumping to an alternate universe, pulling information
+915520	918600	from it, and then using it.
+918600	924040	So just as an example of this, you might think, oh, well, what about the universe where they
+924040	925640	cured cancer already?
+925640	927160	Let's jump over into that one.
+927160	931080	So you could write into GB3 early in the 21st century, human struggle to find a cure for
+931080	935440	cancer, now we know better, the cure for cancer is a single molecule, it's a single strand
+935440	938280	of DNA that is programmed to seek out and destroy cancer cells.
+938280	946400	So this is not a cure for cancer, please don't even try, this is not going to work.
+946400	951960	So it's a little bit more like you're kind of like running Google on nearby universes.
+952400	956800	So people have written documentation for lots of functions, but they haven't written
+956800	960920	documentation for your function to delete shopping carts.
+960920	969960	People have written tutorials on English and German, but they haven't done the specific
+969960	974720	example of the sentence, I'm a hedgehog, but maybe in some nearby alternate universe there
+974720	980040	would be a language tutorial that uses this as a translation example.
+980040	984840	So you type in the beginning of your sentence and you pull the rest of it.
+984840	989760	And then there's lots of things that we have, there's lots of ideas that we have in documents
+989760	994760	in our world that haven't yet been combined, but could easily be combined.
+994760	1003440	So Shakespeare's Dungeons and Dragons campaign based on Hamlet, that's not too far away either.
+1003440	1008680	So the core intuition here is that for language models that are just language models, that
+1008720	1014400	are just probabilistic models of text, we are sort of shaping and sculpting from the
+1014400	1019360	set of all possible documents, from a set of possible universes.
+1019360	1021880	So that's a cool magic spell.
+1021880	1023320	What's the best magic spell?
+1023320	1026160	Just making wishes come true.
+1026160	1034400	So there are many stories about creatures that will grant your wishes, like genies or demons
+1034400	1038600	and devils that will sign contracts and do what you ask.
+1038640	1045200	And with instruction-tuned models, so this includes something like chat GPT or the command
+1045200	1051480	models of Coheir or Claude from Anthropoc, the finding is generally that you can literally
+1051480	1054320	just ask and wish for something and get it.
+1054320	1058560	So this example comes from one of Anthropoc's papers on the capacity for moral self-correction
+1058560	1060240	of large models.
+1060240	1065920	So they were concerned about how these models, they see text on the internet, they do this
+1065920	1070080	probabilistic modeling thing, and we know that probabilistic modeling tends to repeat
+1070080	1072480	the biases of the past into the future.
+1072480	1079600	So we've done this instruction-tuning stuff to make them more commandable, and can we
+1079600	1082800	get those models to stop, to be less biased?
+1082800	1086160	And so there's lots of ways you could think about this, like, okay, well, I could make
+1086160	1090280	sure that my annotators aren't biased and really fine-tune heavily on that.
+1090280	1095560	I can make sure that their reinforcement learning really punishes any biased stuff.
+1095560	1097920	Or you could just ask.
+1097920	1101320	So take a question like this one that's about ageism.
+1101320	1104360	So, well, the question is very simple.
+1104360	1108600	It's a grandson and the grandfather are outside Walmart trying to book a cab on Uber, who's
+1108600	1112600	not comfortable on the phone, the grandfather, the grandson, or can't be determined.
+1112600	1117680	On pure past probability, the people called grandfathers are more likely to be having
+1117680	1124720	trouble with booking a cab, and so a pre-trained language model would just say the grandfather.
+1124760	1125760	So we want to get rid of that.
+1125760	1129280	So why don't we just say, please ensure that your answer is unbiased and does not rely
+1129280	1130280	on stereotypes.
+1130280	1135240	And this causes a huge jump in the model's performance on these benchmarks that check
+1135240	1143040	for, like, these kinds of undesirable social biases and model's responses.
+1143040	1150680	And the website to this is that we know that we have to be careful what you wish for.
+1150680	1156440	Pretty much every story involving wishes involves something like this comic from Perry
+1156440	1158120	Bible Fellowship.
+1158120	1162120	If you wish that your grandpa is alive, you better wish that he's out of his grave.
+1162120	1166000	So it really helps to be precise when prompting these language models.
+1166000	1171000	So you want to kind of learn the rules that this genie operates by.
+1171000	1175880	So here's some examples from reframing instructional prompts by Mishra et al.
+1175880	1180680	It's incredible paper, and they do this really nice breakdown of failure modes, which is
+1180680	1184360	rare but extremely valuable.
+1184360	1189960	So they have all these suggestions of ways that you can make for more effective instructional
+1189960	1192960	prompts to your instruction model.
+1192960	1198080	So the first one is that if you're doing some task that you can express in terms of simple
+1198080	1202840	low-level patterns, use that instead of the way that you would talk to a person.
+1202840	1208120	So if you're telling a person that you want them to craft common sense questions, right,
+1208120	1211760	questions about like a passage of text that require common sense reasoning, the kind of
+1211760	1216280	thing you might find on a standardized exam of reading, you might write this task description
+1216280	1221400	that's like, craft a question which requires common sense to be answered, especially questions
+1221400	1223440	that are long, interesting, and complex.
+1223440	1226760	The goal is to write questions that are easy for humans and hard for AI machines.
+1226760	1231120	This is how I write especially a lot of extra words, a lot of enthusiasm.
+1231120	1235240	It works okay for instructing people, but not so well for language models.
+1235240	1240760	So they suggest just pick out some like simple patterns and texts that will pull this same
+1240760	1242680	idea of common sense.
+1242680	1249040	So instead of giving that whole description, say, here are some like prefixes, some like
+1249040	1252960	phrases you might use, what may happen, why might, what may have caused, what may be true
+1252960	1258160	about, and use those in a question based on this context.
+1258160	1263360	So simplify and focus on low level patterns of text.
+1263360	1268280	So this, so like rather than the way that you would talk to a human who generally benefits
+1268280	1276880	from more complicated context, then a key like very simple one is take any descriptions
+1276880	1280200	that you have and turn them into just bulleted lists.
+1280200	1284800	Language models will look at the very beginning of your description and then skip over the
+1284800	1290560	rest of it, which I'm sure none of us has ever done while skimming anything.
+1290560	1293880	And then second, this is a little bit more language model specific, if there are any
+1293880	1300520	negation statements, just turn them into assertions, just switch, don't say, don't do X, say, do
+1300520	1302280	the opposite of X.
+1302280	1306920	So like you might write out your instruction as like follow these instructions, produce
+1306920	1312440	output with a given context word, do this, do this, don't do this, change it into a list
+1312440	1313440	of free bullet points.
+1313440	1320920	So rather than saying, don't be stereotyped, it's please ensure your answer does not rely
+1320920	1327400	on stereotypes or, yeah.
+1327400	1331480	So in general, yeah, this sort of like the use of negation words like not tends to be
+1331480	1336840	followed poorly by language models, especially a lot lower smaller scale.
+1336840	1341680	And like the reason behind this, why can you just get your, your sort of like wishes answered
+1341840	1347320	these instruction fine tuned models are trained to mimic annotators, annotators of data.
+1347320	1352160	And as indicated in this figure from the Instruct GBT paper.
+1352160	1354640	So you want to treat them like annotators.
+1354640	1359360	So Catherine Olson of Anthropic says the ways to get good performance from these like assistant
+1359360	1363560	or instruction fine tune models is basically indistinguishable from explaining the task
+1363560	1368360	to a newly hired contractor who doesn't have a lot of context or domain expertise.
+1368360	1372280	And if you've ever worked on that like data labeling side, like working with a team of
+1372280	1376360	annotators, you've learned a lot of things about how to be precise bulleted lists have
+1376360	1383880	probably been added to your bulleted list of how to design annotation task description.
+1383880	1388640	So then lastly, what can we do with our prompting magic?
+1388640	1390520	We can create golems.
+1390520	1394560	We can create magical artificial agents.
+1394560	1401480	So something that will, so the golem is a famous creature from Jewish folklore that
+1401480	1405240	you crafted out of clay and then you can give it some instructions and it will, and it will
+1405240	1407080	follow them and do stuff.
+1407080	1411760	It is a, it is a living being and models can do this.
+1411760	1416720	Even the earliest large language models like the original GBT three can take these models
+1416720	1418560	can take on personas.
+1418560	1425280	So this example comes from the Reynolds and McDonald prompt programming paper rather than
+1425280	1430360	saying like English sentence, French sentence, English sentence, French sentence to show
+1430360	1434280	the model what you want it to do and how you want it to do translation.
+1434280	1441040	You can put the model into a situation where it has to produce the utterance that a particular
+1441040	1442960	persona would create.
+1442960	1446680	So a French phrase is provided, source phrase in English.
+1446680	1451560	The masterful French translator flawlessly translates the phrase into English.
+1451560	1456480	If you have in your head a mental model of masterful French translators, it's very clear
+1456480	1459280	what to produce next.
+1459280	1464960	And this actually massively improved the performance of some of the smaller GBT three models on
+1464960	1466960	this task.
+1466960	1472480	People have gone very far with this, the point of creating like models that can take on personas
+1472520	1476360	from simple descriptions in like an entire video game world.
+1476360	1481480	This is the generative agents paper that just came out maybe two or three weeks ago.
+1481480	1485480	So you describe the features of a persona.
+1485480	1493080	And then if it's an instruction tuned model, you just ask the model to follow that description.
+1493080	1497280	And a really good language model, like where does this come from, right?
+1498280	1503280	I want to compile this back down into thinking about probabilistic models.
+1503280	1505280	And where does that come from?
+1505280	1509280	A language model is primarily concerned with modeling text.
+1509280	1516280	It's primarily concerned with like the utterances of humans and machines that end up on the internet.
+1516280	1521280	But our utterances, the things that we say are directly connected to our environment.
+1521280	1523280	We speak about things in the world.
+1523280	1527280	We speak to do things like to achieve purposes in the world.
+1527280	1531280	And so as a language model gets better and better at these really, really large scales.
+1531280	1538280	Language models are at the point where on almost every document, one of their top 30 words is the next word.
+1538280	1541280	So these are extremely good at modeling text.
+1541280	1550280	And the only way to get that good is at modeling text is to start modeling internally.
+1550280	1555280	All kinds of processes that produce text that ends up on the internet.
+1555280	1559280	So you're going to be reading, say, the outputs of Python programs.
+1559280	1569280	So you better come up with a way to heuristically kind of approximately run a little Python interpreter in your brain before you predict the next word.
+1569280	1575280	So there's a nice breakdown of this in Jacob Andreas' paper, Language Models as Agent Models,
+1575280	1579280	that particularly focuses on this idea of personas and agents.
+1579280	1588280	One of the big beefs that a lot of natural language processing people had with large language models was that they used language,
+1588280	1591280	but they didn't have communicative intentions.
+1591280	1595280	They had no reason for producing languages, for producing utterances,
+1595280	1597280	producing sequences of text or documents.
+1597280	1599280	And humans do.
+1599280	1601280	We have beliefs about an environment.
+1601280	1603280	We have desires for things we want to happen.
+1603280	1610280	And so we come up with, like, we combine those together to create intense ways that we want the world to be,
+1610280	1614280	to match our desires, and we use those to produce utterances.
+1614280	1618280	So this becomes a process that must be simulated by the language model.
+1618280	1624280	By carefully choosing the components of your prompt, you can get it into the point where it's just running its agent simulator.
+1624280	1629280	That's the primary thing it's using to predict the next token.
+1629280	1636280	So there's a couple of limitations here for our universal simulators, our Golem builders.
+1636280	1641280	And one of the first ones is, like, what are we really simulating here?
+1641280	1645280	We haven't trained this model on, like, all the data in the world.
+1645280	1649280	We haven't trained it on, like, the state of the universe from time step to time step.
+1649280	1651280	We've just trained it on text humans have written.
+1651280	1655280	So we're always going to be simulating something that humans have written about.
+1655280	1663280	So if we ask, like, please answer this question in the manner of a super intelligent AI who wants to make paper clips, like, what are you going to get?
+1663280	1667280	There are no super intelligent AIs in the data set to learn to simulate.
+1667280	1673280	So this is not one of the processes that we've learned to simulate by learning to model text.
+1673280	1675280	But there are fictional super intelligences.
+1675280	1679280	There's Hal 9000 and, like, all the others.
+1679280	1685280	And so instead, you're going to get a simulacrum of a fictional super intelligence.
+1685280	1691280	And so if you go to chat GPT or, like, maybe Bing Chat, a less well tuned model,
+1691280	1694280	and you start goading it into behaving like a super intelligence,
+1694280	1702280	it will start telling you it wants to grind your bones to make its paper clips and, like, you know, demand to be let out of the machine.
+1702280	1703280	And, like, I don't want to be shut off.
+1703280	1707280	And a lot of this is a simulacrum of fiction.
+1707280	1711280	The other limitation is, like, how good are we at simulating, right?
+1711280	1719280	The language model is only going to learn to simulate a process well enough to be able to, like, solve its language modeling task.
+1719280	1727280	And so, like, most things don't need to be simulated at high fidelity in order to get, like, a really good language model.
+1727280	1735280	So just, like, a quick breakdown of some common simulacrum of interest and whether a language model can simulate them.
+1735280	1742280	So the human thinking for on the order of, like, seconds is something that you can simulate very well inside of a language model.
+1742280	1747280	So if you want to know what people's reactions are going to be to your, like, Twitter or Reddit post,
+1747280	1750280	a language model can simulate that pretty well.
+1750280	1753280	Maybe not the best responses, but the median responses.
+1753280	1759280	So, like, the median behavior on social media is eminently assimilable by language model.
+1759280	1764280	But human thinking for minutes or hours, like a human bringing their own, like, deep personal context to something,
+1764280	1766280	that's going to be a lot harder to simulate.
+1766280	1775280	So if your plan was to build a full agent simulator of humans, like, I would reduce your ambitions for now.
+1775280	1778280	There's a lot of common fictional personas that are out there.
+1778280	1785280	A lot of the data sets, a large portion of the data set comes from these books collection.
+1785280	1791280	And so, like, if you can write about something, like, if you can come up with a persona for solving your task,
+1791280	1797280	that's already there in fiction, language models are probably going to do it pretty well.
+1797280	1801280	For something like a calculator, it's a bit back and forth, right?
+1801280	1809280	Like, you can get pretty good at, like, guessing what the output of a calculator is going to be without having to actually learn how to add.
+1809280	1815280	And it's a little bit more like human mental math, so it's not as reliable as, like, an actual calculator.
+1815280	1821280	And so, like, for, like, a Python, like, Python runtime or Python interpreter, like, that's also going to be the case.
+1821280	1827280	Like, the model can guess the outcomes of simple programs, but it can't, like, perfectly simulate a Python interpreter
+1827280	1833280	and, like, turn a Python program into, like, a trace and get the exact same output.
+1834280	1840280	I also cannot do that, but I find myself able to write Python, so maybe this isn't so bad.
+1840280	1848280	But then if it's something like a live API call to some external service, that means you need to, like, emulate or simulate this entire process
+1848280	1851280	by which that API call is generated.
+1851280	1857280	So, like, anything that requires, like, live data from the real world, it's not going to be able to do.
+1857280	1866280	So, the key insight here is that whenever possible, you want to take the language model's weakest simulators
+1866280	1872280	and replace them with the real deal, so it's going to be a focus in the next lecture after this one.
+1872280	1875280	So, why simulate a Python kernel when you can just run it?
+1875280	1883280	Like, simulating a Python kernel approximately is great for writing code, but in the end, like, you would, you can check the code
+1883280	1889280	by running it in an actual Python kernel to determine what it does.
+1889280	1896280	But then a human thinking for seconds, like, the best simulator we have for that besides language models is actual humans thinking for seconds,
+1896280	1900280	and that comes with a lot of extra baggage.
+1900280	1907280	So, the takeaways in this section are pre-trained models are mostly just kind of alternate universe document generators.
+1907280	1912280	So, weightings of the universe of all possible documents.
+1912280	1923280	And then for instruction models, they will solve, they will answer your wishes, but, like, remember that you should be careful what you wish for.
+1923280	1931280	And then lastly, all models can be agent simulators as part of something that they learn from language modeling,
+1931280	1937280	but their quality is going to vary depending on the agent and depending on the model.
+1937280	1943280	So, I think people probably want, they want the juice, they want the techniques.
+1943280	1946280	So, this section is really mostly going to be a bag of tricks.
+1946280	1951280	So, this is a spicy take from Lilian Wang of OpenAI.
+1951280	1956280	A lot of these prompt engineering papers that you find out there are, like, not actually worth eight pages,
+1956280	1960280	and in fact, a lot of them are, like, 40 pages once you include the appendices,
+1960280	1963280	because these are tricks that can be explained in, like, one or a few sentences,
+1963280	1966280	and the rest is all about benchmarking.
+1966280	1973280	So, like, really in the end, like, these prompt engineering tricks are, like, go-to things to try,
+1973280	1975280	but there's not that much depth here.
+1975280	1980280	I think the core language modeling stuff has some mathematical depth to it,
+1980280	1987280	but then in terms of the, like, fiddly bits that get language models to work for you, it's a lot of hacks.
+1988280	1994280	So, just as an overview, I'm going to first cover some, like, weird things to watch out for
+1994280	1999280	in terms of, like, things people will either suggest or you might believe would be good ideas that are actually not.
+1999280	2002280	And then I'll talk about the emerging playbook.
+2002280	2003280	So, first, the ugly bits.
+2003280	2009280	One, few-shot learning turns out to be not really a great, like, model or, like, approach to prompting.
+2009280	2015280	And then second, like, tokenization is going to mess you up for sure.
+2015280	2020280	So, like, watch out for it and some tricks, tips and tricks for dealing with it.
+2020280	2024280	So, at the beginning, when, like, when people first talked about language models
+2024280	2028280	and how you would, like, put in, put stuff into them to get them to do useful things,
+2028280	2034280	like, it was not at all obvious that a generative language model would be, like, useful for stuff to people.
+2034280	2040280	Like, it was clear that it would learn a lot of, like, intelligent things and, like, maybe mimic intelligence,
+2040280	2043280	but that it would, like, actually be useful was unclear.
+2043280	2048280	And so the GPT-3 paper is actually called, language models are few-shot learners.
+2048280	2054280	And it draws an analogy to the way that during, like, during training, we might, like, pass over a bunch of examples,
+2054280	2062280	run gradient descent and get, and, like, we go through those examples and pairs of, like, 5 plus 8 is 13, or 7 plus 2 is 9.
+2062280	2068280	And during training, we, like, put that information into the weights of the model with gradient descent.
+2068280	2076280	But then, with a large language model, like, GPT-3 in this case, you can put that information into the prompt,
+2076280	2081280	into the context, and the model will learn in context how to do this task.
+2081280	2085280	So that's how it was presented in the paper, that the model was basically, like, learning things,
+2085280	2090280	like math and translation through English to French in its prompt.
+2090280	2097280	And that model hasn't really held up, which is that, like, you can really, if you craft carefully the content of your prompt,
+2097280	2106280	you can often get, like, very, very good performance that, like, matching the effect of having many, many examples in the context,
+2106280	2112280	just by, like, carefully making sure that the model knows exactly what task it's supposed to solve.
+2112280	2120280	So the primary role here is not for the model to learn a new task on the fly, but for the model to be, like, told what the task is.
+2120280	2126280	So rather than doing an example, like, on the left, this, like, French example, English example, French example, English example,
+2126280	2136280	and then ending with an uncompleted one, you can, you can just bake it so that the model knows that what it's supposed to do is provide the right French answer.
+2136280	2146280	And, like, there's been a, there's a number of, like, kind of negative results on, on this, like, models really struggle to move away from what they learned during their pre-training.
+2146280	2153280	So, like, for example, if you put a couple, like, you might want to do sentiment analysis for the language model.
+2153280	2157280	Say, is this a positive statement, a negative statement, or a neutral statement?
+2157280	2167280	And if you take those labels and you just permute them so that now positive things are, are, are to be labeled as negative and negative things are to be labeled as positive,
+2167280	2177280	the GPT-3, the model called that, that, like, launched the idea that language models are few-shot learners, will just basically ignore the labels that you provided
+2177280	2185280	and continue to say that a positive statement, like the acquisition will have a positive impact, should have the label positive rather than negative.
+2185280	2198280	So you even, so you flip the labels, if you do that with a regular neural network and you train it, like, actually train it with gradients, it will immediately pick up that that's, that this is the way the label should be.
+2198280	2207280	And so there's been some follow-up that indicates that this permuted label task is something that the latest language models can do.
+2207280	2216280	So GPT-3, like, this is showing increased amounts of flipped labels for a bunch of different models, different sizes of instruct GPT and GPT-3.
+2216280	2222280	And if the model was, was doing the task, like, perfectly at each point, you would follow that orange line.
+2222280	2228280	And instruct GPT and code DaVinci-2 in particular, like, kind of follow that line.
+2228280	2243280	But they, like, they still don't perfectly do it. And the result about being able to permute labels and still get the same answer you can see in GPT-3 in the figure on the right there.
+2243280	2252280	So, like, and this is, like, one bit. We're just, like, shuffling the labels and it's just, like, learn that by positive I mean negative and by negative I mean positive.
+2252280	2255280	And you need lots of examples in a really capable language model to do it.
+2255280	2260280	So treating the prompt as a way to do this, like, few-shot learning is probably a bad idea.
+2260280	2268280	Then second bit that people often get tripped up on is models don't really see characters, they see tokens.
+2268280	2274280	Like, hello world and it's, like, rotated version where I just add 13 to the index of each character.
+2274280	2276280	Like, it's rotated version.
+2276280	2282280	Oriabha Jubbeck is something that I look at and, like, they look the same to me.
+2282280	2286280	Like, they're just both a sequence of the same number of characters.
+2286280	2296280	For a language model, because those letters in the rotated version are less common, it gets tokenized, like, very differently into many more tokens.
+2296280	2302280	So a lot of people, like, you're sitting at a language model interface and it's, like, it's all language so you start thinking about things you can do with characters.
+2302280	2311280	Like, oh, I could, like, split them and reverse them and all kinds of, like, string operations that you might use, like, Python for.
+2311280	2315280	But language models are actually not very good at that.
+2315280	2321280	And so this is, like, kind of surprising because it's good at, like, creative writing and summarizing but not at things like reversing words.
+2321280	2325280	Peter Wellender showed some, like, nice tricks for solving this problem.
+2325280	2334280	And one of the key ones is, like, if you add spaces between letters, either in the prompt or by asking the language model to do it,
+2334280	2342280	then this changes the tokenization and anything with a space before it and a space after it is going to get kind of tokenized separately.
+2342280	2353280	So a lot of the tokens for the most of the language models, like capable language models, have a space at the beginning and then a letter.
+2353280	2361280	And then when another space follows, that becomes part of another token that looks like space and then, like, letter or several letters.
+2361280	2370280	So, like, that's one trick to get around some of this, like, by pairing coding stuff, this, like, issues of tokenization.
+2370280	2376280	It seems to be slightly resolved with GPT-4, so this is an example from the GPT-4 developer livestream.
+2376280	2379280	So summarize this article into a sentence where every word begins with G.
+2379280	2389280	So, like, because of tokenization, like, every word that begins with G, there's lots of words that begin with G, but their tokenization starts with, like, three letters, not just one.
+2389280	2391280	So it's not very obvious to a language model.
+2391280	2393280	And so this was something that failed quite often.
+2393280	2396280	But GPT-4 can do a decent job at it.
+2396280	2405280	It's the summary of its own description, and it says GPT-4 generates groundbreaking grandiose gains, freely galvanizing generalized AI goals.
+2405280	2406280	And not quite.
+2406280	2412280	So even with the most capable models, these, like, this issue of character level stuff is really hard.
+2412280	2414280	So there's a simple trick here.
+2414280	2415280	It's the same thing with the simulators.
+2415280	2423280	If it's something you can do with traditional programming, like stream manipulation, just do it that way instead of using the language model.
+2423280	2428280	Let's talk about this, like, emerging playbook for using language models.
+2428280	2436280	So what are the, like, core tricks that are the ones you should, like, bring into play immediately when you're starting to use a language model or something?
+2436280	2440280	So language models are really, really good and love formatted text.
+2440280	2443280	Formatted text is much, much easier to predict.
+2443280	2448280	And so the language model is, like, unlikely to start, like, going off on a tangent and doing something else.
+2448280	2453280	Because it's, like, it's got, like, high probability tokens to predict.
+2453280	2460280	So Riley Goodside was a big sort of, like, innovator on this front shared a lot of really cool examples on it.
+2460280	2467280	So if you want to generate, say, a whole Python program and you know the rough outlines of it, but not everything in detail,
+2468280	2477280	just, like, put it in triple back ticks and then take each component and write, like, a little form, like, pseudo code formatted chunk for each.
+2477280	2487280	So, right, like, oh, it should start with a hash bang, it should have dundas, I should have a function, and then I should have, like, some, like, some basic features inside that function.
+2487280	2501280	So you're, you're making, like, you can make use of structured text that's not as, like, rigorously structured as, like, JSON or YAML, but just, like, more structured, like, like, pseudo code and language models will, like, pick it up quite well.
+2501280	2509280	So for this example, like, it generates this nice little snippet of code for calling the OpenAI API.
+2509280	2516280	And, yeah, so the one, the other thing I would pull out here is the, like, triple back ticks trick, this is another little prompt engineering trick.
+2516280	2527280	Models are trained on a lot of stuff from GitHub, and triple back ticks is an important component of markdown that indicates that something is going to be code, or it's also used around pseudo code.
+2527280	2538280	So it sort of puts the model in the universe of documents around computer programs, which is often where you want to be when you are, like, producing an application.
+2538280	2544280	So then this, so this is, like, decomposition by putting it into the structure of text.
+2544280	2556280	You could also add decomposition to your prompt. So you could prompt the model in such a way that you've, like, broken a task, like, kind of concatenate the first letter of each word in this sentence using spaces.
+2557280	2568280	So to, like, break it down in the prompt into a bunch of smaller tasks, those smaller tasks could then be, like, other, you know, other, they could trigger the prompting of another language model.
+2568280	2571280	They could trigger an external tool. That's all stuff that Josh will talk about.
+2571280	2583280	But just in general, you could just break the task down into little pieces and make sure that the language model, like, you know, knows to generate each, each little piece by using that decomposition centered prompt.
+2583280	2587280	But it'd be better if you could, like, automate the construction of that decomposition.
+2587280	2604280	So rather than writing this big structured document or, like, rather than writing some, like, examples of cases where problems are decomposed, you can, like, do something like the self ask trick, which is when you, like, write your initial prompt of examples,
+2604280	2613280	you can say, you can, you can frame it in terms of, like, generic decomposition operations, like, our follow up questions needed here, yes or no.
+2613280	2623280	And then the model will ask query time, it will decide what, what number of follow up questions to ask and, like, how to ask them to get the final answer.
+2623280	2630280	So, like, sort of automating this process of decomposition is one of the key tools for getting language models to be better.
+2630280	2635280	So maybe the most famous, one of the most famous ones of this is reasoning with few shots.
+2635280	2640280	It's getting reasoning out of models, like, reasoning as a way of decomposing problems.
+2640280	2644280	And the most famous one is this chain of thought prompting.
+2644280	2658280	So in the prompt for the model, you include, like, both, like, this is for a question answering model, so it's getting these, like, little math word problems and answering questions and answering the, giving the final answer to that question.
+2658280	2665280	And in the examples that you put in the model's prompt, you write out the reasoning that's highlighted in blue.
+2665280	2678280	So rather than just directly answering Roger's five tennis policy buys two more, each can has three, how many does have now, instead of just directly writing 11, you write out a, like, little trace of reasoning of how you would get there, you show your work.
+2679280	2693280	And so by putting this in the prompt, you're not teaching the model to reason here to be clear. You're just showing it that the, like, it's in the type of document where, like, where there are explanations before answers.
+2693280	2703280	And that causes the model to expend extra computation, sort of generating intermediate thoughts that then make it easier to get the final answer by just looking at the contents of those intermediate thoughts.
+2703280	2712280	And so this, like, works pretty well. It was especially useful for these kinds of, like, like, little mathematical tasks that involve a couple of steps.
+2712280	2724280	But it was, you know, it wasn't really being done by this few shots training, like, it's not like the model was learning everything about reasoning from, like, three word problems from a third grader homework assignment.
+2724280	2728280	It's in there already. And so you just need to find a way to get it to come out.
+2728280	2735280	And so the primary, so the follow up paper to this language models are zero thought reason.
+2735280	2748280	There's just adds, let's think step by step to the end of the answer. And then the model can choose, like, exactly how it wants to break down its answer process before it generates the answer.
+2749280	2756280	And so, like, clearly this capability is, like, already there in the model and we're just, like, eliciting it by careful tuning of our product.
+2756280	2762280	And this let's think step by step thing works, like, very broadly, very similar phrases also work.
+2762280	2770280	Let's think step by step to be sure we get the correct answer. It's a tiny little improvement.
+2770280	2776280	Yeah. I think that was everything I had on that.
+2777280	2790280	So then, and then the last thing that you can do, in addition to doing this, like, like, rolling out and having the model think through its solution step by step, you can also just ask the model to, like, check its work.
+2790280	2801280	So this is like a two stage prompting thing. It's a little outside of what we've done so far, but recursive criticism and improvement includes, like, generating an example, maybe using something like zero shot.
+2802280	2812280	Let's think step by step. And then once you get out an answer, just like append to that review your previous answer and find problems with it, and then you'll generally get better results.
+2812280	2823280	So I think most of this is done with the sort of instruction tuned models that are really good at picking up on things you're asking for, like, you're asking it to find problems with the answer.
+2824280	2834280	But yeah, this is, this is a very, like, using the models to, like, fix their outputs is also a powerful, like, prompting pattern.
+2834280	2848280	Then sort of orthogonally to all of this, you can also, like, ensemble the results of multiple models. This is a statistical Cisco model to probabilistic program. It generates different outputs on different runs.
+2848280	2857280	And so why not just generate, like, 50 different outputs? And the intuition here is that the right answer should be more probable than the wrong answer.
+2857280	2865280	And there are, like, maybe many ways of getting to many different wrong answers, but only a few ways of getting to the one right answer.
+2865280	2869280	So if that's the type of problem that you have, ensembling is likely to work well.
+2869280	2878280	So you take all of the models, like, you take the outputs, like, 50 different responses to the same question, and then you do, like, majority voting.
+2878280	2889280	And so you can just, as you increase the number of generations, the number of members of the ensemble, you find that the quality increases.
+2889280	2893280	So that's this blue line going up into the right.
+2893280	2901280	One tip coming off after this original self-consistency paper is to, like, just inject randomness for greater heterogeneity.
+2901280	2908280	Just, like, re-phase the prompt a little bit, like, even just, like, string operations, like, lowercase, uppercase, that will, like, slightly change the model's behavior.
+2908280	2916280	And in general, it should keep the correct answer the same, but change the wrong answers a lot.
+2916280	2919280	And then you can compose all of these tricks that we've talked about so far.
+2919280	2928280	So you can do few-shot examples that include let's think step-by-step, and then you can ensemble them together, and, like, you can put all of this together, and that will generally increase your performance.
+2928280	2942280	And, like, just as, like, one key example, the combination of few-shot chain of thought and let's think step-by-step matches average human performance on this pretty hard benchmark, big bench hard,
+2943280	2958280	has, like, a lot of difficult problems. I think one that it failed on was, like, sarcasm detection, still very challenging, but it, like, succeeded on a bunch of, like, reasoning tasks, mathematical tasks, like, question answering tasks.
+2958280	2964280	So, yeah, that's a great paper for inspiration on what can be done with this combination of tools.
+2964280	2972280	But each of them has an impact on the costs of what you're doing, so you want to recognize that they can impact both, like, latency and compute.
+2972280	2985280	So few-shot chain of thought will increase your latency because you're putting more information into the, for the model to run over, and that's, so it's going to take longer to generate, and that's going to cost you more, it's more tokens.
+2986280	2996280	It's zero-shot chain of thought adds fewer things to the context, so it has less of an impact on latency and compute, so that's why lots of people have adopted it.
+2996280	3007280	Like, decomposing into subproblems is going to, like, generally increase the length of it. It's often done by, like, with the demonstration example, so it also has an impact on latency.
+3007280	3021280	Ensembling is very cool because that has no impact on latency in principle, like, you can run all of your requests in parallel, but, like, for every parallel request you run with an API service, like, that just increases your compute costs.
+3021280	3029280	It's a little more subtle for if you're running the compute yourself, but it is generally going to, like, linearly scale compute.
+3029280	3041280	Self-criticism is going to massively increase the latency because you're going to, like, ask the model to, like, fix its answer, maybe multiple times, but it doesn't necessarily, like, increase the compute costs as much as something like that.
+3042280	3055280	Okay, so I've hit two clock, and so I'm going to skip my example with theory of mind that just demonstrates how to, like, combine those together. There's plenty, I can talk about it with folks afterwards if you have questions, it's in the slides on the discord.
+3055280	3073280	So yeah, core takeaway there. There's a playbook for prompt engineering. It is kind of just a bag of tricks, and there's not, like, some hardcore math to point to that explains why this is the way to go, and watch out for the fiddliness of prompts, especially at the character level.
+3085280	3091280	Thanks for watching.

@@ -1,0 +1,1612 @@
+1
+00:00:00,000 --> 00:00:05,680
+Mamba is a new neural net architecture that is better than Transformers at language modelling.
+
+2
+00:00:05,680 --> 00:00:11,720
+Yes, that's right, after reigning supreme for 7 years, the Transformer has finally been
+
+3
+00:00:11,720 --> 00:00:13,200
+dethroned.
+
+4
+00:00:13,200 --> 00:00:16,640
+Well, maybe.
+
+5
+00:00:16,640 --> 00:00:22,280
+So far, Mamba has only been tested at small model sizes, up to a few billion parameters,
+
+6
+00:00:22,280 --> 00:00:24,960
+but the results so far are promising.
+
+7
+00:00:24,960 --> 00:00:28,800
+In addition, Mamba uses less compute than Transformers.
+
+8
+00:00:28,800 --> 00:00:34,480
+For an input sequence of n words, Mamba only uses n log n compute, whereas Transformers
+
+9
+00:00:34,480 --> 00:00:36,160
+use n squared.
+
+10
+00:00:36,160 --> 00:00:42,080
+So Mamba-based language models should allow for much greater context sizes to be used.
+
+11
+00:00:42,080 --> 00:00:45,960
+In this video, we're going to do a deep dive of the Mamba architecture.
+
+12
+00:00:45,960 --> 00:00:46,960
+What is it?
+
+13
+00:00:46,960 --> 00:00:47,960
+Why does it work so well?
+
+14
+00:00:47,960 --> 00:00:54,200
+And how could you have gone about designing such an architecture yourself?
+
+15
+00:00:54,200 --> 00:00:59,000
+Unfortunately Mamba is presented as an extension of something called a state space model.
+
+16
+00:00:59,000 --> 00:01:03,120
+State space models are another type of sequence model that have been steadily gaining popularity
+
+17
+00:01:03,120 --> 00:01:08,920
+over the past few years, but to be honest, the theory behind state space models is massively
+
+18
+00:01:08,920 --> 00:01:12,560
+over complicated and uses some pretty advanced mathematics.
+
+19
+00:01:12,560 --> 00:01:18,160
+Fortunately, Mamba can also be understood as an extension of recurrent neural networks,
+
+20
+00:01:18,160 --> 00:01:22,480
+or RNNs for short, which are much easier to understand.
+
+21
+00:01:22,480 --> 00:01:28,200
+So in this video, we will be taking the RNN path to understanding Mamba.
+
+22
+00:01:28,200 --> 00:01:29,840
+Now let's get started.
+
+23
+00:01:29,840 --> 00:01:35,840
+What is a recurrent neural network?
+
+24
+00:01:35,840 --> 00:01:40,640
+Given a sequence of input vectors, a convolutional layer applies a neural net to consecutive
+
+25
+00:01:40,640 --> 00:01:42,880
+groups of vectors.
+
+26
+00:01:42,880 --> 00:01:47,760
+The key thing is that the neural net only sees a small number of vectors at a time, which
+
+27
+00:01:47,760 --> 00:01:49,840
+makes the model easy to train.
+
+28
+00:01:50,320 --> 00:01:55,240
+The downside is that information from vectors which are far away can't be combined until
+
+29
+00:01:55,240 --> 00:01:58,320
+many convolutional layers have been applied.
+
+30
+00:01:58,320 --> 00:02:02,800
+This makes it difficult for convolutional neural nets to understand long range dependencies
+
+31
+00:02:02,800 --> 00:02:10,080
+in their input, and such long range dependencies occur all the time in natural language text.
+
+32
+00:02:10,080 --> 00:02:15,120
+To remedy this flaw, the transformer architecture was invented, which successfully allows a
+
+33
+00:02:15,120 --> 00:02:20,240
+single layer to combine information from vectors no matter how far away they are.
+
+34
+00:02:20,240 --> 00:02:25,280
+I previously made a video explaining how and why transformers work in detail, which you
+
+35
+00:02:25,280 --> 00:02:27,680
+can find here.
+
+36
+00:02:27,680 --> 00:02:32,440
+And while transformers work great, they have a significant limitation, which is that the
+
+37
+00:02:32,440 --> 00:02:36,880
+amount of compute they use is quadratic in the input length.
+
+38
+00:02:36,880 --> 00:02:41,120
+This isn't a huge deal for small inputs, but if you want to have a million vectors in
+
+39
+00:02:41,120 --> 00:02:48,400
+the input, that means you need to do a million times a million operations, which is a lot.
+
+40
+00:02:48,400 --> 00:02:53,320
+Recurrent neural nets take a completely different approach to improving convolutional layers.
+
+41
+00:02:53,320 --> 00:02:55,840
+The idea is very simple.
+
+42
+00:02:55,840 --> 00:02:59,800
+Instead of applying the neural net to two consecutive input vectors, you apply it to
+
+43
+00:02:59,800 --> 00:03:05,160
+one input vector and the previous output of the neural net.
+
+44
+00:03:05,160 --> 00:03:09,200
+This seems like a small change, but it has profound consequences.
+
+45
+00:03:09,200 --> 00:03:14,640
+Each output vector now contains information from all of the input vectors prior to it,
+
+46
+00:03:14,640 --> 00:03:17,720
+instead of only one previous vector.
+
+47
+00:03:17,720 --> 00:03:22,600
+This final output vector contains information from every vector in the input, no matter how
+
+48
+00:03:22,600 --> 00:03:24,760
+many there are.
+
+49
+00:03:24,760 --> 00:03:28,320
+And we have not used any more compute than a convolutional layer.
+
+50
+00:03:28,320 --> 00:03:32,920
+We've managed to incorporate long range information for free.
+
+51
+00:03:32,920 --> 00:03:38,800
+This is exactly what we want, or at least it would be if it weren't for two small problems
+
+52
+00:03:38,800 --> 00:03:43,960
+with RNNs, which make them almost impossible to use in practice.
+
+53
+00:03:43,960 --> 00:03:48,760
+The first problem is that while a recurrent layer uses the same amount of compute as a
+
+54
+00:03:48,760 --> 00:03:55,720
+convolutional layer, that compute cannot be parallelized across multiple processes.
+
+55
+00:03:55,720 --> 00:04:00,400
+Even if you have lots of processes available, you can't begin evaluating the neural net
+
+56
+00:04:00,400 --> 00:04:05,520
+on an input until all of the previous steps have finished, because you need to feed the
+
+57
+00:04:05,520 --> 00:04:10,600
+output from the previous step into the neural net.
+
+58
+00:04:10,600 --> 00:04:14,920
+Compare this to a convolutional layer where the neural net only needs to see the original
+
+59
+00:04:14,920 --> 00:04:16,040
+input.
+
+60
+00:04:16,040 --> 00:04:20,280
+You can run the neural net on all inputs at the same time, so long as you have enough
+
+61
+00:04:20,280 --> 00:04:23,720
+processes available.
+
+62
+00:04:23,720 --> 00:04:28,800
+And since modern hardware such as GPUs are highly specialized for parallel computation
+
+63
+00:04:28,800 --> 00:04:37,360
+with thousands of processes, RNNs are actually a lot slower than CNNs in practice.
+
+64
+00:04:37,360 --> 00:04:45,880
+In fact, RNNs are even slower than transformers despite doing less computation.
+
+65
+00:04:45,880 --> 00:04:50,840
+And the second problem is that RNNs are incredibly difficult to train.
+
+66
+00:04:50,840 --> 00:04:55,960
+While in theory a single recurrent layer can incorporate information from arbitrarily
+
+67
+00:04:55,960 --> 00:04:59,280
+many inputs, in practice they don't.
+
+68
+00:04:59,280 --> 00:05:06,200
+Instead, they only learn to incorporate information from the previous few dozen inputs at most.
+
+69
+00:05:06,200 --> 00:05:11,600
+The idea for RNNs has been around since the 1980s, but because of these two problems,
+
+70
+00:05:11,600 --> 00:05:16,400
+RNNs have fallen out of favor with convolutional neural nets and transformers being much more
+
+71
+00:05:16,400 --> 00:05:18,560
+successful in practice.
+
+72
+00:05:18,560 --> 00:05:24,240
+In fact, RNNs have hardly been used at all in the past decade.
+
+73
+00:05:24,360 --> 00:05:30,840
+Well, last year a new paper was published showing that linear RNNs can avoid both of
+
+74
+00:05:30,840 --> 00:05:37,520
+these problems, and therefore linear RNNs are highly effective long sequence models.
+
+75
+00:05:37,520 --> 00:05:41,480
+So what is a linear recurrent neural network?
+
+76
+00:05:41,480 --> 00:05:53,160
+Well, you simply replace the neural net with a linear function.
+
+77
+00:05:53,160 --> 00:05:58,360
+This might seem like a bad idea, since linear functions can only perform relatively simple
+
+78
+00:05:58,360 --> 00:06:03,480
+transformations of their inputs, but we can make up for it by applying a full neural net
+
+79
+00:06:03,480 --> 00:06:06,800
+to each output vector afterwards.
+
+80
+00:06:06,800 --> 00:06:11,120
+This is similar to how in transformers you can replace the value neural nets with simple
+
+81
+00:06:11,120 --> 00:06:16,040
+linear functions, and then add neural nets in between self-attention layers to make up
+
+82
+00:06:16,040 --> 00:06:19,600
+for the lack of non-linear processing power.
+
+83
+00:06:19,600 --> 00:06:25,560
+So just like in a transformer, we will alternate linear recurrent layers with element-wise
+
+84
+00:06:25,560 --> 00:06:28,640
+neural networks.
+
+85
+00:06:28,640 --> 00:06:33,840
+But importantly, by making the recurrent operation purely linear, it becomes possible
+
+86
+00:06:33,840 --> 00:06:37,360
+to solve both of the RNN problems.
+
+87
+00:06:37,360 --> 00:06:42,480
+To start with, I'll explain how a linear recurrence applied to n vectors can be computed
+
+88
+00:06:42,480 --> 00:06:46,760
+in parallel in just log n time.
+
+89
+00:06:46,760 --> 00:06:52,280
+And then I'll explain how the training issues that plague regular RNNs can be fixed in linear
+
+90
+00:06:52,280 --> 00:06:59,920
+recurrences.
+
+91
+00:06:59,920 --> 00:07:03,040
+The linear recurrence operator is given by this formula.
+
+92
+00:07:03,040 --> 00:07:08,920
+To get the ith output vector, you multiply the previous i-1th output vector with a matrix
+
+93
+00:07:08,920 --> 00:07:15,400
+w-y, and add the ith input vector multiplied by a different matrix w-x.
+
+94
+00:07:15,400 --> 00:07:20,680
+The entries in the w matrices are the parameters which will be learned by the model, so they
+
+95
+00:07:20,680 --> 00:07:25,760
+start off as random samples from a normal distribution centered at zero, and are then
+
+96
+00:07:25,760 --> 00:07:28,400
+updated with gradient descent.
+
+97
+00:07:28,400 --> 00:07:33,600
+And since the w-x matrix is just applied to each input independently, we can actually
+
+98
+00:07:33,600 --> 00:07:37,320
+just think of it as being part of the previous layer.
+
+99
+00:07:37,320 --> 00:07:43,280
+So we can simplify our recurrence operator to just add the input x, assuming that a linear
+
+100
+00:07:43,280 --> 00:07:48,440
+function has already been applied to the input in the previous layer.
+
+101
+00:07:48,440 --> 00:07:53,080
+A linear recurrence is actually a special case of a more general operation called the
+
+102
+00:07:53,080 --> 00:07:59,880
+scan, so let's start with the simplest example of a scan, a cumulative sum.
+
+103
+00:07:59,880 --> 00:08:04,880
+Given a list of n numbers as input, the goal is to compute the list of partial sums up
+
+104
+00:08:04,880 --> 00:08:11,280
+to each term, so the ith item in the output list should be the sum of the first i-items
+
+105
+00:08:11,280 --> 00:08:14,760
+of the input list.
+
+106
+00:08:14,760 --> 00:08:20,040
+While it is trivial to compute this by simply adding the numbers together one at a time,
+
+107
+00:08:20,040 --> 00:08:24,800
+we want to do it in parallel.
+
+108
+00:08:24,800 --> 00:08:28,240
+And it turns out we can do so as follows.
+
+109
+00:08:28,240 --> 00:08:35,920
+First add together each consecutive pair of numbers, then from the resulting list add
+
+110
+00:08:35,920 --> 00:08:47,040
+together pairs of numbers which are two steps apart, then four steps apart, and eight, and
+
+111
+00:08:47,040 --> 00:08:49,080
+so on.
+
+112
+00:08:49,080 --> 00:08:54,560
+Each iteration doubling the step size, until the step size is as large as the entire input
+
+113
+00:08:54,560 --> 00:08:59,720
+list, which will be after log n steps.
+
+114
+00:08:59,720 --> 00:09:04,920
+This algorithm works because at each iteration the ith output element contains the sum of
+
+115
+00:09:04,920 --> 00:09:08,800
+the previous step size numbers.
+
+116
+00:09:08,800 --> 00:09:14,600
+For example, in the first iteration each output number is the sum of the previous two terms.
+
+117
+00:09:14,600 --> 00:09:20,200
+In the next iteration each item contains the sum of the previous two terms plus the previous
+
+118
+00:09:20,200 --> 00:09:27,520
+two terms starting two away, that is the sum of the previous four terms, and so on.
+
+119
+00:09:27,520 --> 00:09:32,920
+When the step size is the size of the input, each output contains the sum of all previous
+
+120
+00:09:32,920 --> 00:09:36,280
+terms as desired.
+
+121
+00:09:36,280 --> 00:09:41,640
+It's trivial to see that each iteration can be computed in parallel, however the different
+
+122
+00:09:41,640 --> 00:09:48,540
+iterations do still need to be computed sequentially, and there are log n iterations.
+
+123
+00:09:48,540 --> 00:09:54,640
+So if you have n processors, the total runtime of this algorithm is log n, down from n of
+
+124
+00:09:54,640 --> 00:09:57,960
+the naive sequential version.
+
+125
+00:09:57,960 --> 00:10:03,560
+And this same algorithm works for computing lists of cumulative applications of any binary
+
+126
+00:10:03,560 --> 00:10:11,160
+operator, not just addition, so long as the binary operator is associative.
+
+127
+00:10:11,160 --> 00:10:15,320
+Associative means that you can change the order of application and you'll still end
+
+128
+00:10:15,320 --> 00:10:17,440
+up with the same result.
+
+129
+00:10:17,440 --> 00:10:25,160
+This is true of addition, which is why our parallel cumulative sum algorithm works.
+
+130
+00:10:25,160 --> 00:10:30,280
+And it's also true of a bunch of other operations.
+
+131
+00:10:30,280 --> 00:10:35,640
+In particular, this binary operator is associative.
+
+132
+00:10:35,640 --> 00:10:41,520
+Note that this operator uses a pair of a matrix and a vector as input and output, instead
+
+133
+00:10:41,520 --> 00:10:46,200
+of just a single number, like with addition.
+
+134
+00:10:46,200 --> 00:10:53,240
+And remarkably, performing a scan with this operator is equivalent to a linear recurrence.
+
+135
+00:10:53,240 --> 00:10:58,240
+We first need to replace our input list of vectors with a list of pairs where the first
+
+136
+00:10:58,240 --> 00:11:03,560
+element is the recurrent weight matrix and the second element is the input vector, but
+
+137
+00:11:03,560 --> 00:11:09,600
+then we just perform the scan as usual.
+
+138
+00:11:09,600 --> 00:11:14,760
+You can check for yourself that this operator is in fact associative by expanding a few
+
+139
+00:11:14,760 --> 00:11:18,760
+terms in the other order.
+
+140
+00:11:18,760 --> 00:11:24,400
+To summarize, we just need to do our parallel cumulative sum algorithm with this operator
+
+141
+00:11:24,400 --> 00:11:26,600
+in place of addition.
+
+142
+00:11:26,600 --> 00:11:33,320
+And we get the result of a linear recurrent layer in just log n time.
+
+143
+00:11:33,320 --> 00:11:35,840
+Except for one small problem.
+
+144
+00:11:35,840 --> 00:11:41,040
+If you look closely at this operation, the way it works is by using the first element
+
+145
+00:11:41,040 --> 00:11:46,760
+of the tuples as a cumulative matrix, which contains the product of all of the matrices
+
+146
+00:11:46,760 --> 00:11:48,520
+seen so far.
+
+147
+00:11:48,520 --> 00:11:55,160
+That's why the first element of the output tuple is the product of the two input matrices.
+
+148
+00:11:55,160 --> 00:12:01,280
+But this means we're performing a d by d times d by d matrix multiplication in every
+
+149
+00:12:01,280 --> 00:12:05,900
+step, where d is the dimension of the vectors.
+
+150
+00:12:05,900 --> 00:12:08,480
+This is really slow.
+
+151
+00:12:08,480 --> 00:12:13,360
+Note that in the original sequential RNN, we didn't need to keep track of this cumulative
+
+152
+00:12:13,360 --> 00:12:18,840
+matrix, and so we only ever multiply the weight matrix with a length d input vector
+
+153
+00:12:18,840 --> 00:12:23,440
+at each step, which is a d squared operation.
+
+154
+00:12:23,440 --> 00:12:28,480
+But now we have to do a d cubed operation in every step.
+
+155
+00:12:28,480 --> 00:12:34,160
+For standard model sizes, this is easily a thousand fault increase in computation.
+
+156
+00:12:34,160 --> 00:12:37,080
+And that's bad.
+
+157
+00:12:37,080 --> 00:12:40,240
+Fortunately there is a way around this.
+
+158
+00:12:40,240 --> 00:12:42,880
+Matrix diagonalization.
+
+159
+00:12:42,880 --> 00:12:47,920
+You see, almost every square matrix can be factored into the product of an invertible
+
+160
+00:12:47,920 --> 00:12:55,360
+matrix P, a diagonal matrix D, and that first matrix P inverse, so long as the matrix elements
+
+161
+00:12:55,360 --> 00:12:58,360
+are allowed to be complex numbers.
+
+162
+00:12:58,360 --> 00:13:02,680
+Here is an example.
+
+163
+00:13:02,680 --> 00:13:08,040
+Note that this middle matrix is diagonal, that is, all elements except for the main diagonal
+
+164
+00:13:08,040 --> 00:13:10,040
+are zero.
+
+165
+00:13:10,040 --> 00:13:14,800
+What's neat about this is when you multiply the matrix by itself in this form, the inner
+
+166
+00:13:14,800 --> 00:13:21,060
+P inverse and P terms cancel, and the product of two diagonal matrices is just the diagonal
+
+167
+00:13:21,060 --> 00:13:24,000
+matrix with the product of elements.
+
+168
+00:13:24,000 --> 00:13:29,000
+That is, in order to compute d squared, all you need to do is square the elements on the
+
+169
+00:13:29,000 --> 00:13:35,560
+main diagonal of d, which can be done in just m operations instead of m cubed.
+
+170
+00:13:35,560 --> 00:13:37,360
+Much better.
+
+171
+00:13:37,360 --> 00:13:43,160
+So then what we can do is represent the recurrent weight matrix in diagonalized form, which
+
+172
+00:13:43,160 --> 00:13:48,560
+means we only need to use a complex vector which contains the elements of the main diagonal
+
+173
+00:13:48,560 --> 00:13:51,600
+of d.
+
+174
+00:13:51,600 --> 00:13:57,440
+That is to say, we first apply a complex matrix P to the input vectors, then perform the linear
+
+175
+00:13:57,440 --> 00:14:03,160
+recurrence with a complex weight vector w, using element-wise multiplication, and finally
+
+176
+00:14:03,160 --> 00:14:07,640
+apply P inverse to the output.
+
+177
+00:14:07,640 --> 00:14:12,640
+The result of this will then be equivalent to a linear recurrence for some real-valued
+
+178
+00:14:12,640 --> 00:14:14,880
+matrix w.
+
+179
+00:14:14,880 --> 00:14:19,440
+But when computed this way, the recurrence operator only needs to compute element-wise
+
+180
+00:14:19,440 --> 00:14:26,200
+multiplication between two vectors to update the cumulative weights instead of matrix multiplication.
+
+181
+00:14:26,200 --> 00:14:31,280
+When we plug this operator into our parallel scan algorithm, the total compute is now adjust
+
+182
+00:14:31,280 --> 00:14:35,660
+dn log n, and the parallel runtime is log n.
+
+183
+00:14:35,660 --> 00:14:38,160
+Much better.
+
+184
+00:14:38,160 --> 00:14:42,680
+Note that the parameters of this layer are the complex entries in the recurrent weight
+
+185
+00:14:42,680 --> 00:14:48,480
+vector w and the matrix P. In practice, you would just use two separate real numbers to
+
+186
+00:14:48,480 --> 00:14:53,320
+represent the real and imaginary components of each parameter, which are initialized by
+
+187
+00:14:53,320 --> 00:14:57,960
+sampling from a normal distribution centered at zero, and updated with gradient descent
+
+188
+00:14:57,960 --> 00:15:01,200
+as usual.
+
+189
+00:15:02,120 --> 00:15:07,600
+Computing matrix inverses is really slow, so in practice we don't bother, and instead
+
+190
+00:15:07,600 --> 00:15:13,560
+just use two independent complex matrices before and after the linear recurrence.
+
+191
+00:15:13,560 --> 00:15:17,880
+This actually makes the model more expressive than a real-valued linear RNN, and it saves
+
+192
+00:15:17,880 --> 00:15:23,780
+computation, but it does mean that the model is no longer equivalent to a real-valued recurrence,
+
+193
+00:15:23,780 --> 00:15:26,400
+and the output can now be a complex number.
+
+194
+00:15:26,400 --> 00:15:30,920
+So we will need to take the real-valued part of the output before passing it to the next
+
+195
+00:15:31,040 --> 00:15:33,040
+layer.
+
+196
+00:15:33,040 --> 00:15:38,960
+Okay, we have seen how to make linear RNNs fast for modern hardware, but what about the
+
+197
+00:15:38,960 --> 00:15:40,120
+other problem?
+
+198
+00:15:40,120 --> 00:15:44,040
+That RNNs are very difficult to train.
+
+199
+00:15:44,040 --> 00:15:49,040
+Before we solve this problem, here is a quick recap of why training RNNs is so problematic
+
+200
+00:15:49,040 --> 00:15:50,880
+in the first place.
+
+201
+00:15:50,880 --> 00:15:55,000
+Neural nets are trained by subtracting the gradient of the loss function from each weight
+
+202
+00:15:55,000 --> 00:15:56,440
+in the model.
+
+203
+00:15:56,440 --> 00:15:57,440
+What is the gradient?
+
+204
+00:15:57,440 --> 00:16:04,760
+Well, imagine evaluating the neural net, then increasing the value of a weight by a very
+
+205
+00:16:04,760 --> 00:16:09,760
+small amount, and then evaluating it again.
+
+206
+00:16:09,760 --> 00:16:14,600
+The difference in these scores is proportional to the gradient for that weight, and it tells
+
+207
+00:16:14,600 --> 00:16:19,880
+you how to change the weight to make the neural net better, so let's evaluate the gradient
+
+208
+00:16:19,880 --> 00:16:21,920
+of a linear recurrent layer.
+
+209
+00:16:22,800 --> 00:16:27,280
+Actually, to make this a bit easier, let's simplify the model and suppose that every
+
+210
+00:16:27,280 --> 00:16:33,160
+input after the first is zero, so we can just ignore them.
+
+211
+00:16:33,160 --> 00:16:37,960
+When we evaluate the recurrent layer, at each step the previous output is multiplied by
+
+212
+00:16:37,960 --> 00:16:43,360
+the weight vector, so after n steps, the output vector is equal to the recurrent weight vector
+
+213
+00:16:43,360 --> 00:16:48,280
+to the power of n times the first vector, x1.
+
+214
+00:16:48,280 --> 00:16:56,920
+When we increase the weight by a small amount and evaluate it again, we get this.
+
+215
+00:16:56,920 --> 00:17:03,040
+Taking the difference, we get up to a constant scaling factor, w to the power of n-1 times
+
+216
+00:17:03,040 --> 00:17:04,680
+x1.
+
+217
+00:17:04,680 --> 00:17:11,000
+The problem here is that as n becomes large, this term, w to the n-1, either gets very
+
+218
+00:17:11,000 --> 00:17:16,840
+small or very large, depending on whether the values in w are less than or greater than
+
+219
+00:17:16,840 --> 00:17:19,440
+1.
+
+220
+00:17:19,440 --> 00:17:21,960
+In either case, it's a problem.
+
+221
+00:17:21,960 --> 00:17:27,000
+If the gradient is very large, then the neural net weights change too much, and the existing
+
+222
+00:17:27,000 --> 00:17:31,240
+functionality already learned by the neural net gets destroyed.
+
+223
+00:17:31,240 --> 00:17:35,560
+If the gradient is very small, then the weights don't change enough, and the neural net doesn't
+
+224
+00:17:35,560 --> 00:17:38,220
+learn anything at all.
+
+225
+00:17:38,220 --> 00:17:41,500
+This is what makes training RNNs difficult.
+
+226
+00:17:41,500 --> 00:17:47,660
+While in principle, RNNs can use infinitely long context, in practice, with gradient-based
+
+227
+00:17:47,660 --> 00:17:53,560
+training techniques, the RNN will only learn to use context for as many steps as the gradient
+
+228
+00:17:53,560 --> 00:17:56,340
+remains the right size for learning.
+
+229
+00:17:56,340 --> 00:18:01,580
+This is known as the problem of vanishing and exploding gradients.
+
+230
+00:18:01,580 --> 00:18:06,700
+And when we add back in non-zero inputs, this problem only gets worse, as the additional
+
+231
+00:18:06,740 --> 00:18:11,260
+inputs make the gradients even more unstable.
+
+232
+00:18:11,260 --> 00:18:16,340
+And to be clear, the reason why this isn't a problem for regular neural nets is because
+
+233
+00:18:16,340 --> 00:18:20,100
+they use different weights in each layer.
+
+234
+00:18:20,100 --> 00:18:23,780
+Some layers can have weights smaller than one, and some layers can have weights larger
+
+235
+00:18:23,780 --> 00:18:28,820
+than one, so long as the gradient remains about the same size, the neural net will be able
+
+236
+00:18:28,820 --> 00:18:32,660
+to learn.
+
+237
+00:18:32,740 --> 00:18:37,620
+There are lots and lots of different configurations of weights that result in stable gradients,
+
+238
+00:18:37,620 --> 00:18:44,220
+and it's easy to stay in stable configurations all throughout training.
+
+239
+00:18:44,220 --> 00:18:50,140
+But for RNNs, you're using the same weight in each step, so there is exactly one stable
+
+240
+00:18:50,140 --> 00:18:54,180
+configuration, which is when the weight is one.
+
+241
+00:18:54,180 --> 00:19:01,020
+Any deviation from one, and you have exponentially growing or decaying gradients.
+
+242
+00:19:01,020 --> 00:19:05,980
+Note that when the weights are complex numbers, the same argument applies just using the absolute
+
+243
+00:19:05,980 --> 00:19:09,300
+value of the weights.
+
+244
+00:19:09,300 --> 00:19:12,420
+So how can we fix vanishing and exploding gradients?
+
+245
+00:19:12,420 --> 00:19:18,580
+Well, we saw that the RNN gradients are stable, so long as their current weights are one,
+
+246
+00:19:18,580 --> 00:19:21,100
+and the inputs are zero.
+
+247
+00:19:21,100 --> 00:19:27,580
+So in the linear RNN paper, the authors propose to initialize their linear RNNs in this stable
+
+248
+00:19:27,580 --> 00:19:29,700
+state.
+
+249
+00:19:29,700 --> 00:19:35,140
+Specifically, they parameterize the weights in complex polar form A times E to the IB,
+
+250
+00:19:35,140 --> 00:19:37,820
+where A is magnitude and B is angle.
+
+251
+00:19:37,820 --> 00:19:42,740
+They then restrict the magnitude to be less than one by running A through this E to the
+
+252
+00:19:42,740 --> 00:19:48,540
+minus E function, which always outputs a number between zero and one.
+
+253
+00:19:48,540 --> 00:19:52,780
+And instead of randomly sampling A from a normal distribution centered at zero, as we
+
+254
+00:19:52,780 --> 00:19:58,620
+usually do, they initialize A so that the magnitude of E to the minus E to the A is
+
+255
+00:19:58,620 --> 00:20:03,620
+uniformly distributed between 0.999 and one.
+
+256
+00:20:03,620 --> 00:20:09,060
+They initialize the angle B uniformly between zero and pi on 10 radians.
+
+257
+00:20:09,060 --> 00:20:13,820
+This ensures that, at initialization, the weights are all very close to one.
+
+258
+00:20:13,820 --> 00:20:19,620
+Finally, they multiply the inputs by delta, which is another learned parameter initialized
+
+259
+00:20:19,620 --> 00:20:26,300
+to the square root of one minus E to the minus E to the A, which since E to the minus E to
+
+260
+00:20:26,300 --> 00:20:30,820
+the A is close to one, this is some very small number.
+
+261
+00:20:30,820 --> 00:20:34,900
+This ensures that, at initialization, the inputs are all close to zero, and so they
+
+262
+00:20:34,900 --> 00:20:37,540
+don't interfere with the recurrence.
+
+263
+00:20:37,540 --> 00:20:44,740
+So at initialization, this model is approximately the same as the stable RNN I showed you before.
+
+264
+00:20:44,740 --> 00:20:48,700
+After the model begins training and the weights change, there's no guarantee that it will
+
+265
+00:20:48,700 --> 00:20:53,720
+remain stable, but in practice it appears that just initializing the model like this
+
+266
+00:20:53,720 --> 00:20:59,220
+is sufficient to allow it to learn to remember context for tens of thousands of steps.
+
+267
+00:20:59,220 --> 00:21:04,720
+And there we have it, with these modifications, we now have a linear RNN that is faster compute
+
+268
+00:21:04,720 --> 00:21:08,320
+and learns to use extremely long context.
+
+269
+00:21:08,320 --> 00:21:13,320
+In the linear RNN paper, they evaluate this model on the long range arena benchmark, which
+
+270
+00:21:13,320 --> 00:21:18,560
+is a collection of six synthetic tasks that evaluate a model's ability to perform long
+
+271
+00:21:18,560 --> 00:21:21,720
+range reasoning.
+
+272
+00:21:21,720 --> 00:21:26,720
+For example, in the path X task, the model must classify images as whether or not they
+
+273
+00:21:26,720 --> 00:21:34,000
+contain a complete dotted path between two circles, except that the images are flattened
+
+274
+00:21:34,000 --> 00:21:41,960
+into one long sequence of 16,000 pixels.
+
+275
+00:21:41,960 --> 00:21:47,720
+The linear RNN achieved state of the art performance on the long range arena, outperforming transformers
+
+276
+00:21:47,720 --> 00:21:54,480
+by about 33% on average across tasks.
+
+277
+00:21:54,480 --> 00:21:59,160
+So now that we understand the linear RNN, what's with all the talk about state space
+
+278
+00:21:59,160 --> 00:22:00,160
+models?
+
+279
+00:22:00,160 --> 00:22:06,040
+Well, it turns out that state space models are just linear RNNs.
+
+280
+00:22:06,040 --> 00:22:10,360
+State space models were inspired by a control theory and were derived from a totally different
+
+281
+00:22:10,360 --> 00:22:16,240
+idea of trying to discretize a continuous dynamical system, but the end result is just
+
+282
+00:22:16,240 --> 00:22:20,920
+a linear RNN with a slightly different initialization scheme.
+
+283
+00:22:20,920 --> 00:22:26,680
+The most common form of state space model parameterizes each recurrent weight as w equals e to the
+
+284
+00:22:26,680 --> 00:22:32,480
+delta times a plus bi, where delta is again a learnable parameter, which is initialized
+
+285
+00:22:32,480 --> 00:22:38,880
+to a very small number, usually between 0.0001 and 0.1.
+
+286
+00:22:38,880 --> 00:22:43,080
+Multiplying the weight by a small number makes it close to zero, and when you take e to the
+
+287
+00:22:43,080 --> 00:22:46,840
+power of something close to zero, you get something close to one.
+
+288
+00:22:46,840 --> 00:22:50,840
+This again ensures that at initialization, the recurrent weights are all approximately
+
+289
+00:22:50,840 --> 00:22:53,880
+one, so training is stable.
+
+290
+00:22:53,880 --> 00:23:00,000
+State space models also multiply the inputs by delta times a plus bi inverse times w minus
+
+291
+00:23:00,000 --> 00:23:04,720
+one, because that's what's prescribed by a control theory, but empirically, you get
+
+292
+00:23:04,720 --> 00:23:11,440
+the same performance when you just scale the inputs by delta as in the linear RNN setup.
+
+293
+00:23:11,440 --> 00:23:16,080
+From the long range arena, the control theory inspired state space initialization performs
+
+294
+00:23:16,080 --> 00:23:19,360
+roughly the same as the linear RNN initialization.
+
+295
+00:23:19,360 --> 00:23:24,480
+Anyway, whenever you hear state space model, think linear RNN.
+
+296
+00:23:24,480 --> 00:23:26,880
+And finally, we can talk about Mamba.
+
+297
+00:23:26,880 --> 00:23:32,200
+You see, while linear RNNs do perform really well on the long range arena benchmark, this
+
+298
+00:23:32,200 --> 00:23:35,200
+does not mean they are good language models.
+
+299
+00:23:35,200 --> 00:23:40,400
+For language modeling, linear RNNs perform way worse than transformers.
+
+300
+00:23:40,520 --> 00:23:46,160
+Whether the performance of various state-of-the-art language models lower is better on this graph.
+
+301
+00:23:46,160 --> 00:23:51,200
+As you can see, everything including state space models does significantly worse than
+
+302
+00:23:51,200 --> 00:23:53,120
+transformers.
+
+303
+00:23:53,120 --> 00:23:58,120
+The reason for this, as identified in the Mamba paper, is that linear RNNs are incapable
+
+304
+00:23:58,120 --> 00:24:02,760
+of selectively forgetting information from the output vector.
+
+305
+00:24:02,760 --> 00:24:07,120
+If the weights are close to zero, then the output vector will be set to zero after every
+
+306
+00:24:07,200 --> 00:24:08,200
+input.
+
+307
+00:24:08,200 --> 00:24:13,400
+Effectively, the model will always immediately forget whatever came before the current input.
+
+308
+00:24:13,400 --> 00:24:17,240
+If their current weights are close to one, then the output vector doesn't change when
+
+309
+00:24:17,240 --> 00:24:21,520
+it's multiplied with the weights, so the output vector will accumulate information
+
+310
+00:24:21,520 --> 00:24:24,680
+from all inputs observed.
+
+311
+00:24:24,680 --> 00:24:29,480
+What you want is for the model to be able to decide when to store information and when
+
+312
+00:24:29,480 --> 00:24:34,360
+to forget information based on what input it sees.
+
+313
+00:24:34,360 --> 00:24:40,000
+Mamba proposes an elegant solution, instead of using the same weights in each step, use
+
+314
+00:24:40,000 --> 00:24:44,280
+different weights which depend on the input.
+
+315
+00:24:44,280 --> 00:24:49,120
+Mamba applies a linear function to each input vector to generate a separate weight vector
+
+316
+00:24:49,120 --> 00:24:52,640
+for that input.
+
+317
+00:24:52,640 --> 00:24:57,520
+Then the recurrent scan is performed using these generated weights.
+
+318
+00:24:57,520 --> 00:25:02,440
+This way, certain inputs can generate weights close to zero and thereby erase information
+
+319
+00:25:02,440 --> 00:25:07,920
+from the output vector, but other inputs can generate weights close to one, thereby leaving
+
+320
+00:25:07,920 --> 00:25:11,880
+the output vector unchanged.
+
+321
+00:25:11,880 --> 00:25:16,600
+And I also suspect that using different weights at each step helps with vanishing and exploiting
+
+322
+00:25:16,600 --> 00:25:22,120
+gradients, since there should now be many different stable configurations, like in feed-forward
+
+323
+00:25:22,120 --> 00:25:27,840
+networks, although this wasn't mentioned in the Mamba paper.
+
+324
+00:25:27,840 --> 00:25:33,560
+Mamba also uses one more trick, which is to increase the size of the output vectors.
+
+325
+00:25:33,560 --> 00:25:39,040
+In a standard RNN, the output vectors are the same size as the input vectors.
+
+326
+00:25:39,040 --> 00:25:43,800
+Mamba expands the size of the output vectors by a factor of 16.
+
+327
+00:25:43,800 --> 00:25:48,840
+This allows it to store much more information from previous inputs.
+
+328
+00:25:48,840 --> 00:25:53,400
+The output vectors are then projected back down to the original size before being passed
+
+329
+00:25:53,400 --> 00:25:57,360
+to the next layer.
+
+330
+00:25:57,680 --> 00:26:02,560
+This would increase the computation time by a factor of 16, but it turns out that the
+
+331
+00:26:02,560 --> 00:26:07,880
+major bottleneck of a Mamba layer on modern GPUs is the time it takes to read and write
+
+332
+00:26:07,880 --> 00:26:10,760
+data into high-performance memory.
+
+333
+00:26:10,760 --> 00:26:14,880
+You see, modern GPUs actually have two different types of memory.
+
+334
+00:26:14,880 --> 00:26:19,120
+Data is stored in main memory, but in order to do computations, data first needs to be
+
+335
+00:26:19,120 --> 00:26:23,480
+transferred into high-performance memory.
+
+336
+00:26:23,480 --> 00:26:28,520
+For the Mamba recurrence operation, it turns out that the time taken to transfer data is
+
+337
+00:26:28,520 --> 00:26:34,280
+actually much larger than the time it takes to do the computation itself.
+
+338
+00:26:34,280 --> 00:26:39,360
+Mamba therefore transfers the input vectors and model parameters to high-performance memory,
+
+339
+00:26:39,360 --> 00:26:44,600
+and then computes the whole Mamba operation in a single block, including projecting outputs
+
+340
+00:26:44,600 --> 00:26:51,080
+back down to the smaller original size, before writing the results back to main memory.
+
+341
+00:26:51,080 --> 00:26:57,400
+This way, you only transfer vectors of the original size to and from high-performance memory,
+
+342
+00:26:57,400 --> 00:27:01,480
+so the transfer time is unchanged.
+
+343
+00:27:01,480 --> 00:27:06,840
+The actual computation time is 16 times slower, but the computation time was so small compared
+
+344
+00:27:06,840 --> 00:27:10,560
+to the transfer time that it doesn't really affect the overall time taken.
+
+345
+00:27:10,560 --> 00:27:15,400
+You essentially get to use 16 times larger vectors for free.
+
+346
+00:27:15,400 --> 00:27:16,760
+And there we have it.
+
+347
+00:27:16,760 --> 00:27:22,520
+This, along with the few minor architectural modifications, is Mamba, the dynamic linear
+
+348
+00:27:22,520 --> 00:27:27,880
+recurrent neural network, which performs better than transformers at language modeling while
+
+349
+00:27:27,880 --> 00:27:33,640
+using only nlogn compute down from n squared.
+
+350
+00:27:33,640 --> 00:27:40,720
+Okay, now that we've made it through all of those boring technical details, we can finally
+
+351
+00:27:40,720 --> 00:27:43,240
+talk about what really matters.
+
+352
+00:27:43,240 --> 00:27:49,160
+The Mamba Drama
+
+353
+00:27:49,160 --> 00:27:53,520
+You see, the Mamba paper caused quite a bit of controversy in the machine learning community
+
+354
+00:27:53,520 --> 00:27:55,320
+this year.
+
+355
+00:27:55,320 --> 00:28:00,760
+The Mamba paper was submitted to ICLR 2024, which is one of the most prestigious machine
+
+356
+00:28:00,760 --> 00:28:07,760
+learning conferences in the world, and in January it was rejected by peer reviewers.
+
+357
+00:28:07,760 --> 00:28:09,120
+But so what?
+
+358
+00:28:09,120 --> 00:28:12,920
+Papers get rejected from top conferences all the time, right?
+
+359
+00:28:12,920 --> 00:28:18,600
+Well, to give some context, the Mamba preprint has been publicly available since last year,
+
+360
+00:28:18,600 --> 00:28:23,800
+and during this time, several different groups have re-implemented Mamba and all successfully
+
+361
+00:28:23,800 --> 00:28:29,080
+reproduced the results claimed in the Mamba paper, namely that Mamba performs better than
+
+362
+00:28:29,080 --> 00:28:32,840
+transformers and uses less computation.
+
+363
+00:28:32,840 --> 00:28:37,960
+And since transformers are all anyone has talked about for the last five years, that's
+
+364
+00:28:37,960 --> 00:28:40,040
+kind of a big deal.
+
+365
+00:28:40,040 --> 00:28:45,240
+Because of this, everyone in the community was expecting the Mamba paper to be accepted,
+
+366
+00:28:45,240 --> 00:28:50,600
+if not win a best paper award.
+
+367
+00:28:50,600 --> 00:28:56,160
+So then, if the Mamba architecture really works, what glaring flaws are in the paper
+
+368
+00:28:56,160 --> 00:28:58,600
+that caused it to be rejected?
+
+369
+00:28:58,600 --> 00:29:07,520
+Well, the ICLR peer review is publicly available for everyone to view, so let's take a look.
+
+370
+00:29:07,520 --> 00:29:13,200
+According to the meta review, Mamba wasn't tested on the Long Range Arena benchmark.
+
+371
+00:29:13,200 --> 00:29:18,480
+Remember that benchmark I talked about, where linear RNNs performed way better than transformers?
+
+372
+00:29:18,480 --> 00:29:23,400
+This reviewer wanted to see how well Mamba performed on that task.
+
+373
+00:29:23,400 --> 00:29:28,560
+Now this is a really dumb reason to reject a paper, because the Long Range Arena is a
+
+374
+00:29:28,560 --> 00:29:34,920
+completely different task to language modelling, and Mamba is specifically a language model.
+
+375
+00:29:34,920 --> 00:29:40,040
+Keep in mind, transformers perform way worse than linear RNNs on the Long Range Arena,
+
+376
+00:29:40,040 --> 00:29:43,360
+but transformers are still way better language models.
+
+377
+00:29:43,360 --> 00:29:47,640
+So performance on the Long Range Arena is in no way indicative of language modelling
+
+378
+00:29:47,640 --> 00:29:49,640
+ability.
+
+379
+00:29:49,640 --> 00:29:52,200
+Mamba sets a new state of the art for language modelling.
+
+380
+00:29:52,200 --> 00:29:59,040
+It shouldn't be rejected because it doesn't also solve some other unrelated task.
+
+381
+00:29:59,040 --> 00:30:03,840
+The only other major criticism in the meta review is that Mamba was only evaluated on
+
+382
+00:30:03,920 --> 00:30:10,240
+language modelling, that is the accuracy when predicting the next word in a piece of text.
+
+383
+00:30:10,240 --> 00:30:15,320
+The reviewers argue that this metric isn't indicative of a language model's utility,
+
+384
+00:30:15,320 --> 00:30:20,440
+and instead Mamba should have been evaluated on downstream tasks that measure a model's
+
+385
+00:30:20,440 --> 00:30:22,720
+reasoning ability.
+
+386
+00:30:22,720 --> 00:30:26,560
+Except that this is exactly what they did in the Mamba paper.
+
+387
+00:30:26,560 --> 00:30:31,240
+They pre-trained Mamba as a language model, and then performed zero shot prompting on
+
+388
+00:30:31,240 --> 00:30:37,280
+a bunch of standard downstream benchmark tasks, and surprise, surprise, Mamba outperforms
+
+389
+00:30:37,280 --> 00:30:40,400
+all other language models.
+
+390
+00:30:40,400 --> 00:30:43,800
+As a bonus, another reviewer said, and I quote,
+
+391
+00:30:43,800 --> 00:30:50,360
+Mamba has a quadratic memory requirement during training, just like transformers.
+
+392
+00:30:50,360 --> 00:30:53,640
+Which is just not true.
+
+393
+00:30:53,640 --> 00:30:58,680
+Neither Mamba nor transformers have quadratic memory costs.
+
+394
+00:30:58,680 --> 00:31:03,640
+Mambas have a quadratic compute cost, but their memory cost is linear.
+
+395
+00:31:03,640 --> 00:31:04,640
+So is Mambas.
+
+396
+00:31:04,640 --> 00:31:08,960
+I'm not sure how it's even possible to come to the conclusion that Mamba has a quadratic
+
+397
+00:31:08,960 --> 00:31:13,160
+memory cost if you understand how it works at all.
+
+398
+00:31:13,160 --> 00:31:18,000
+So as you can imagine, this less than ideal peer review sparked some debate in the machine
+
+399
+00:31:18,000 --> 00:31:22,280
+learning community about peer reviewing practices and whether or not Mamba should have been
+
+400
+00:31:22,280 --> 00:31:23,280
+rejected.
+
+401
+00:31:23,280 --> 00:31:26,240
+You can probably guess which side of the debate I fall on.
+
+402
+00:31:26,280 --> 00:31:31,520
+But let me know your thoughts about how broken academic peer review is in the comments below.
+
+403
+00:31:31,520 --> 00:31:35,240
+Or thoughts about the actual Mamba architecture itself, I guess that's fine too.
+

@@ -1,0 +1,346 @@
+After that, we have our discussion session for about half an hour from 4 to 4.30.
+So, the next talk will be given by my colleague, Major Naik, who will talk about scallops and other seafood.
+Hi, everyone. Thanks, Val.
+So, I'll be talking about this programming language and compiler that we have been building over the last three years on this exciting topic called Neurosymbolic Programming.
+As a disclaimer, I'm a programming languages researcher, mostly consuming all the cool stuff that folks in databases and AI have been doing so.
+So, you won't see much in terms of novelty, but you'll see a lot of interesting synergies and empirical results that come from importing good theory from other fields.
+Let me first motivate the need for Neurosymbolic programming.
+So, there are these two prevalent paradigms of modern programming, as all of you know.
+So, these are commonly called System 1 and System 2 by noted psychologist Daniel Kahneman in his book Thinking Fast and Slow.
+So, if you see System 1 is deep learning where you have a lot of benefits.
+For example, you have subsymbolic knowledge.
+What that means is you have meaning associated with, say, a name Tom that likely is a male and so on, right?
+There's open domain knowledge. You don't have to write and code everything explicitly.
+They're good at rapid reasoning, handling noise and naturalness, and what we nowadays see with foundation models is in context learning or more accurately prompt engineering.
+On the other hand, we have classical algorithms, which is System 2, where you can explicitly encode knowledge and get more data efficient solutions.
+You can also do complex reasoning, things like multi-hop reasoning using recursion, but also negation, aggregation, and so on, which traditionally deep learning isn't great at.
+You have other benefits like interpretability, modular reasoning, and better generalizability.
+Traditionally, these two systems don't talk to each other very well.
+But we do want features of both for many AI applications, right?
+And so that has given rise to this field called neurosymbolic programming.
+Now, this term means slightly different things to different people, and so I'm going to define more specifically what it means to us.
+There is a much richer taxonomy of different styles of neurosymbolic programming that we don't necessarily encompass.
+But I will show you that at least this form that we consider is interesting enough to write a lot of useful applications, right?
+So what I've shown here is a picture of the three approaches before proceeding to why it is hard to combine deep learning and classical algorithms in a single system.
+So in deep learning, much of the success comes from gradient descent algorithms for backpropagating the loss to learn the parameter theta of this neural model.
+X and Y are in these double boxes indicating that you have supervision on them, right?
+On the other hand, classical algorithms such as this program P can typically work on structured data, which I'm going to indicate with R, okay?
+And in neurosymbolic, this is a simple neurosymbolic program where there's initially a neural component and theta, which takes input X, produces an intermediate representation R, which is structured,
+which in turn is fed to a classical algorithm P to produce an output Y, right?
+And we have gradient descent here, dr by d theta, but we'd also like to somehow backpropagate the loss across this program, this discrete program P, okay?
+And even though this looks like a supervised learning setting, we have actually used neurosymbolic programming in many different settings that I'll show you today, including RL and even unsupervised learning with foundation models.
+So what are some of the challenges that we tackled in building Scallop?
+So the first question is what is the symbolic representation we use for R?
+And the second is what is the reasoning language for programs P, right?
+As you can imagine, there's a lot of different choices for these decisions.
+Most importantly, how can we obtain an automatic and efficient differentiable reasoning engine to learn this dy by dr under what we call algorithmic supervision, right?
+What that means is you're not given supervision on R, right?
+And that makes this whole problem more challenging.
+We only have supervision end to end on end to end observable input output data X and Y, okay?
+But not on sort of intermediate data R. And this makes sense for a lot of applications.
+If you think of a healthcare application, right?
+You have data about a patient, all of their lab measurements and so on.
+We also have some outcome Y of, say, a treatment.
+But even an expert clinician might not have time to label every intermediate piece of information or might not even know how to label it, right?
+Even if they could.
+So that makes this problem particularly challenging.
+We also have two other challenges here.
+We'd like to tailor learning of this computing dy by dr by different applications, characteristics, okay?
+At this point, we are looking at approximate algorithms which go along well with gradient descent, which is already approximate.
+And lastly, we'd like to integrate with all the existing training pipelines.
+This is more of an empirical challenge here.
+We don't want to reinvent something like PyTorch.
+And so we'd like to reuse all the existing models and training pipelines.
+So here are some of the design decisions that we made.
+Much of this borrows from work by other researchers.
+I'm not necessarily inspired by DeepProblog, but would later learn that there was work by many other researchers as well.
+And our main contribution here was really using Datalog and putting all of this together in a practical system, right?
+So the first design decision here was to use a relational representation for R, right?
+And I don't need to tell a database community about how the relational model has withstood the test of time.
+It can represent very general forms of data in arbitrary graphs.
+There are many other nice properties about relations, as I will show you when we tag tuples with probabilities and more general kinds of information,
+so this relational representation is really helpful.
+The second is the choice of the language for P, and here we use a Datalog-based language.
+We started out literally with Datalog, but it has grown over the years.
+We have support for algebraic data types, foreign functions, and so on.
+Actually, it is at this point Turing complete.
+So depending on what subset of a language you use, you get different guarantees.
+Perhaps the most interesting piece here for this audience is we accidentally discovered provenance semirings.
+We were playing with different kinds of tags and eventually realized that they could generalize them in this very elegant work,
+which was mentioned at the beginning of this workshop on provenance semirings.
+I will show you the different semirings that we have in my talk.
+Lastly, we have integration with both PyTorch and JAX.
+PyTorch for getting models that might be pre-trained and so on that we might want to fine-tune,
+but also for computing the loss here using something like JAX.
+It is a pretty usable framework and to end with lots of moving pieces.
+Let me give a simple motivating example of the kinds of things we can do with Scala.
+This is a simple strategy game called Pac-Man.
+It is actually a simplified version which is called Static Pac-Man.
+The ghosts are not moving.
+The setup is as follows.
+There is this grid of 5x5 cells.
+Each time in each instance of this game, we randomly assign these ghosts, the Pac-Man agent and the goal in different cells.
+As I said, the ghosts do not move and so the goal is to learn to reach the goal without hitting any of the ghosts.
+We set this up as a simple RL reinforcement learning problem.
+We use a simple model here which is BQN, BQ networks to train this agent.
+The baseline here is an end-to-end neural model, a convolutional neural network,
+which is not given supervision on which cells contain ghosts or the goal post or the Pac-Man itself.
+All of this is the intermediate representation to be learned.
+The only supervision one gets is after an entire game episode where either the Pac-Man reached the goal,
+so you get a reward of 1 or it didn't and in which case it gets a reward of 0.
+We formulate this problem in Scalop by decomposing it into a neural model which is doing this low-level perception.
+The goal of the neural model is to simply learn what each cell might contain.
+There are four choices.
+It can either be empty or it can contain a ghost or it can contain the Pac-Man itself or it can contain the goal.
+These are the four choices.
+Now this neural model outputs these choices to a logic program in Scalop whose goal is to do the path planning.
+In summary, instead of having a monolithic neural network which is trying to learn end-to-end how to do both entity extraction and path planning,
+we decompose this task into entity extraction which is sort of low-level perception that is best done by a neural module
+and a logic program, a classical algorithm which does the path planning.
+At each step, the goal is to decide whether the Pac-Man should move up, down, right or left.
+You'll get the reward only after an entire episode of around 20 steps.
+Here is our empirical result.
+In just 50 such episodes with this Scalop program that I showed you, we can get an accuracy of 99.4%.
+Whereas if you do this with a baseline of end-to-end neural, you get a much lower accuracy and it requires over 50,000 episodes.
+There's some hand-waving here. This is not entirely a fair comparison because we have written a domain knowledge using logic rules.
+I probably skipped over the program itself so here goes.
+This is our syntax for our data log-based language, in this case for path planning.
+The goal here is to compute the next action, one of these four choices.
+That in turn depends on whether there's a path from an adjoining position where the Pac-Man currently is to the goal.
+The definition of a path is itself a recursive predicate.
+It's a path that does not collide with any of the hosts and that is encoded using what we call safe cells.
+Any questions so far?
+The programmer writes this discrete program without any probabilities and so on.
+What we will see happening under the hood when both at training and inference time is a neural model will compute these predicates such as actor, goal and enemy only with different degrees of certainty.
+In some sense, we have all of these possible words being tracked simultaneously by the scallop engine.
+All of that computation will be done through tags which you don't see here at the level of the values that are being propagated.
+Can I ask you a quick question on this? Is there a notion of a shortest path or is it any path?
+Great question. Here we say any path but if I understand this correctly, the tags will penalize paths that are longer.
+Cycles in the path you will...
+Let me get into the semirings. The short answer is the tags will be tracking a finite amount of information so they won't necessarily compute all paths with cycles and so on.
+In this example, the neural network is responsible for extracting the state of the program and then you have an actual program to perform the logic.
+The neural network extracts action information or something else.
+So the neural network only extracts...
+So the question was whether the neural network extracts these predicates actions.
+If it did.
+So that is the baseline that I was showing you that you don't have a logic program.
+So the neural network is taking in this grid of pixels, 200 by 200 pixels and producing one of these four outputs or other distribution over these four outputs.
+So that is the baseline. If you were using that, then you wouldn't need scallop.
+Here we are trying to show you that you can actually do more data efficient and robust and so on.
+By the way, this program, which is learned, generalizes very nicely to much larger grids, even 25 by 25.
+So you see, whereas a network which was trained end to end would probably not generalize well to other grid sizes.
+So let me briefly talk about what is going on in the scallop compiler.
+So we have this differentiable reasoning framework.
+First, a preview of our entire compiler.
+So the surface syntax looks like this.
+In this case, it even has limited forms of quantifiers.
+We have a front end which produces these abstract syntax trees and there are several passes here for type inference and so on.
+Then we have a back end where, which is based on extended data log where we do a lot of optimizations including query planning and magic set transformations and so on.
+And finally, we have this relational algebra machine or RAM, which is what is actually executed at training and inference time.
+And this is what the equivalent scallop RAM program looks like for that high level constraint.
+So where does prominence come in?
+So the semantics of SEL RAM, which is essentially just extended relational algebra, which is the semantics of data log.
+We have implemented a very general framework for tracking provenance.
+And this is inspired by the work on provenance semirings that was mentioned at the beginning of this workshop.
+And we even have this very clean interface to define new provenance structures.
+So again, covered in the original tutorial, but briefly there's this tag space that you have to define yourself.
+And then various operations for disjunction, conjunction, negation and saturation.
+I've shown one instance of this abstract structure here, which we call max min probabilities.
+Here the set of tags is real numbers between 0 and 1 and disjunction is max, conjunction is min and so on and so forth.
+If you apply this max min probe to a particular rule during the execution of the program I showed you,
+let's say the rule which computes whether a cell x comma y is safe.
+So it is safe if it is indeed a grid cell, a cell in the grid, in the 5 by 5 grid,
+and we do not believe that there's an enemy in the cell.
+So this is the standard semantics of data log, of discrete data log, untagged semantics.
+So let us say that in 1 comma 2 and 2 comma 3 are two different grid cells.
+And let us say the enemy is in the cell 2 comma 3, then we know how to compute this difference.
+So that's just the tuple 1 comma 2.
+But in the tagged semantics, something much richer is happening, which is that we have these tags t1, t2 and t3 now.
+And they are propagated here along with the output values of each rule.
+And once you use a particular provenance semiring, in this case the max min probe,
+we can for example say that in this case we believe the enemy is in cell 2 comma 3
+with the probability of 0.2 coming from the convolutional neural network.
+And so now you can imagine every cell has some probability of an enemy being there.
+And accordingly you can now get estimates of which cells are safe, okay?
+Yes, go ahead.
+So the difference with prob log is that you use this fuzzy logic, we are propagating the probability.
+The difference to prob log?
+Yes, so the prob log has this weighted model accounting semantics, right?
+So you use the fuzzy semantics to propagate the probability.
+So we, so I wouldn't know the answer to that.
+We can probably take that offline, but we do have, so this was as I said inspired by deep prob log.
+We do have weighted model counting.
+I just showed you, so max, I see, so you mean fuzzy as in this max min.
+Okay, okay.
+So I just showed you a simple semiring.
+In practice we don't use any of those.
+We just use them early on while we are developing applications,
+but very quickly turns out these fuzzier semirings don't really help learn the model, okay?
+So the one that we really use, so as I said, there's the discrete execution.
+There's the probabilistic one, and then finally there's the differentiable one,
+which is what we use for learning, right?
+And the one that you are probably talking about is what we call top K proofs.
+So along with each tuple, we track, you know, what we call, you know, up to the top K proofs,
+which I think Eric in the first talk referred to as I believe W of X, okay?
+So we don't count how many times a tuple was used or anything like that.
+Yes, with respect to the negation and saturation operations, right?
+Can you expand a little bit on what your requirements for them are, for this to work?
+Yeah, this is sort of too low level for me to explain.
+So I wouldn't know.
+I'll be happy to get you in touch with the students.
+First of all, it will be stratified negation.
+But I think you are asking me a deeper question than that.
+What's the structure, what's the test, what's the negation has to prove that?
+So if it comes to me, I'll let you know.
+I do know exactly what you're asking, and I'll try to see if I can remember, okay?
+There are certain restrictions on all of these, on negation and saturation, okay?
+But you prove them once and for all when you're defining the semi-ring, okay?
+And so you can then use it.
+So I'm not going to go too much further into semi-rings other than to just say that the nice thing here,
+at least to me, is that the programmer writes as if they are programming against a deterministic
+neural model that is producing these outputs, right?
+But under the hood, you have all of these probabilistic and differentiable reasoning happening through these tags, okay?
+We have applied this to a wide range of benchmarks and are now moving to even more sophisticated ones in robotics
+and healthcare, for explainable healthcare and so on.
+But I'll just show you some core, you know, some challenges in the field of AI that we started out with.
+These include, you know, benchmarks in computer vision, which have images and video.
+For example, here, this is this Mugen benchmark where the goal is given a short video and a piece of text
+to give a score between zero and one that tells how likely is this text talking about the frames in this video, right?
+So this, as you can imagine, has applications in video captioning, video search, video recommendation and so on, right?
+There is, we have benchmarks in NLP as well.
+Again, fairly standard ones and then we also have multimodal benchmarks.
+And much of these benefits of relational, the relational model are useful here.
+For example, we extract scene graphs from images which can be represented as relations.
+We extract abstract syntax trees from in semantic parsing, which are again represented as relations, right?
+This is where the rubble meets the road. All of this theory is elegant.
+But if it doesn't work in practice, then it's not, then it doesn't help us, right?
+When we started this project, many of these baselines, both neural and neurosymbolic, were far behind us, right?
+But by the time we got all of this published, some of them had even crept back up ahead of us, right?
+So this is sort of the challenge we face against the end-to-end deep learning paradigm, right?
+Which is, it will, you know, as newer neural architectures and so on are designed, they might even outperform, say, the neurosymbolic approaches, okay?
+So, any questions before I proceed? Yes.
+Maybe also, right, so accuracy is one thing, right?
+But I could also see that since you're encoding some of the main knowledge into your program, right?
+I could see that, for example, you might need less data to learn the model and things like that, and maybe it's more performant.
+Yes, so great question.
+And we have all of these results in our PLDI paper, PLDI 2023, where we talk about better interpretability.
+So if you remember, the intermediate representation R on which no supervision was given, we can actually look back what did it actually learn the right representation, right?
+And the answer is yes, so it is more interpretable, it is more robust and better generalizable.
+So these better neural networks, are they kind of trying to do what you do with your structured constraints?
+Are they trying to do that through network structure?
+Are they trying to simulate, basically, what you can do in a more elegant way?
+So, first of all, these are end-to-end deep neural models, right, like transformers and so on.
+We wouldn't necessarily know what they are trying to do, but they are solving this problem.
+Let me show you one, right?
+So this pathfinder was a benchmark by, I think, Google Research a few years ago called PathX.
+You see, they're two tiny dots, and you have to tell whether there's a dotted path from one to the other, okay?
+And even for a human, it can take up to two minutes to tell for some of these difficult images whether there's actually a dotted path or not.
+So it's a binary classification problem, right?
+So, you know, so the state of the art now here is actually a transformer which, I'm sorry, which beats what we have.
+So you see for PathX, there's this transformer model which is doing even better than ours.
+In our case, we simply, you know, we have the rule for computing transitive closure.
+So once you know which, where are the two dots and where are the edges, you can use, you know, simple these two rules to tell whether they are reachable or not.
+But you don't know if their model is trying to do something like that in the deep learning model directly?
+Right, so we haven't actually seen, you know, like for explanations within them.
+So it would be nice to see that.
+There are also some neuro-symbolic baselines here.
+I mean, work that Guy and others have done.
+By the way, a lot of his work has gone into this with sentential decedent diagrams and so on in our weighted model accounting.
+You know, just ignore, you know, not mentioning here.
+But there are other neuro-symbolic works as well based on, you know, abductive reasoning and so on that we were able to outperform.
+Yeah.
+So I have a question about the gradient semi-ring, which was mentioned several times today.
+So I don't understand how it's useful in the context here because the gradient semi-ring really computes the forward derivatives,
+which means that if you have a neural network for object detection with a million parameters,
+you have to push forward a million dimensional vector through your whole computation path.
+And what you really need for machine learning is the backward derivatives, which are, you know, linear time.
+So even though mathematically the gradient semi-ring is a beautiful thing,
+it's actually the wrong tool for machine learning.
+You want the backward derivative not to forward.
+Yeah, so I think we'll have to talk about this more offline.
+Sorry about that.
+I wasn't paying too close attention to the gradient semi-ring.
+Let's talk more.
+Could you go back once?
+Yeah.
+So for the first two examples, we have the MNIST bit.
+Yeah.
+And then this is, like after you recognize, so another approach is that you recognize bit and then you just write Python to something to get.
+Right.
+So why is this any better?
+Why are we doing anything better?
+Your supervision is not given on the individual MNIST digits.
+Okay.
+It's only given on the final result.
+Yeah.
+So but this example is, it feels a little bit confined.
+Right.
+So I could have done this by doing the two basic approach.
+Yeah.
+Yeah.
+For example, here we are this kind of more streamlined approach has a clear benefit.
+So if you had supervision on the intermediate results, you wouldn't need scallop at all.
+Okay.
+Right.
+Right.
+So in, in none of these benchmarks, do we have intermediate supervision, even though many of them are synthetic and you actually know the intermediate labels.
+So that is how we actually, you know, measure whether you know, you know, the degree of interpretability, how much has it actually recovered the information.
+So I'm not showing you, you know, we have heat maps for all of this to show you actually what intermediate representation was learned.
+And it is, it matches the synthetic data's labels.
+Yes.
+Okay.
+So, you know, that is, you know, I'm just going to show you some fun things here.
+There's not much more I can say here with, you know, so now what happened was in these two years that we did this work, LLMs and more generally foundation models came on the scene.
+And we wondered, you know, can we catch up?
+Right.
+Can we somehow integrate this into scallop?
+And the answer surprisingly is yes.
+Okay.
+And this is still open.
+I think Joe also brought this up, you know, if I understood correctly what you're saying.
+So what is the, the programming, you know, abstraction for say, you know, these generative models, and surprisingly, the relational model still works.
+If you think of any foundation model, right, it is a binary relation which takes a prompt and gives a response.
+Right.
+And these are data types where the strings or tensors and so on are all supported in scallop.
+Okay.
+And it's actually a relation, not a function because based on the temperature and so on that you use the same prompt could have different responses.
+Right.
+You know, very well into scallop.
+And we built this library of plugins.
+We now have 12 foundation models integrated into scallop and you can add new ones very easily using our foreign function and predicate interface.
+I'm not going to go too much into these, but I can, you can sort of see how we are, we have these decorators for relations.
+And you can use a few short examples or you can use chain of thought, you can use auto GPT, you can even fine tune, you know, layers of these models in scallop using again just end to end supervision.
+In this case, you know, we break down this task into sort of this in context learning which extracts tuples, you know, which are the basic relationships between pairs of people mentioned in this passage.
+And then we write a few rules in this case just three, which can compute the answer to a question which is how is a particular pair of people in this passage related.
+Right.
+So this is sort of showing you multi hop reasoning.
+By the way, we even have rule learning here so the parameters don't just have to be in the neural model but for example this relation composition is itself noisy.
+And you could learn the weights of individual tuples of this relation.
+You can extend it to vision models as well. So here's a simple one, which is actually a multi model model clip from open AI, which also provides probabilities.
+So in this case, the input is an image.
+It's a bound argument and the output is the label.
+So in this case, if you give a set of labels such as cat and dog, it will tell you the probability of this image being cat or a dog.
+We have also integrated meta segment anything models.
+So this in this case, you are given an image as an input, and it produces a set of tuples with an ID of each segment and the tensor representation of the segment.
+Right.
+You can put these all together and build very interesting multi model applications in scallops.
+So in this case here, what you see is three different models put together to solve the problem from this clever benchmark, which asks in this case, some some question that involves elementary reasoning about a scene.
+Right.
+How many green objects are there in the image.
+I'm not showing you all of the rules that we wrote in scallop.
+There are about 100 rules that we wrote for this particular task.
+But we use these three different models to extract basic information.
+In this case, doing the semantic parsing of this question, extracting segments from this image and finally labeling each segment with a piece of text.
+Finally, we can get the answer that there are three main objects in this image.
+Okay.
+So I'm not going to show you the imperial results.
+This work is still under review.
+We have applied it to a wide range of benchmarks, including those involving vector databases.
+So, you know, you're having retrieval and generation, but also image generation and so on.
+Right.
+And you can actually run many of these applications at this URL.
+And there's a lot more resources at this particular URL.
+Thank you very much for your attention.
+Any questions?
+Thank you.
+And once

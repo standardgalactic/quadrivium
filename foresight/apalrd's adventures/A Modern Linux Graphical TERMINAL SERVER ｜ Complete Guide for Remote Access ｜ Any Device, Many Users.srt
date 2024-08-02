@@ -1,0 +1,1028 @@
+1
+00:00:00,000 --> 00:00:03,840
+I've got here a variety of computers running all kinds of different operating systems from
+
+2
+00:00:03,840 --> 00:00:11,200
+Raspberry Pi, an iPhone, an Intel MacBook, an iPad, a Windows Surface, an M1 Mac, and a cheap
+
+3
+00:00:11,200 --> 00:00:16,240
+thin client. And all of these are connected to a virtual session on a terminal server. So how am
+
+4
+00:00:16,240 --> 00:00:21,440
+I able to share one computer amongst all of these users running on all of these different platforms
+
+5
+00:00:21,440 --> 00:00:24,640
+without using virtualization? Come along and find out.
+
+6
+00:00:24,720 --> 00:00:32,000
+The concept we're implementing today is called a terminal server. Long ago,
+
+7
+00:00:32,000 --> 00:00:37,680
+mainframes using time-sharing systems allowed users to share computer resources. Back then,
+
+8
+00:00:37,680 --> 00:00:43,680
+they used teletype equipment as terminals. Incidentally, this is why Unix and Linux named
+
+9
+00:00:43,680 --> 00:00:50,080
+their terminals TTY, short for teletype. As technology progressed, MIT wanted to develop
+
+10
+00:00:50,080 --> 00:00:55,840
+a unified computing environment that encouraged the sharing of ideas, code, and data across all of
+
+11
+00:00:55,840 --> 00:01:02,480
+MIT. They called this initiative Project Athena, and they developed many of the ideas surrounding
+
+12
+00:01:02,480 --> 00:01:08,880
+modern thin clients. This project also included the X-Windows system, a protocol to allow graphical
+
+13
+00:01:08,880 --> 00:01:15,120
+applications to access graphical terminals separated by a network. Fast-forwarding to the
+
+14
+00:01:15,120 --> 00:01:21,840
+modern era, Microsoft has supported graphical terminal servers since NT4, and continues to
+
+15
+00:01:21,840 --> 00:01:27,440
+offer a terminal server product to this day. So apparently, it's useful enough to some company.
+
+16
+00:01:27,440 --> 00:01:31,200
+We are going to build a Linux equivalent to the Microsoft terminal server,
+
+17
+00:01:31,200 --> 00:01:36,720
+supporting many user sessions at the same time without virtualization. While I won't be expanding
+
+18
+00:01:36,720 --> 00:01:41,920
+a network login today, you could combine this setup with system-wide network authentications
+
+19
+00:01:41,920 --> 00:01:46,160
+such as Kerberos, which incidentally was also developed by Project Athena.
+
+20
+00:01:48,640 --> 00:01:57,360
+Welcome to the server room. This is the hardware we're using today. We got an AMD Ryzen 5 3400G
+
+21
+00:01:57,360 --> 00:02:03,600
+with 32GB of RAM, and we just got our Exubon 2 installer, keyboard and mouse,
+
+22
+00:02:03,600 --> 00:02:08,640
+Gigabit Ethernet, PGA. Once we're all done, the only thing we're going to need plugged in
+
+23
+00:02:08,640 --> 00:02:16,000
+is going to be the Ethernet power. I've chosen to install Exubon 2 desktop version 21.10,
+
+24
+00:02:16,640 --> 00:02:22,240
+although you can choose any Ubuntu flavor you'd like. I chose Exubon 2 since it's a
+
+25
+00:02:22,240 --> 00:02:29,120
+lightweight desktop that I feel is very easy to use. Even though this is a server, I'm starting
+
+26
+00:02:29,120 --> 00:02:34,000
+with a desktop OS, so the entire graphical environment and graphical applications come
+
+27
+00:02:34,000 --> 00:02:38,800
+installed. Depending on your use case, you might want to change the file system here. If you choose
+
+28
+00:02:38,800 --> 00:02:44,720
+none, it'll install on EXT4, which is a pretty good install if you're just using it normally.
+
+29
+00:02:44,720 --> 00:02:49,200
+I'm going to choose ZFS instead. So with ZFS, each user will get their home directory on a
+
+30
+00:02:49,200 --> 00:02:54,320
+separate dataset, and it'll also create snapshots of the root file system every time it does a
+
+31
+00:02:54,320 --> 00:02:58,960
+software update, and it'll let you roll back to them through the boot menu. So this is a nice
+
+32
+00:02:58,960 --> 00:03:03,440
+feature if you're managing users and want to be able to back up their datasets to TrueNAS or
+
+33
+00:03:03,440 --> 00:03:12,320
+something like that. So now we let this run, and we'll come back when it's all done.
+
+34
+00:03:13,200 --> 00:03:17,840
+So now because we installed the desktop Ubuntu, we have a graphical user interface instead of a
+
+35
+00:03:17,840 --> 00:03:22,160
+command line. So it's going to pop up with some graphical things we need to take care of. The
+
+36
+00:03:22,160 --> 00:03:24,400
+first one is this language support dialog, and we're going to let it go.
+
+37
+00:03:29,040 --> 00:03:32,560
+The software updater also wants to run, and we're going to tell it to install updates now.
+
+38
+00:03:33,440 --> 00:03:44,080
+Hey, it wants to restart. We're going to restart later, because we're going to have to restart
+
+39
+00:03:44,080 --> 00:03:48,400
+pretty soon anyway. So now we're going to open a terminal, and because it's a server, we probably
+
+40
+00:03:48,400 --> 00:03:51,440
+want to administer this over SSH, so we're going to install open SSH.
+
+41
+00:03:56,000 --> 00:04:00,480
+And also XRDP, which is the first remote desktop utility we're going to install, and it's actually
+
+42
+00:04:00,480 --> 00:04:10,240
+installs almost everything through this package. The last thing we need is audio support for XRDP,
+
+43
+00:04:10,880 --> 00:04:17,840
+and currently there's a bug in the installer for XRDP's audio that doesn't work correctly with ZFS
+
+44
+00:04:17,840 --> 00:04:23,600
+file systems or NFS home directories. So as a result, I'm not going to put this in the video,
+
+45
+00:04:23,600 --> 00:04:27,280
+but the instructions are my blog posts, and I'm keeping them up to date as I work with the developer
+
+46
+00:04:27,280 --> 00:04:32,560
+on solving this. Now at this point, we can reboot the system, and then we're done using the physical
+
+47
+00:04:32,560 --> 00:04:39,520
+console. We can do everything else remotely. So to understand what's happening here, let's dive
+
+48
+00:04:39,520 --> 00:04:45,680
+into how a Linux graphical program gets its output onto the screen. So any graphical program has a
+
+49
+00:04:45,680 --> 00:04:52,400
+canvas. That's the region within the Windows borders. Windows draw things onto their canvas,
+
+50
+00:04:52,400 --> 00:04:57,600
+such as shapes, or text, or graphics, or whatever the window wants to draw. The output of all of
+
+51
+00:04:57,600 --> 00:05:02,960
+these windows is sent to the window manager, which composites all of them into a single canvas.
+
+52
+00:05:03,920 --> 00:05:10,240
+This composite is then sent to the display server. The display server takes the canvas and interfaces
+
+53
+00:05:10,240 --> 00:05:16,880
+with the appropriate hardware drivers, dealing with multiple monitors, resizing monitors, etc.
+
+54
+00:05:16,880 --> 00:05:21,120
+The video output for each monitor is finally sent to the video hardware,
+
+55
+00:05:21,120 --> 00:05:26,240
+which generates a physical signal to send to the monitors. Now we can inject ourselves at different
+
+56
+00:05:26,240 --> 00:05:32,400
+points in this process to get different types of remote graphical access. To view the contents of a
+
+57
+00:05:32,400 --> 00:05:39,440
+single window, we can redirect it over SSH using x11 forwarding. In this case, a single program is
+
+58
+00:05:39,440 --> 00:05:44,960
+running on the remote system, but the display for that one program is sent to the client. With a
+
+59
+00:05:44,960 --> 00:05:52,400
+terminal server such as XRDP or X2GO, we act as the display server. In this case, we create a full
+
+60
+00:05:52,400 --> 00:05:58,320
+desktop environment in window manager bound to our remote session, cutting out the display hardware
+
+61
+00:05:58,320 --> 00:06:03,600
+entirely. Alternatively, we could insert ourselves into the display server and display hardware
+
+62
+00:06:03,600 --> 00:06:10,000
+pipeline and capture the output being sent to the monitor. This is normally how VNC operates,
+
+63
+00:06:10,000 --> 00:06:14,320
+taking over the same session that would normally be displayed on the display hardware.
+
+64
+00:06:14,320 --> 00:06:19,280
+And finally, if we're operating in a virtual machine, then the display hardware is emulated
+
+65
+00:06:19,280 --> 00:06:24,640
+anyways, so we can capture the output of the virtual graphics card and send that over the
+
+66
+00:06:24,640 --> 00:06:28,960
+network. I've done other videos on this topic using SPICE for thin clients.
+
+67
+00:06:30,720 --> 00:06:33,520
+So now that we have the system up and running, we should be able to connect to it through remote
+
+68
+00:06:33,520 --> 00:06:39,120
+desktop. This is the Microsoft remote desktop client available from Microsoft Store. It's also
+
+69
+00:06:39,120 --> 00:06:44,800
+available on Android, on iOS, on macOS. Pretty much every platform has a software available,
+
+70
+00:06:44,800 --> 00:06:47,440
+and it looks pretty similar. So we're going to walk through it on Windows, but it should be the
+
+71
+00:06:47,440 --> 00:06:52,640
+same whatever platform you're using. So we have to add a PC. We need the IP address of our terminal
+
+72
+00:06:52,640 --> 00:07:00,720
+server. And we could either tell it to ask every time or we could add a user account here. I'm
+
+73
+00:07:00,720 --> 00:07:06,080
+going to tell it to ask every time for now. So let's see what that looks like. So now if we double
+
+74
+00:07:06,080 --> 00:07:11,680
+click on it, it tells us it has a self signed certificate. So because we're not running in a
+
+75
+00:07:11,680 --> 00:07:16,320
+Windows domain, we don't have a public certificate for the server. It is a little bit concerned,
+
+76
+00:07:16,320 --> 00:07:22,560
+but we can click through that. So now we get the login to VDI system, and this is done by XRDP.
+
+77
+00:07:22,560 --> 00:07:33,520
+So we can use our username and password. And we're logged in. I have a terminal open from
+
+78
+00:07:33,520 --> 00:07:42,480
+when I installed the audio support. So this is our exubuntu desktop and we're logged in via Windows.
+
+79
+00:07:43,120 --> 00:07:48,400
+We have access to all of our programs, including web browser. Go to my website.
+
+80
+00:07:55,680 --> 00:07:58,480
+It's very functional. I mean, this is running just fine.
+
+81
+00:07:58,960 --> 00:08:04,800
+The web video is not a good experience. So don't try web video, but most applications will work pretty
+
+82
+00:08:04,800 --> 00:08:10,000
+well. So now let's add more users to the system. So we could either from the terminal if we wanted.
+
+83
+00:08:10,960 --> 00:08:21,360
+So we do sudo add user, make him a name, alpha. And we need our sudo password.
+
+84
+00:08:28,160 --> 00:08:31,520
+And the full name is what gets displayed on the login prompt sometimes.
+
+85
+00:08:32,160 --> 00:08:34,160
+You could set it, you could not set it, it doesn't matter to you.
+
+86
+00:08:34,160 --> 00:08:42,880
+So now we have the username VDI alpha that can log in really. How about adding a user from the GUI?
+
+87
+00:08:42,880 --> 00:08:43,600
+Can we do that too?
+
+88
+00:08:50,400 --> 00:08:51,840
+So I got my admin user.
+
+89
+00:08:55,680 --> 00:08:59,280
+And change my name. So let's add a new user.
+
+90
+00:09:04,160 --> 00:09:09,520
+Another thing to note. So Linux does not allow you to start with a number.
+
+91
+00:09:10,080 --> 00:09:14,160
+And XRDP seems to have trouble if you're using an ends with a number.
+
+92
+00:09:14,720 --> 00:09:19,120
+Numbers seem to be fine in the middle, but don't put a number on the end.
+
+93
+00:09:21,840 --> 00:09:23,360
+So now we need to set him a password.
+
+94
+00:09:26,160 --> 00:09:28,080
+And the user can change their own password later.
+
+95
+00:09:30,000 --> 00:09:31,680
+There we go. So we got some remote users.
+
+96
+00:09:32,640 --> 00:09:34,560
+Now let's see what it looks like when one of them logs in.
+
+97
+00:09:37,120 --> 00:09:40,080
+So we could log out of our session here and click log out.
+
+98
+00:09:40,800 --> 00:09:43,200
+Or we could go up here and just close the session.
+
+99
+00:09:45,520 --> 00:09:47,760
+So now it happens next time we connect to that server.
+
+100
+00:09:54,080 --> 00:09:56,400
+So we get the login screening and we'll try VDI Bravo.
+
+101
+00:10:01,680 --> 00:10:08,400
+And there we go. They have a session too. So unless we do some more restricting,
+
+102
+00:10:08,400 --> 00:10:13,680
+a lot of these programs here exist for every user, but every user might not be able to use them.
+
+103
+00:10:13,680 --> 00:10:18,960
+So here if I try to create a new user, it asks me for the password for admin, not for my own user.
+
+104
+00:10:18,960 --> 00:10:22,960
+And that's because VDI Bravo doesn't have pseudo permission, so they're not allowed to make changes.
+
+105
+00:10:23,680 --> 00:10:27,200
+So if you try to make changes, it requires the password for the admin account that does have
+
+106
+00:10:27,200 --> 00:10:32,800
+pseudo privileges. So remote users on the system see all of these programs, but can't necessarily
+
+107
+00:10:32,800 --> 00:10:36,000
+use them. So we'll restrict that in a little bit later.
+
+108
+00:10:39,760 --> 00:10:43,120
+So how about if we log in again as the admin?
+
+109
+00:10:43,360 --> 00:11:01,440
+So right back to our session we were up before. So when a user closes the session by closing
+
+110
+00:11:01,440 --> 00:11:05,920
+remote desktop, it leaves all their programs open and running. And next time you connect,
+
+111
+00:11:05,920 --> 00:11:11,120
+it reattaches to them. So you can leave Firefox or terminal or whatever open and come back to it
+
+112
+00:11:11,120 --> 00:11:17,440
+later, and it won't close anything when you log off. What about copying and pasting things?
+
+113
+00:11:22,560 --> 00:11:27,200
+So I got an excerpt from Wikipedia. I just copied on my off screen. If I go in here,
+
+114
+00:11:28,160 --> 00:11:29,920
+I got a new text document.
+
+115
+00:11:36,960 --> 00:11:40,720
+Paste it in there. So this got copied and pasted across my session.
+
+116
+00:11:41,840 --> 00:11:46,800
+So the clipboard does work between your remote session. How about copying images? You go over
+
+117
+00:11:46,800 --> 00:11:53,680
+here on my desktop and copy an image. Can I paste it in here? Oh, must give remote desktop access.
+
+118
+00:11:53,680 --> 00:11:58,160
+Yeah, sure. Let's do that. So remote desktop asks for permission and then closed.
+
+119
+00:11:58,720 --> 00:12:02,160
+So I gave it permission and let's see if we can copy the clipboard.
+
+120
+00:12:16,720 --> 00:12:22,560
+There we go. We copied an image. How about files? Can we access any files on my remote system?
+
+121
+00:12:24,560 --> 00:12:28,640
+So I'm going to file on my Windows desktop here, and I'm going to copy it into the
+
+122
+00:12:28,640 --> 00:12:35,680
+remote session. It doesn't let me drag and drop, but I can copy and paste. And there you see my
+
+123
+00:12:35,680 --> 00:12:40,480
+file got copied to the remote session. So now you're all going to ask, what is web browsing like?
+
+124
+00:12:42,720 --> 00:12:48,320
+Let's try YouTube. Looks great. I get a display that resizes itself. I get a keyboard and I get
+
+125
+00:12:48,320 --> 00:12:53,280
+a mouse. What I don't get is the ability to take a flash drive or another USB device, plug it into
+
+126
+00:12:53,280 --> 00:12:56,640
+the Pi, and have it show up on the virtual machine. And that's what I'm going to expect.
+
+127
+00:12:57,360 --> 00:13:03,520
+So audio works as well. Sometimes it stutters if the video stutters, but it's functional.
+
+128
+00:13:04,480 --> 00:13:10,720
+So what about touch screens? Here we have an iPad. You can see that everything works correctly.
+
+129
+00:13:10,720 --> 00:13:14,880
+One quirk about the iPad is that the mouse does not move to the location of your finger.
+
+130
+00:13:15,600 --> 00:13:19,680
+So if you click your finger onto the touchscreen, it clicks wherever the mouse currently is.
+
+131
+00:13:20,240 --> 00:13:23,600
+So mouse movement is relative. As you drag your mouse across the screen,
+
+132
+00:13:24,480 --> 00:13:28,560
+I'm not necessarily touching where the pointer is. I'm touching somewhere else on the screen and
+
+133
+00:13:28,560 --> 00:13:32,480
+moving at the same distance, which can feel a little bit disorienting, but you get used to it
+
+134
+00:13:32,480 --> 00:13:38,640
+pretty quickly. So here we have a Microsoft Surface tablet. And in this case, the touchscreen does
+
+135
+00:13:38,640 --> 00:13:44,240
+work as expected. Wherever I click my finger is exactly where it clicks the mouse on the screen.
+
+136
+00:13:44,960 --> 00:13:57,360
+So I can click in the corner to close the window. I can drag. You can see the
+
+137
+00:13:58,480 --> 00:14:03,440
+click and drag box shows up. So a slight difference in functionality between clients.
+
+138
+00:14:05,600 --> 00:14:09,680
+Digital security has advanced a lot since the mainframe time sharing days,
+
+139
+00:14:09,680 --> 00:14:14,080
+and keeping users isolated from each other and from the system as a whole is very important.
+
+140
+00:14:14,320 --> 00:14:19,200
+Running a terminal server like this securely is perfectly within the capabilities of Linux.
+
+141
+00:14:19,200 --> 00:14:23,680
+However, with our current configuration, it's like giving everyone their own account on the same
+
+142
+00:14:23,680 --> 00:14:29,760
+desktop. Each user cannot see other users' documents, but they can all see system files,
+
+143
+00:14:29,760 --> 00:14:34,240
+and it's not hard for them to share files with each other. Whether that's a problem or a feature
+
+144
+00:14:34,240 --> 00:14:40,960
+is up to you. More importantly, RDP is a very commonly targeted protocol. While the protocol
+
+145
+00:14:40,960 --> 00:14:46,480
+with modern security settings is secure for the users and does keep user data safe, you will be
+
+146
+00:14:46,480 --> 00:14:51,600
+targeted by attacks and bots trying to guess random passwords. You'll probably also show up on an
+
+147
+00:14:51,600 --> 00:14:56,800
+index of all RDP servers publicly facing on the internet. You should plan on isolating the server
+
+148
+00:14:56,800 --> 00:15:01,760
+to your internal network and using a secure remote access VPN to connect back home. Also,
+
+149
+00:15:01,760 --> 00:15:05,840
+without additional configuration, we haven't limited how much system resources each user could
+
+150
+00:15:05,840 --> 00:15:10,160
+produce. So it's theoretically possible that some rogue user could start crypto mining with all the
+
+151
+00:15:10,160 --> 00:15:14,720
+extra CPU time. We also haven't limited who can log into the system, so anyone that has an
+
+152
+00:15:14,720 --> 00:15:19,520
+account on the computer can log in remotely. Most of these issues can be resolved by locking down
+
+153
+00:15:19,520 --> 00:15:25,040
+things on the server, and I'm going to go into how to configure them now. To configure session
+
+154
+00:15:25,040 --> 00:15:33,920
+management, we need to go to etsy xxdrp, and then the file is sessman.ini.
+
+155
+00:15:40,960 --> 00:15:46,000
+So this configures the xdrp session manager, and a lot of the options that we probably want to
+
+156
+00:15:46,000 --> 00:15:52,480
+add are in this file instead of the xdrp.ini file. The first few options that you might want to
+
+157
+00:15:52,480 --> 00:15:59,040
+consider changing are in the security section here. So by default, allow root login is true,
+
+158
+00:15:59,040 --> 00:16:03,760
+and we're going to set that to false. And that means that the user root can never log in.
+
+159
+00:16:04,400 --> 00:16:09,840
+There's also a line here that says terminal server users equals ts users, and that's the name of a
+
+160
+00:16:09,840 --> 00:16:17,120
+group. So once xdrp is installed, it does not create this group ts users. And so since the group
+
+161
+00:16:17,120 --> 00:16:24,400
+does not exist, any user on the system can log in. But if we create the group ts users and add
+
+162
+00:16:24,400 --> 00:16:35,680
+users to it, then we can restrict who can log in. So let's try that.
+
+163
+00:16:35,680 --> 00:16:52,880
+So we'll add the admin to the list, and who else do you want to add to the list?
+
+164
+00:16:54,000 --> 00:17:01,760
+Let's echo and foxtrot. So if you want to add someone later, you can go back to manage groups,
+
+165
+00:17:01,760 --> 00:17:07,040
+find the ts users group, and click properties, and click the checkbox for group members here.
+
+166
+00:17:07,840 --> 00:17:10,400
+If you want to do this from the command line, you would use group add.
+
+167
+00:17:15,360 --> 00:17:19,120
+This case, it already exists, but that would create the group if it didn't already exist.
+
+168
+00:17:19,120 --> 00:17:23,040
+And to add a user to the group, we use gpassword.
+
+169
+00:17:23,760 --> 00:17:33,840
+So this should have added our alpha user to group ts users.
+
+170
+00:17:34,560 --> 00:17:53,840
+You can see now the alpha is checked in this box, so it shows up in both places.
+
+171
+00:17:53,840 --> 00:17:56,960
+So what happens when an unauthorized user tries to log in?
+
+172
+00:17:57,600 --> 00:18:01,760
+I rebooted the server and let's see if VDI Charlie is allowed to access it.
+
+173
+00:18:04,720 --> 00:18:08,560
+So we get an error here that says login failed for display zero.
+
+174
+00:18:09,120 --> 00:18:13,360
+And so this is what a user will see if they try to log in, but they don't have permissions to
+
+175
+00:18:13,360 --> 00:18:18,640
+log in in this system. It takes them back to login screen. We get cancel to disconnect the session.
+
+176
+00:18:20,160 --> 00:18:25,680
+Now that we understand about ts users, there's a few other things we can look at in this file.
+
+177
+00:18:25,680 --> 00:18:30,400
+So restrict outbound clipboard. This sets if you're allowed to copy things from the server
+
+178
+00:18:30,400 --> 00:18:34,800
+to the client on the clipboard. If you're trying to prevent data from leaving the server,
+
+179
+00:18:34,800 --> 00:18:39,280
+this might be a good option to use. Max sessions. This is the maximum number of
+
+180
+00:18:39,280 --> 00:18:43,680
+sessions it'll allow. This doesn't mean your system is capable of this many sessions,
+
+181
+00:18:43,680 --> 00:18:48,160
+and your system might stop allocating more sessions long before then if it runs out of memory.
+
+182
+00:18:48,160 --> 00:18:53,760
+So by default, when you close a remote desktop session, the session will stay open.
+
+183
+00:18:53,760 --> 00:18:58,320
+So the next time a user logs in with that same account, we'll get connected to the already
+
+184
+00:18:58,320 --> 00:19:03,200
+existing session with all of the already running programs. If you set this to true,
+
+185
+00:19:03,200 --> 00:19:07,520
+it will eventually kill all the programs and log the user out. You can set a time
+
+186
+00:19:08,160 --> 00:19:14,400
+to wait before killing sessions. And you can also set a time to kill to disconnect idle sessions.
+
+187
+00:19:14,400 --> 00:19:18,160
+If someone's not using the system, but it's still connected, it can kick them off. If you'd
+
+188
+00:19:18,160 --> 00:19:23,040
+like the user to be able to log in more than once with the same account, you can set a session
+
+189
+00:19:23,040 --> 00:19:29,200
+allocation policy. The default is to have one session per user. If you try to log into a remote
+
+190
+00:19:29,200 --> 00:19:34,960
+session with the user account of another user who's already in a remote session, it'll kick out the
+
+191
+00:19:34,960 --> 00:19:39,520
+first user and transfer that session to the new user. If you'd like to intentionally create more
+
+192
+00:19:39,520 --> 00:19:44,960
+than one session, you could set this to one of these options here. The most common would be UBI
+
+193
+00:19:44,960 --> 00:19:51,200
+to filter by IP address or UBC to filter by connection. So by IP address, that means each IP
+
+194
+00:19:51,200 --> 00:19:55,040
+address connecting to the server can have one session at a time. Multiple connections from the
+
+195
+00:19:55,040 --> 00:19:59,280
+same IP address will get handed off to the same session, but multiple connections from different
+
+196
+00:19:59,280 --> 00:20:03,920
+IP addresses will go to different sessions. And by connection means that a new session is created
+
+197
+00:20:03,920 --> 00:20:09,440
+every single time remote desktop connects. If you're going to use UBI mode or especially UBC mode,
+
+198
+00:20:09,440 --> 00:20:14,960
+you really need to use kill disconnected sessions. With UBC mode, every time you make a connection
+
+199
+00:20:14,960 --> 00:20:19,440
+to the server, it'll create a new session. So there's no way for you to kill that session or
+
+200
+00:20:19,440 --> 00:20:25,840
+reconnect to it other than killing the process on the server. So something's going on with our
+
+201
+00:20:25,840 --> 00:20:30,480
+system. Someone's trying to use a lot of resources here. And the system has a lot of memory, but
+
+202
+00:20:30,480 --> 00:20:35,440
+someone is still using quite a bit of it. Let's see what's going on. So if we filter by CPU,
+
+203
+00:20:35,440 --> 00:20:41,200
+someone is clearly trying to stress the system here. And it looks like it's VDI echo. So we could
+
+204
+00:20:41,200 --> 00:20:46,960
+nicely ask them not to or we could try to restrict how much CPU time they can use. How about memory?
+
+205
+00:20:50,400 --> 00:20:56,320
+So our window manager is using a decent amount, which we kind of expect. But VDI echo again here
+
+206
+00:20:56,320 --> 00:21:01,120
+is using two gigs just for no good reason. So maybe we want to limit them to two gigs per user
+
+207
+00:21:01,120 --> 00:21:06,080
+or three gigs per user so they can't monopolize the whole system. The better way to visualize this
+
+208
+00:21:06,080 --> 00:21:11,280
+is by using control groups. There's a tool called system D CG talk, which shows us the usage per
+
+209
+00:21:11,280 --> 00:21:24,320
+control group instead of per process. So right now it looks like user 105.slice is using 200%
+
+210
+00:21:24,320 --> 00:21:32,320
+of the CPU and 2.2 gigs of memory. XRDP service is not using a ton at around 2.8%. But if I move
+
+211
+00:21:32,320 --> 00:21:38,720
+my window around a lot, you'll see that XRDP starts bubbling up to the top. So how do we tell
+
+212
+00:21:38,720 --> 00:21:50,000
+who user 105 is? Well, we use the command ID. So if we ask ID, it tells us that user is 1001.
+
+213
+00:21:50,000 --> 00:21:52,400
+But how do we go from a number to a user? Well,
+
+214
+00:21:55,920 --> 00:22:01,360
+so VDI echo. So VDI echo is the one that's using all of our CPU right now. So in order to bring
+
+215
+00:22:01,360 --> 00:22:06,080
+some sanity to the system, we're going to limit each user to use 200% of the CPU, which is two
+
+216
+00:22:06,080 --> 00:22:12,960
+threads and use two gigs of RAM. So the folder Etsy system D system is where we create both files
+
+217
+00:22:12,960 --> 00:22:19,760
+and folders to limit control groups. System D has a folder structure where we can put configurations
+
+218
+00:22:19,760 --> 00:22:26,960
+of control groups per user. Normally, this would be something like Etsy system D system user dash
+
+219
+00:22:26,960 --> 00:22:34,480
+number dot slice dot D. So for example, for user 1000, we might create a file in Etsy system D
+
+220
+00:22:35,440 --> 00:22:45,360
+system user 1000 that slice dot D and any dot comp files in that folder would be applied to slice
+
+221
+00:22:45,360 --> 00:22:50,400
+of user 1000. However, there's a little trick we can do if we eliminate the number and just do user
+
+222
+00:22:50,400 --> 00:22:58,000
+dash dot slice dot D, then this folder applies to all users by default if they don't have their own
+
+223
+00:22:58,000 --> 00:23:03,840
+configuration. So we're going to create this folder and create a configuration file in it to limit
+
+224
+00:23:03,840 --> 00:23:05,440
+the default VDI user.
+
+225
+00:23:16,800 --> 00:23:21,120
+So in this file, we're going to put a little bit of configuration that turns on CPU and memory
+
+226
+00:23:21,120 --> 00:23:39,920
+accounting and sets a quota for each one. So here's an example configuration I've linked in
+
+227
+00:23:39,920 --> 00:23:44,480
+the description below my blog post, which goes into some more detail and links to some resources
+
+228
+00:23:44,480 --> 00:23:52,080
+on system D control groups. So we're going to save this and let's see if this applies.
+
+229
+00:23:52,080 --> 00:23:57,680
+I rebooted the system so the changes take effect. We can see here that VDI echo is trying to run a
+
+230
+00:23:57,680 --> 00:24:03,280
+stress test again. But if we go back to CGTOP, we can see that they're being limited to roughly
+
+231
+00:24:03,280 --> 00:24:07,120
+200% CPU and suddenly under two gigs of RAM, just like we asked for.
+
+232
+00:24:07,840 --> 00:24:11,280
+Remember that color manager error we got earlier?
+
+233
+00:24:13,520 --> 00:24:16,240
+We get this error about the color manage device and we'll deal with that later.
+
+234
+00:24:17,200 --> 00:24:21,600
+It'll pop up from time to time, but here's how we fix that. So we need to create a configuration
+
+235
+00:24:21,600 --> 00:24:26,880
+file for policy kit. First, we need to see what version of policy kit we're using. In this case,
+
+236
+00:24:26,880 --> 00:24:33,360
+it's 0.105. In newer versions of policy kit, we need to create a .cont file which contains
+
+237
+00:24:33,360 --> 00:24:39,040
+JavaScript code for processing the rules. In older versions, we need to use a .pecla file.
+
+238
+00:24:39,040 --> 00:24:44,800
+This version 0.105 uses the pecla file method. So we need to create a file in the folder etsy
+
+239
+00:24:44,800 --> 00:24:48,400
+pull kit one local authority 50 local dot D.
+
+240
+00:24:51,360 --> 00:24:55,200
+And we can name it anything we'd like, but we need to make sure it doesn't conflict with anything else.
+
+241
+00:24:56,160 --> 00:25:05,680
+So now we have a pecla file. We need to copy and paste the code down for my website into this file.
+
+242
+00:25:10,160 --> 00:25:15,520
+So here's the configuration. It gives any user access to certain color manager permissions,
+
+243
+00:25:15,520 --> 00:25:17,360
+and that should get rid of the color manager errors.
+
+244
+00:25:18,960 --> 00:25:23,280
+So now we have a functional terminal server which can be accessed by clients of all different
+
+245
+00:25:23,280 --> 00:25:28,400
+operating systems. Ignoring internet video, this is a pretty good user experience for each client,
+
+246
+00:25:28,400 --> 00:25:32,720
+and uses a lot less resources than creating a virtual machine for each session.
+
+247
+00:25:32,720 --> 00:25:38,240
+Thanks to Microsoft's wide support for the RDP protocol, we can have access to high quality
+
+248
+00:25:38,240 --> 00:25:42,880
+clients on pretty much every operating system in existence. Microsoft publishes their client to
+
+249
+00:25:42,880 --> 00:25:49,680
+the Apple Store, the Android Store for Android TV even, and Samsung even supports RDP access on
+
+250
+00:25:49,760 --> 00:25:55,280
+their Tizen Smart TVs. So by using this protocol, instead of X forwarding or VNC, we get better
+
+251
+00:25:55,280 --> 00:26:01,120
+client access. This wide client support makes it a great solution for bring your own device type
+
+252
+00:26:01,120 --> 00:26:06,720
+solutions, where you're relying on potentially arbitrary user supplied devices that could be
+
+253
+00:26:06,720 --> 00:26:12,000
+running any operating system. While not specifically an advantage of the thin client architecture,
+
+254
+00:26:12,000 --> 00:26:17,440
+keeping all of your computing and data centralized in a server keeps important data off of the end
+
+255
+00:26:17,440 --> 00:26:22,480
+user's devices, which can be a great feature for remote access or for when you're traveling.
+
+256
+00:26:22,480 --> 00:26:26,320
+Be sure to let me know if you liked this video, and if you have any other topics on terminal
+
+257
+00:26:26,320 --> 00:26:28,160
+servers you'd like me to cover in the future.
+

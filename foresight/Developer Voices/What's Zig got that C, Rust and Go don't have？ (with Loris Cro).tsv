@@ -1,0 +1,1257 @@
+start	end	text
+0	5640	One trend we've seen a lot in programming in recent years is the attempt to replace C.
+5640	9560	And I think that's both wise and terrifying.
+9560	12920	It's wise because C is about 50 years old,
+12920	19240	and being old doesn't make it bad, but it has given us five decades to think about what works
+19240	22160	and what doesn't work in programming language design.
+22160	27120	We've got 50 years worth of techniques we really ought to be putting into practice.
+27320	32720	And putting them into practice is the terrifying part, because C is everywhere.
+32720	38080	You may not write C, but I guarantee you're writing something that runs on something that runs C
+38080	39760	and was written in C.
+39760	43840	It's in the compilation stack for everything we install.
+43840	48240	So if languages like Go and Rust want to become the new C,
+48240	51000	they've really got their work cut out for them.
+51000	55680	All of which makes this week's topic kind of breathtaking.
+55680	57160	We're looking at ZIG.
+57160	62920	It's a language that's not only trying to take on C and C++ and Rust and Go
+62920	65800	for that systems programming crown,
+65800	71800	it's also trying to replace the infrastructure that C itself gets built on, things like LLVM.
+71800	79320	So it can hopefully become the best way to build systems-level software across all different architectures.
+79320	82720	ZIG ends up being a project with a huge scope.
+82760	86680	And if you're a fan of programming languages, there is a lot to chew on this week.
+86680	91520	We cover cross-platform compilation, to memory management techniques,
+91520	95560	to new thoughts in compile-time metaprogramming.
+95560	98920	As well as when you've got these huge long-term ambitions,
+98920	103160	how do you structure an open-source project for long-term funding?
+103160	107200	There is a lot of ground to cover, so this is a bit of a longer episode than usual,
+107200	108840	and we'd best get started.
+108840	110480	I'm your host, Chris Jenkins.
+110480	114160	This is Developer Voices, and today's voice is Loris Crowe.
+127920	129600	I'm joined today by Loris Crowe.
+129600	131160	How are you doing out there, Loris?
+131160	132480	Hello, hi, Chris.
+132480	133600	Pretty good, thank you.
+133600	135360	Good, good. It's good to have you here.
+135360	137560	I always love it when we do a language deep dive,
+137600	140320	because I'm a particular fan of the world's programming languages.
+141320	143440	And you're going to tell us all about ZIG,
+143440	146120	which is a language I don't think I've heard of,
+146120	151800	until we had Joran Dirk Grief on the show from Tiger Beetle,
+151800	153800	who said they've written a new database in ZIG,
+153800	155880	and I thought, well, we have to do something about ZIG.
+155880	157280	I have to learn about that.
+158280	160360	So let's start here.
+160360	164800	I always think new programming languages come into being
+164800	170320	as a reaction to what's missing in the marketplace, if you like.
+170320	174160	Like, there's a burning reason why ZIG needed to exist.
+174920	176040	Do you think that's true?
+176040	177880	What's ZIG's raison d'être?
+179640	185880	Right. So I guess a way of answering this question,
+185880	191560	like, actually, is maybe to look at how it was created originally.
+191560	195080	So the original creator, Andrew Kelly,
+196040	201640	wanted to make a digital audio workstation software.
+202280	204280	For making electronic music and that kind of thing.
+204280	205520	Exactly.
+205520	208280	And he tried a bunch of different languages
+208280	210760	and he was unhappy with all the solutions,
+210760	215200	with all the trade-offs that each offered.
+215200	218120	So I think he started with higher level languages
+218120	221320	and then quickly found out that to do real-time audio processing,
+222440	228920	you can't use a language with automated memory management.
+228920	232880	And languages that don't give you precise control over the hardware.
+233560	234280	Yeah.
+234280	237480	Because audio is one of the places where we're talking hard real-time.
+237480	238280	Exactly.
+238280	238800	Yeah.
+238800	240400	You have to be there on time.
+242200	242720	Yeah.
+242720	246280	And but on the other end of the spectrum,
+247080	250960	at the time, the main languages that did give you
+251720	254560	full control over the machine were like C and C++.
+254560	260240	And each had its own, like, if you will, baggage of issues,
+260240	264480	which some of it is also up to, like, personal taste.
+265360	268680	But for example, C is very low level,
+268680	272360	but it doesn't have good metaprogramming facilities.
+272720	277440	C macros are very well known for being not particularly good.
+277880	279240	Yeah.
+279240	280040	Yeah.
+280120	282240	They're not much better than string mungent, right?
+282240	283080	Yeah, exactly.
+283080	287840	You mess around with strings and you have a lot of, like, unwanted side effects.
+288920	289880	Oftentimes.
+289880	291920	So it's a food gun.
+291920	293600	That's how we usually think of it.
+293600	295280	Yeah, yeah.
+295280	297320	On the other hand, you have C++,
+297320	300480	which I don't know if he actually did attempt to use,
+300480	303840	but in general, C++ exists in a space
+304880	307920	where the language is very powerful.
+307920	309720	It's very complex.
+309760	316600	And it's a type of language where you are heavy with abstractions, oftentimes.
+317360	321960	And that kind of detracts from what you're trying to accomplish.
+322320	326080	Or rather, some people can definitely make it work for them.
+326080	328600	And that is their preferred way of programming.
+328600	329720	So that's good.
+329720	333160	But for some other people, C++ doesn't really,
+334080	339280	you know, it doesn't feel good in your hand as a tool.
+340160	341600	For some people.
+341600	345840	Yeah, and I can see how people that we're not going to start a language war,
+345840	349120	but you can certainly see how people would feel that way about C++.
+349280	350040	Absolutely.
+350040	354520	And to me, you know, this is not really a thing of language war at all.
+354520	360040	Like, I can fully appreciate how somebody who likes that way of doing things
+360040	362280	can make it work for them.
+362280	364960	And but on the other hand, like, for me personally,
+364960	367680	that doesn't that way of doing things doesn't really click.
+367800	372480	So ultimately, I can totally see how somebody would be productive
+372480	374440	with C++ and I wouldn't.
+374440	376560	So I need a different tool.
+376560	377440	Right.
+377440	380160	And I think that Andrew also shares,
+381440	382960	generally speaking, this perspective.
+382960	386000	So he wanted to make a language that was
+387440	389920	low level, so they gave you full control over the machine
+390800	393440	that would be suitable for an audio workstation.
+394160	399720	And that, on the other hand, it wouldn't be overly complicated.
+400720	404880	And there's like a sentence that you can you can find in
+406000	409120	like Ziggs on the website where we say
+410440	412880	it's one of the first things that you can see on the front page.
+412880	415840	It says focus on debugging your application
+415920	418640	rather than debugging your programming language knowledge.
+419640	421840	Right. Yeah. Yeah.
+421920	425760	OK, so that's kind of I know people.
+425760	428480	Anytime you write something that's sort of competing with C
+428480	432840	in the low level world, someone says, why not go and why not rust?
+433000	435880	But you yeah, you begin to demarcate those as
+436880	439080	I'll let you answer it. Why is it not go or rust?
+441040	445720	So the reason why it's not rust, I would say is
+446200	449920	like the answer is very in a very general way.
+450800	453080	It's kind of the same answer as why not C++?
+453160	457560	I think that rust is another language that likes its own complexity
+458080	460320	and it gives a ton of power from that, for sure.
+460960	463280	But but the complexity is there.
+463800	466760	And and also
+468360	472000	when it comes to like giving you full control over the machine rust,
+472040	477440	it's not entirely of that opinion like rust for good reasons,
+477440	480240	for for safety reasons, rust wants to.
+482640	487040	Religate certain things inside unsafe rust,
+487040	490080	which is a part of rust that you are not supposed to use lightly.
+490600	495400	So that means that you will find out their libraries that
+496480	500280	when choosing between maximum performance in safety,
+500600	504480	they will choose safety, probably overperformance, oftentimes,
+504480	507240	because you do get audited if you have unsafe or not.
+507240	511640	So in general, rust is going for something slightly different
+511680	513840	than what Z is going for. OK.
+514720	517880	So both in terms of like tradeoffs between performance and safety,
+517920	522040	but also in terms of obstruction.
+522120	526440	And I would argue also like readability in terms of like the complexity
+526720	532000	because writing abstracted code makes it harder to understand and to read for for a consumer.
+533000	538320	But when it comes to to go, I think they go and they both share.
+539920	544400	An appreciation for simplicity, although go is not just simple,
+544400	545800	it's also very minimalistic.
+547560	551560	So I would say that there are like some parallels between Z can go,
+551800	555080	but we don't have the exact same take on everything.
+555080	557040	And I can get more into detail if you want later.
+557920	566000	But but ultimately, go is not as low level as rust and Z are.
+567000	573040	I am not sure if go would be the best choice for an audio workstation,
+573040	577640	for example, or for an operative system, because go has a runtime,
+577640	579640	has a garbage collector.
+579640	584640	Also, interoperability with C is a bit complicated in go because,
+584640	587640	well, first of all, everything, any language that has a runtime
+587880	591120	that makes interoperability with C a little bit more complicated
+591120	597560	because you need to give information to the runtime of your language
+597560	600440	to the garbage collector about what's going on with memory.
+600480	602840	And so that sometimes makes things a little bit awkward.
+603600	606160	But we go specifically.
+606160	610000	I do think that the for the go team, interoperability with C
+610360	613520	was never a priority or something that they really liked.
+613880	618320	So go can call C functions, for example.
+619400	621600	But you cannot do the inverse easily.
+621640	626200	So you cannot make a go function that can be easily called from C.
+626800	631520	And I think basically this is like a philosophy of the go team.
+631520	634360	Like they basically said, no, we want to do something different.
+634360	635840	We don't want to do something.
+635840	639720	We don't want people to rely too much on like we want to be able to consume
+639720	642920	C libraries, but we don't want to do the inverse.
+643200	644600	If you're in go land, you just go.
+644600	646480	I think that's kind of their philosophy there.
+646800	650520	Yeah, yeah, it's like we want to be able to reuse existing C,
+650520	653680	but we're not intending to live in the same ecosystem quite.
+654240	655640	Yeah, exactly. I would say that.
+655640	659280	And you can see that also in a bunch of choices
+659280	662440	that they made also with how compilation works in go
+663640	664920	like in terms of the compiler.
+664920	667360	But I think it's a reasonable choice.
+667360	671120	It makes sense, very different from what Zig is going for.
+671760	674360	Yeah, there's there's a I don't think we need language wars
+674360	677120	because there's a huge design space to be explored.
+677120	680160	And there's plenty of there's plenty of land for everyone.
+680280	681400	Right. Yeah.
+681400	684160	But OK, so that demarks what you want to be.
+684160	688640	What's what's Zig's answer to this set of design constraints?
+690840	693440	I think that.
+694800	697800	I think the most interesting part about the answer to like,
+697800	700720	let's say systems programming like lower level programming in general
+701360	704640	is to rebuild it from scratch.
+705480	709200	All these other languages that I own, not all these other languages,
+709200	714400	but like it is common to consider kind of like see the bottom layer
+714960	716800	of abstraction of what you're building.
+716800	720360	So for example, there are programming languages that compile to C code.
+720920	723360	Yeah, I think name is an example of this.
+724360	729080	And Rust itself, it doesn't compile to C, but for example,
+729080	734160	Rust depends on the C standard library of the platform that you're targeting.
+734160	738480	So if you're writing a Linux program, like a Rust program
+738480	740520	that you want to deploy on Linux,
+740520	745520	Rust will use the libc of your Linux distribution.
+748080	752560	With Zig, the idea instead is to really, really build
+753120	755200	everything from the bottom up.
+755920	758800	And this is a big scope.
+758920	761360	This is not like for the faint of heart.
+762360	766640	It's a lot of work, but it does yield some very good
+768960	772440	results, like some very good things that you can do once you are willing
+772440	775960	to do that work. So I would say that the most important
+775960	780440	interesting thing about Zig is that it really is a language
+780440	785640	that allows you to build for every target from any target,
+785960	790840	meaning that if you want to target like not just normal computers,
+790840	794400	but also very tiny embedded devices, you can do so easily.
+794880	798160	And that's also cross compilation because you're like you're compiling
+798160	803120	on a Linux machine, probably, which is going to be maybe X8664
+803520	807760	and you're targeting a very tiny ARM V8 embedded device.
+807880	810600	So you're compiling for different architecture there.
+810800	812800	But this is also true from computer to computer.
+812800	816280	So with Zig, it's a very it's considered fundamental,
+816280	821240	the ability to build your program for Mac OS Windows Linux
+821240	823480	from any of those other RSS.
+823480	826600	So from Linux to Windows, from Windows to Mac, etc.
+826920	828800	That's surprisingly rare.
+828800	830920	Yeah, but a very nice feature.
+830920	835240	And it doesn't end here because we can do this for Zig applications.
+835320	839200	And to be fair, I think that Go can do it for Go, Rust can do it for Rust,
+839480	842120	but they cannot do it for C.
+842120	844520	Well, we can do it also for C and C++.
+844520	849680	So the idea is that if you have a project that has Zig code in it
+849800	854080	and also a C dependency, not only you can cross compile the Zig part,
+854080	856520	but you can also cross compile the C part.
+857120	858920	Really? Yes.
+858920	861480	And that is, I think, the huge thing.
+861480	868400	And it's so big that actually you can use Zig as your C C++ compiler
+869080	872080	when you are trying to cross compile a Rust,
+872280	875920	a mixed project between Rust and C or a Go and C one.
+875920	880360	So, for example, Go people have been using the Zig compiler
+881080	886000	to enable to complete the close the circle to enable complete cross
+886000	889080	compilation of C Go programs.
+889280	895000	C Go is basically what you call a project that has both Go and C in it.
+895120	898000	C Go is like a component of their of the Go compiler.
+898240	901120	That's how they compile in a link to C code.
+901600	906520	So, people having using Go projects,
+906520	909480	they are using Zig to cross compile and same with Rust.
+909680	914680	Even AWS is using Zig to cross compile.
+915680	918560	Rust lambdas for their lambda engines
+918560	922080	because Rust depends on the libc of the target
+922600	926240	and their machines running lambda functions
+926920	931920	are running a specific version of Linux with an older libc.
+932440	935440	And you need to be able to target the correct version of the libc
+935440	938200	to make sure that everything runs smoothly.
+938520	941360	Right. And that's not something that normally compilers can do.
+941960	946440	And Rust itself, which doesn't concern itself with C compilation at all,
+947280	948520	certainly cannot do.
+948520	952080	So, they have there's a package called Cargo Zig build
+952480	955280	that allows you to use Zig to basically link
+955280	958120	against the correct libc version that works on lambda.
+959880	961200	How on earth is that working?
+961200	964960	Are you telling me that Zig also has a C compiler built in or?
+965200	966200	Yeah, it does.
+967400	968400	It straight up does.
+972360	975480	And Andrew started out trying to build an audio workstation
+975480	978520	and ended up building a language that also includes a C compiler.
+978840	980840	Yeah, pretty much. That's legendary.
+980920	986360	Yeah. And this is like, I would say we're like halfway through the journey
+986360	989680	because we want to get even more hardcore than this.
+989680	992760	So, I mean, if you want, we can change subject.
+992760	994640	Otherwise, I can. No, I'm fascinated.
+994640	996600	Keep going. Yeah. OK.
+996640	1002760	So, do you remember when Apple released the M1 architecture?
+1002760	1005120	Right? Yeah, they went from Intel to ARM.
+1005920	1011240	And that was big news because, well, turned out it's also pretty good CPU,
+1011240	1014680	like pretty good architecture, Numex, I would say are pretty nice from.
+1016280	1017880	Like they're powerful.
+1017880	1020200	They overheat less. It's they're nice.
+1020400	1021400	So.
+1022400	1023720	When it will release the M1,
+1025160	1027840	Zeke was the first compiler
+1028720	1034800	that was able to cross compile for M1 from another target, from another machine.
+1034840	1038960	So, Apple, obviously, when they really well, well, not only when they released,
+1038960	1042080	but also while they were developing the M1, obviously,
+1042080	1044560	they had a tooling to compile for the M1.
+1045480	1049840	But they never released or other when when everything came out,
+1049920	1056880	they had not released any tooling for compiling for M1 from another machine.
+1058280	1061240	So you had to buy the new Mac in order to build for the new Mac?
+1061320	1068080	Exactly, because what you would get was when you have Mac OS, you get clang.
+1068120	1072320	You like you get a fork of LLVM, which is
+1073280	1077560	yeah, it's I would say it's kind of pretty much LLVM, except with like private patches
+1077560	1080280	that Apple makes specific to their system.
+1081080	1085560	And when the M1 came out, they had patches specific to the new architecture.
+1085560	1090480	So you could compile, obviously, from M1 to M1.
+1090600	1096560	But LLVM itself, the open source project, did not support M1 yet fully.
+1096960	1101280	And so you could not get LLVM like on Windows or Linux
+1101280	1103360	and then use that to compile for Mac OS.
+1103360	1104640	We were the first ones.
+1104680	1109280	And that was because not only Zig is a C compiler and to be fair,
+1109280	1113920	the C compiler stuff right now, I would say at its core, it's not super impressive.
+1113920	1119280	The the idea is that Zig uses LLVM and LLVM is like this library that allows you to.
+1120240	1127400	It's like a unified framework for optimizing for generating optimized machine code.
+1127400	1133680	So the idea is that you your compiler reads the program that it's trying to compile
+1134040	1136880	builds a data structure in memory, does semantic analysis,
+1136880	1139000	all the usual stuff that our language has to do.
+1139000	1143720	But then the final step is to give some of that information to LLVM,
+1144040	1149240	which will then take care of selecting which exact instructions
+1150280	1153920	to use for the for the CPU that you're targeting.
+1154400	1160440	Right. So it's I suppose I want to say it's almost a little bit like WebAssembly.
+1160440	1165480	It's like a very low level language is actually going to generate the final machine code.
+1166480	1169800	Yeah, that's a bit of a stretch, but that's I think that's fair.
+1169800	1175640	That's what that's the that's called the LLVM IR intermediate representation.
+1175640	1180360	Yeah, that's what you create, which is a bit code of some kind.
+1180400	1185240	And by code, sorry, of some kind, kind of like a WebAssembly.
+1185280	1187200	I think that's a fair parallel.
+1187960	1189480	OK. Yeah.
+1189480	1191080	So we give that to LLVM.
+1191080	1194760	And since we are already bundling all of LLVM,
+1194880	1201720	it doesn't take much to also add clang, which is the C compiler that runs on LLVM.
+1201760	1203720	So that's what's allowed us to build C.
+1203720	1206720	There's more than it does, but at its core, it's not super complicated.
+1207760	1216600	But but a compiler is just one step necessary to create an final executable.
+1216640	1218880	There's also a linking page at the end.
+1218880	1225280	So the main problem with the new M1 Max was that linking
+1226760	1228520	needed to be different than it was in the past.
+1228520	1234200	And the reason why we were the first ones to be able to cross compile for M1
+1235720	1238440	was because we had our own in-house linker.
+1239320	1242200	There's a core team member in the project.
+1242640	1245960	His name is Jacob Conca, and he used to work in Microsoft.
+1246080	1249920	And we kind of poached him to work.
+1249960	1252200	Well, I guess he poached himself.
+1252280	1254440	He wanted to work on on linkers.
+1255080	1259680	I think at Microsoft, he was not working on anything even remotely as exciting.
+1260080	1263520	And so he decided to jump ship and join the project full time.
+1263840	1268000	So we have our own linker, and most of the work is done by him.
+1269520	1274360	And so that my point here is that by having our own linker,
+1274800	1280640	we were able to reach to to have a feature even faster than LLVM code.
+1281280	1285040	And LLVM is considered in general like a very good project, and it is.
+1285080	1286680	And it is. Yeah.
+1286680	1292080	But by not the point is that we did not consider LLVM the baseline.
+1292120	1296440	We were willing to get past LLVM and do some of that work ourselves.
+1296880	1301120	And now going forward in this ties back to my point that we are only halfway
+1301160	1306760	through our journey now going forward, we plan to make LLVM a completely
+1306800	1307960	optional component.
+1308080	1315440	So that means that we have our own implementation of some of what LLVM does.
+1315520	1318520	So we have what we call them backends.
+1318520	1323560	So we have our own implementation of what reads the internal representation
+1323720	1328440	of the compiler, the internal data structures and the sides, which
+1328480	1329760	instructions to output.
+1331080	1334280	That's a lot of work because you have to build one of those things for each
+1334600	1335960	architecture they want to support.
+1336000	1338160	So you want to support x8664.
+1338560	1339600	That's one implementation.
+1340000	1346600	Arm 32 bit another arm 64 bit x86 like 32 bit x86.
+1346640	1347400	That's another one.
+1348680	1349920	There's more architectures out there.
+1349920	1352240	So for each one, you have to write a specific one.
+1352240	1359480	And then you have to write another bit based on the OS that you're targeting.
+1359480	1367280	So like x86 64 Windows is a little bit different than x86 64 Mac, not in terms
+1367280	1371040	of like the instructions of the program, but like the packaging, like how
+1371040	1375520	an executable is structured all the like surrounding metadata, the frame in a
+1375520	1375960	sense.
+1376360	1376640	Right.
+1376680	1376960	Yeah.
+1377440	1378720	And we're doing it.
+1379200	1384680	Now, the work that we're doing in that regard right now is not to replace
+1384680	1386920	LVM in terms of optimizations.
+1387320	1391520	So the bulk of what LVM does and what it's considered the state of the art
+1391520	1392960	for is optimizations.
+1392960	1394360	We are not doing that yet.
+1394800	1399480	What we're doing right now is basically do the work so that we can have
+1399800	1406000	debug builds, which are not optimized happen without needing LVM at all.
+1407000	1409240	Oh, that's our starting point.
+1409480	1416000	But the plan is going forward to basically have a competing, optimizing
+1416000	1416560	backend.
+1416920	1421080	So you will still be able to use LVM if you want, how it's going to happen
+1421080	1422840	in practice doesn't matter much.
+1422840	1427520	I think it's going to happen that you basically will need to get LVM through
+1427520	1428320	the package manager.
+1428600	1433400	So you will use the package manager to get LVM instead of getting it bundled
+1433480	1437960	in the compiler itself, but then you will be able to get an LVM optimized
+1437960	1439640	final executable regardless.
+1439680	1443840	But we're going to work on our competing version and you will decide
+1443840	1444880	which one you like more.
+1445400	1450280	And over time, if we do a good job, it might even be that our competing
+1450280	1455440	backend becomes compelling enough that people will use that one over LVM.
+1456240	1460880	Crikey, you're not kidding about going all the way down to the lowest level,
+1460880	1461200	right?
+1461360	1462400	Yeah, geez.
+1463160	1463440	Yeah.
+1463480	1463840	Okay.
+1463840	1466600	That's what's your timeline for that?
+1467640	1470680	Ooh, that's got to be a multi-year project, right?
+1470880	1471800	100%.
+1472160	1472920	Yeah, for sure.
+1473720	1475800	Honestly, I don't know what the timeline is going to be.
+1476160	1480640	The reality is that the timeline of these things can vary dramatically,
+1481240	1484560	depending on the amount of talent that you attract.
+1485720	1491960	One thing that the people usually say when we first tell them, yeah,
+1492480	1497320	we want to get rid of LVM, they start by saying, oh, you're insane.
+1497640	1498840	You're never going to be able to do it.
+1498920	1501520	There's a bunch of geniuses that work on LVM.
+1503200	1503560	Fair.
+1504680	1505040	Fine.
+1505120	1506400	Let's assume that that's right.
+1506400	1508640	I mean, I'm sure that the people working on LVM are smart.
+1509960	1514960	But it's not like they are bound by a blood contract to work on LVM.
+1515840	1522200	And if we work on LVM, it's a humongous C++ project that takes forever
+1522200	1527640	to compile and it's in some ways like it's messy.
+1528440	1533720	What if we were to be able to present to people working in that field
+1534800	1539120	another ecosystem where they can research the same exact kind of
+1539320	1543080	of optimizations that they are researching and implementing on LVM.
+1543920	1550560	But the compiler, instead of taking four hours to build, it takes 20 seconds.
+1552880	1554640	I imagine that would be very seductive.
+1554920	1558920	And I think you're deliberately trying to seduce people over to the zig side,
+1559280	1560360	which is fair enough.
+1561120	1566360	And I mean, we already have people in the core team who have pushed access to LVM.
+1567000	1572480	So it's not like we are like, well, I don't know anybody who is part
+1572520	1575840	like the leadership of LVM, so I wouldn't say we are like insiders.
+1577040	1581640	But we already know people who do this.
+1582000	1587600	So there's a, sounds like there's potential for both knowledge sharing
+1587600	1589800	and maybe some more kinds of sharing out there.
+1589840	1591440	Absolutely. And absolutely.
+1591440	1595400	And if LVM also ends up benefiting from this, it's great for everybody.
+1595800	1599120	Sounds like one of those whoever wins, we all win situations.
+1599200	1599840	Absolutely.
+1600040	1602360	OK. This is getting very low level.
+1602360	1605960	Maybe we should try and pull it back into a user space.
+1607760	1609600	Love the ambition, though, absolutely.
+1610000	1614520	But I do want to get a sense of what it's like to write zig.
+1614560	1616760	What am I going to find as a programmer?
+1616840	1617640	What am I going to like?
+1617640	1619200	What am I going to need to learn?
+1619200	1620200	Right. So.
+1623880	1627160	The hardest part about the zig is not the at all.
+1627240	1630360	Zig is a language is very, very simple.
+1630360	1634120	The most complicated part of zig right now is comp time,
+1634200	1639040	which is the ability to run code at compile time instead of runtime.
+1639840	1645160	And if you're not used to thinking about the two different like.
+1647600	1651960	Lifetimes of your program, the two different phases of its life,
+1652520	1656200	then you might get a little bit confused about what it is that you can can do
+1656200	1659240	at comp time or what it is that you cannot do at comp time.
+1659520	1663800	But overall, the core principle is, in my opinion, kind of straightforward
+1664280	1668360	where things get complicated is once you get into
+1668720	1670480	systems programming more in general.
+1670560	1674040	So if you were like a JavaScript or a Python developer
+1674560	1677920	and you never had in your life to think about the stock versus hip,
+1678200	1681120	or maybe people told you, but like if you're a Python programmer,
+1681240	1683440	this is something that also happened to me like in university.
+1685000	1688040	If you do Python and people told you about the stock versus hip,
+1688080	1691520	that's like philosophy to you because that's yeah, right.
+1691520	1694040	You don't have fascinating, but you'll never use this knowledge.
+1694040	1695920	Exactly. Like you don't have control over it.
+1695920	1697320	And yeah.
+1699760	1701720	When you're getting to low level systems program,
+1701720	1703600	suddenly this becomes a real concern, right?
+1703840	1708320	Exactly. And so people, so the hardest part is, for example,
+1708320	1714120	understanding the difference between an array of which of whose length
+1714320	1717680	you know, you know, statically, like this is going to be a six element array
+1717680	1721960	and it's always going to be six or maybe, you know, you need up to six slots.
+1721960	1725000	Maybe at some point in time, you use fewer than those.
+1725040	1728480	So you have like a counter that tells you how many slots you're using,
+1728880	1729840	but six is the limit.
+1729840	1732840	So and if you know this statically at compile time,
+1732880	1734920	then this can be put on the stock.
+1735880	1738760	And there's some things that you can do with this memory
+1739600	1744920	thanks to the knowledge of the fact that it's bounded to six elements.
+1745000	1747280	And you know exactly how much memory it's going to need
+1747280	1748760	for the whole lifetime of the program.
+1748760	1752120	Exactly. And that is critical information for the compiler itself,
+1752120	1756840	like the language, lower level languages are like designed
+1756840	1760800	around these very critical concepts of like what you know statically
+1760800	1762640	and what you do not know statically.
+1762640	1765160	So if, for example, instead, you have a program
+1765160	1768720	where you ask the user to tell you how many items they want to enter
+1768800	1771600	and they are allowed to enter 10,000 if they want,
+1772080	1777080	or more realistically, imagine parsing a JSON file
+1777160	1780840	like a JSON file can be arbitrarily deeply nested
+1780960	1782800	or big in general.
+1782800	1788400	So in that point, you need to concern yourself with heap allocation,
+1789160	1791240	which again is something that in Python and JavaScript
+1791240	1795160	you don't do directly because the runtime manages that for you.
+1795560	1798760	Yeah. So that's one example.
+1798840	1803160	Another example is all things that your platform
+1803240	1807160	like APIs that your OS operative system gives to you,
+1807840	1811800	which people sometimes are used to think about as in terms of capabilities
+1811800	1815240	that the language gives to them, even though the language
+1816040	1817480	can only act as an intermediary.
+1817480	1820200	So for example, sometimes people ask,
+1820960	1825400	how do I get the size of the terminal window in Zig?
+1826480	1831280	And the answer is, well, the question, the real question is,
+1831400	1834800	how does your OS allow you to get that information?
+1835800	1836800	Right.
+1836800	1840680	And then, and that's going to happen through a syscall of some kind.
+1841040	1843920	And then the, I guess the secondary question is,
+1843920	1849120	well, has somebody written the boilerplate to access that syscall
+1849160	1851080	and where is it in the Zig standard library?
+1851080	1854960	So the question of how you do this kind of stuff in Zig
+1854960	1857960	or in each specific language, it's not completely wrong.
+1857960	1859600	It does make sense.
+1859680	1865320	But understanding what is the actual API below you
+1865800	1868680	can be a little bit annoying, especially when the language
+1869440	1873120	wants to show you precisely what that is.
+1873120	1877360	And it's not trying to give you a sugared interface
+1877360	1881920	that is overly simplified, because sometimes you do also get that
+1881920	1883600	in other languages, which might make sense.
+1883600	1886120	Like a higher level programming language, it makes sense that it doesn't
+1886120	1890320	give you necessarily low level access to, like, to everything.
+1892080	1893880	So I would say these are like the biggest challenges.
+1893880	1895960	People need to learn systems programming.
+1895960	1898200	They need to have this mindset where they have to think, OK,
+1898200	1901200	how like for another example, people sometimes ask,
+1901200	1903400	how do I print, call or text in the terminal?
+1903800	1905600	How do you do that in Zig?
+1905600	1909440	And the answer is, Zig doesn't concern itself with this.
+1909440	1910840	Like these are escape codes.
+1910840	1915400	It depends on which terminal you're using and a bunch of other related concerns
+1915400	1918040	that really are pretty much transparent to Zig.
+1919440	1920960	But people don't have this mindset.
+1920960	1924280	So I would say that is the hardest part about learning Zig.
+1924400	1929520	And connected to this, there aren't a lot of good learning materials, in my opinion.
+1931320	1936920	So this sounds like the usual kind of young national language problem
+1937360	1939840	where maybe there isn't a library for everything.
+1939840	1942640	Yes. And there aren't there isn't documentation for everything yet.
+1943080	1944440	Yeah, for sure.
+1944440	1949240	But also, I mean, it's not like Zig has invented systems programming.
+1949240	1951440	So it would be nice, right?
+1951440	1956280	If there was some good piece of like a good book
+1956280	1960360	that taught you the core principles without too much fuss.
+1960360	1965760	And in fact, there are plenty of books that try to teach you these things.
+1965800	1969240	It's just that in my experience, most of those that I've seen,
+1969280	1975600	they tend to conflate C specific stuff with the OS.
+1975600	1978160	So for example, you have this book that it's trying to teach you systems
+1978160	1984680	programming and it starts by telling you about how the C compilation model works
+1985600	1989840	and how that intertwines with like how libraries are
+1991200	1993800	certain files are like laid out in your system.
+1993800	1995400	And this is all real and concrete.
+1995400	1999520	And it was especially real and concrete and concrete like 40 years ago.
+2000200	2005080	But those concepts are like in other things like macros
+2005080	2007800	and where things are usually in the system library.
+2007800	2011840	But those are things that are specific to C.
+2011840	2013600	So if you're not doing C,
+2013600	2018400	a lot of these things are not as timeless as the book thinks they are.
+2018920	2022480	While instead that versus hip, that one is much more timeless.
+2022520	2025720	So personally, I think that we're missing learning materials
+2025720	2031720	that can discern between really timeless systems programming concepts
+2031720	2037800	like stock versus hip versus C isms that are not the relevant anymore.
+2038800	2046080	Yeah, yeah, that's sort of a long life cycle, but not not mathematically pure.
+2046800	2048600	You almost say, yeah, yeah.
+2048600	2053320	OK, but so I would like to talk about how the C interrupt works
+2053800	2055640	and maybe this is the way to do it.
+2055640	2060440	So if I'm if I'm actually looking to get the size of a terminal window,
+2061080	2063360	am I going to go looking for a sysop call and find
+2063360	2066040	I actually have to do it through an OSC library?
+2066040	2068720	And how's that going to play out when I actually start coding?
+2069680	2074680	So, well, I guess it depends on the US.
+2074720	2077280	Let's assume that the US is Linux. OK, for simplicity.
+2078200	2081320	So if the US is Linux, you're in luck
+2082000	2087320	because in Linux, the syscalls are considered a public API of the US.
+2088120	2093240	So you are not forced to use the C library of your OS.
+2093960	2096040	You can invoke the syscalls directly.
+2096040	2099120	And in the case of Ziggs, since we like doing things from scratch,
+2100880	2105400	you will find in the Ziggs library that we do implement the syscall,
+2105760	2108560	which I think it's IOCTL.
+2108560	2112600	This is called that you can use to get that information from the US.
+2112760	2117480	So in the case of Ziggs, so in the case of Linux,
+2118360	2122160	that's how you find that out.
+2122160	2127360	But in other platforms, yes, you would have to use a C lib,
+2127360	2129720	although we do have also bindings to the C lib.
+2129720	2135240	So in practice, you wouldn't have to do everything yourself from scratch.
+2136400	2139000	When it comes to like these very common things,
+2139000	2141600	but let's imagine that instead you want to use like a C library.
+2142120	2145120	OK, let's imagine that you want to use, I don't know, SQLite.
+2146120	2150560	By the way, SQLite is a perfect example of a very popular library used,
+2150560	2152000	for example, by Go.
+2152000	2155400	There's a lot of Go projects that the bundle SQLite,
+2155760	2157160	but SQLite is a C project.
+2157160	2162840	So that's one major use case of people using Ziggs to do cross compilation
+2162880	2164440	when they also want to bundle SQLite.
+2164440	2166880	Anyway, you want to use SQLite.
+2166880	2170200	So at its baseline, here's what you want to do.
+2170760	2176280	You want to the way this stuff works in C is that you have C files
+2176280	2179840	that contain implementations of things and have header files,
+2179840	2182480	which are like files with a dot h extension.
+2183080	2184880	And those files contain definitions.
+2184880	2187320	So they contain they do not contain the full implementation.
+2187320	2190440	They only contain like the signature of a function, for example.
+2190440	2192640	The original kind of API docs, right?
+2192640	2195120	Exactly. The original API docs, like they're there.
+2196680	2198880	What's it called? Is it called Open API, I think?
+2200440	2203120	The thing that used to be called this walker, it's basically like
+2203400	2206240	it's a system to document like a restful API, right?
+2206360	2209000	That's kind of the idea, except systems programming.
+2210640	2217120	Yeah, so the way this works is that then SQLite comes with a bunch of C files
+2217640	2221560	and one header file that you are supposed to include in your project
+2221600	2223880	to get access to the public API.
+2224560	2227200	With ZIG, you can do that directly.
+2227200	2233520	So in ZIG, you can import a C header file and it will work right away.
+2233600	2238120	Like you import that and you immediately get access to all the definitions in there.
+2238480	2239600	Oh, interesting. OK.
+2239600	2242160	So there's no kind of bridging file that you have to write.
+2242640	2245560	Well, the bridging file, in a sense, gets auto-generated.
+2245680	2247240	That's the idea. Right. OK.
+2247240	2249280	So you don't see this.
+2249360	2253200	And actually, if you do want, you can do that manually.
+2253200	2256880	Like you can take the header file, translate it to C definitions.
+2257840	2262000	And in case there's like the need to tweak something manually, you can do that if you want.
+2262800	2266880	But the happy path, like the most common way you will want to do this
+2266920	2271720	is to straight up import the header file and have ZIG do that bridging internally.
+2272040	2272880	OK.
+2274120	2279160	Then at that point, you can just straight up call all the SQLite.
+2279280	2280600	Functions, they are defining there.
+2280600	2285720	So you can you can just like go read the SQLite documentation
+2286200	2288360	and they will tell you called. I'm making this up.
+2288360	2294520	I don't remember how to use SQLite, but there's going to be maybe a test of the SQLite header API syntax.
+2294520	2296200	Don't worry. OK.
+2296200	2299280	So there's going to be some kind of SQLite in it function.
+2299320	2301400	So you just call it and it works.
+2303480	2307600	There's also a couple other things that ZIG does that help you with interoperability with C.
+2307600	2311920	So, for example, C uses non-terminated strings a lot.
+2313480	2318560	So basically, there's a you when you want to give to a function is string,
+2318560	2321400	you give it a pointer to the beginning of the string.
+2321840	2324360	And the pointer doesn't carry information about the length.
+2324440	2329920	The length will be discovered by the function that you're calling by iterating through the sting
+2330040	2335040	to the string until it encounters a zero character once it like a zero byte.
+2335440	2337440	Once you find this, your body knows that the string is over.
+2339000	2341640	Modern languages don't like to do that anymore.
+2341680	2345680	Modern languages very much prefer something else.
+2345800	2347000	I'll tell you my age.
+2347000	2349320	I can remember when we didn't like to do it at the time.
+2351880	2355520	So in ZIG, for example, normally a string,
+2355600	2360360	it's not just a pointer to the beginning of some data without null in the end.
+2360880	2366360	But in ZIG, we use slices, which other languages sometimes call five pointers.
+2366400	2372000	So the tiny what you call the pointer is a pointer, but also a length.
+2372560	2374920	So, yeah, you have both informations.
+2374920	2381160	And to be fair, sometimes in C, you also have APIs that want a length.
+2381200	2385560	No, they don't want to discover a null byte at some point, but they want you to pass in a length.
+2385600	2388960	But those have have always to be two separate arguments,
+2389000	2393240	two separate values that you need to move around in parallel.
+2393400	2398560	Anyway, so how does ZIG help with the interoperability?
+2398560	2403800	Well, string literals in ZIG are null terminated.
+2404240	2407440	So basically, when you write, I don't know, Hello World,
+2408080	2412880	and you want to use that string literal in ZIG, that's going to be a pointer plus a length.
+2413120	2415160	I don't know how long Hello World is.
+2415160	2417520	Ten characters, nine characters, whatever.
+2417600	2420560	Pencil there, you include the traditional exclamation mark at the end.
+2421160	2426440	OK, so you do have this information, but there's also going to be a null byte
+2426680	2428800	past the end of the string.
+2429560	2435080	So you can take a C, a ZIG string literal and pass it to C transparently.
+2435240	2437440	No need to do anything else, and it's always going to work.
+2438120	2442760	And more in general, ZIG does have a bunch of functions in the Sanda library
+2442760	2446960	that allow you to deal with null terminated strings,
+2446960	2449280	which are not the preferred type of string in ZIG.
+2449280	2453040	Like you don't treat strings as null terminated normally, but
+2455400	2458240	null terminated strings are a reality because not only because of C
+2458240	2461600	interoperability, like in terms of SQLite, but also because of C
+2461600	2467760	interoperability with the OS, like OS APIs, the lib C, that's C,
+2467760	2471720	but also the Cs calls often time inherit some C ism,
+2471720	2476800	some like some ways of communicating data that are like mirroring what C does.
+2477040	2481160	Yeah, unsurprisingly, often the OS is written in C.
+2481400	2485000	Exactly, because the OS is written in C, because that's maybe how people used
+2485000	2486120	to do things at the time.
+2486120	2487880	And so these things are still there.
+2488440	2489680	Yeah. Yeah.
+2489800	2494440	And OK, so to conclude, you have string literals.
+2494480	2498480	You have a lot of other like operators in ZIG that you can also use
+2498480	2502840	with C functions very easily, kind of transparently.
+2503840	2507240	But just to name one, I think it's really cool.
+2507560	2508720	You can use defer.
+2508880	2514320	So defer is almost the same concept as goes defer.
+2514600	2516840	There's like some minor differences.
+2517480	2520840	But the idea is that basically if you want to.
+2522280	2527560	Free a resource while when exiting the function, instead of making sure that
+2527560	2532200	you call free or like file close, for example, like the whatever resource
+2532240	2535760	release function you need to call, instead of making sure that you copy,
+2535760	2540280	paste that call at every exit point of your function, what you can do is
+2540720	2546280	on one line, you open a file and on the line below, you defer, close it.
+2547480	2549120	Oh, OK.
+2549120	2553800	Yeah. So you have basically a cleanup that you can put immediately
+2553800	2555680	after the creation of the resource.
+2556200	2561520	And whenever you leave that scope, no matter how you leave it, whenever
+2561960	2564640	you leave that scope, that function will be called.
+2565720	2570560	Yeah, because it's always deeply dissatisfying that you have to you
+2570560	2574840	have to remember to stick the close call or the free up call at the end.
+2574840	2578680	And it just screams this is going to get forgotten one day.
+2578960	2580320	Yeah, absolutely.
+2580320	2585200	So defer saves you from having to be too careful about like branching
+2585200	2587120	paths in your function.
+2587160	2591880	And if you look at it from a maybe it's not as handy as, you know,
+2591880	2596360	what C plus plus can do with the array with the structures that run
+2596360	2598280	automatically, you don't even have to write defer.
+2598760	2604720	But C plus plus destructors only work with C plus plus defer in zig
+2605120	2607680	also can be called on C functions.
+2607960	2609920	It's completely transparent.
+2609920	2612280	So there's this funny end result.
+2612280	2619440	We were basically zig, in a sense, is better at using C libraries than C
+2620920	2625480	because the same cleanup routine in C would require you maybe to even use go
+2625480	2630880	to like it's not uncommon for people to use go to and have like a label
+2630880	2633160	like a section of the function with all the cleanup functions.
+2633160	2634760	But it gets really messy.
+2634760	2640480	Like I don't think I am able to fully convey how messy cleanup can get in C
+2641160	2642640	because it doesn't have the fur.
+2643160	2643880	I can believe.
+2643880	2644960	Yeah, absolutely.
+2645320	2646400	That's interesting.
+2646560	2650760	That's interesting still being in C, but building on it with new syntax.
+2651800	2656360	I have to ask before we leave this particular thread, what about pointers?
+2656360	2659240	The pointer, does pointer arithmetic come into zig?
+2660800	2663120	Pointer arithmetic can come into zig.
+2663160	2664480	By the way, that's a great point.
+2664480	2669360	I was forgetting that's another great improvement over C that also helps
+2669360	2670960	beautifully with interoperability.
+2670960	2675120	So you can do pointer arithmetic in in zig if you want to,
+2675840	2680120	because because that's what the machine allows you to do.
+2680280	2683800	And maybe occasionally some OS API will require you to do so.
+2684200	2688040	But in general, you do not do pointer arithmetic in zig.
+2688560	2692760	And specifically in zig, you cannot do so in the type system.
+2692800	2695920	You are not allowed to do arithmetic on pointers.
+2696000	2701320	What you have to do is take your pointer, convert it to an integer,
+2701800	2704920	which is not like an operation that does anything at runtime.
+2704920	2707800	It's just like a type system thing.
+2707800	2710920	Like you have to be explicit about taking a pointer,
+2712320	2716240	interpreting it as a number, apply the math to the number
+2716560	2718600	and then convert it back to a pointer.
+2718600	2722280	So you can do it if you want, or if you need.
+2722680	2725720	Probably if you need, you shouldn't want the language.
+2725920	2728760	It's not going to make it easy or like very comfortable to you.
+2728760	2730760	There's a little bit of friction introduced there.
+2730800	2735000	And on the flip side, it helps identify very quickly
+2735400	2737760	where these kind of shenanigans are happening.
+2740200	2744960	Right. So it's mainly there for the sake of C interoper,
+2744960	2748720	rather than writing zig day to day.
+2749120	2752840	Exactly. And I mean, we say C interop, but I don't know.
+2752840	2756160	There might be other things out there like I'm thinking of firmwares,
+2756160	2759760	like your programming tiny embedded device, and you need something like this
+2759760	2762560	because of the very low level stuff that you're doing,
+2762560	2766080	which is not really necessarily specific to C anymore.
+2766600	2769120	But it's like low, super low level bit fiddling.
+2769280	2771760	Maybe at that point you need something like this.
+2771760	2773480	But otherwise you normally don't.
+2773480	2777160	And still related to pointers, there's another crucial thing.
+2777880	2782080	Pointers in C are very under specified in the sense
+2782080	2786280	that you see a char star, so you know it's a pointer.
+2786560	2789360	And when you dereference it, you get a character.
+2789800	2793080	But then the question is, can the pointer be null or not?
+2793240	2797400	You don't know. Maybe documentation tells you, but you're not sure normally.
+2798200	2802240	The second question is, OK, I'm getting a character at the end of this pointer.
+2802960	2804600	Assuming it's not null.
+2804600	2807840	Now, is there going to be just one character on the other side?
+2807880	2809480	Or is this like a string?
+2809480	2812000	Is this like expected to have another character afterwards
+2812000	2814080	and another one afterwards until I encounter a null?
+2814280	2818120	Is there going to be a null or am I supposed to know how many items to get
+2818120	2819520	because of another variable?
+2819520	2822400	This is not encoded in a type system at all in ZIG.
+2822760	2824960	All of these are different type of pointers.
+2824960	2827480	So if a pointer can be null, it's an optional pointer.
+2827640	2830120	So we do the thing that all modern languages are doing
+2830120	2833960	where you have the concept of optional and then you need to unwrap the optional.
+2835080	2837160	And we use that to represent null pointers.
+2838000	2840400	But then we have types for.
+2840400	2843480	So you have normal ZIG slices, which are a pointer and in length.
+2844200	2847320	But then you have a C style pointer that can be
+2847760	2851760	that's going to be a pointer either to one item, one specific item.
+2851760	2854800	So you're explicitly saying there's going to be one character, one chart.
+2854800	2856320	Again, not many.
+2856320	2860000	Or there's a syntax for saying, no, this is like a pointer
+2860000	2864160	to a unknown number of characters.
+2864440	2866400	So there's specific syntax and it's going to tell you,
+2866720	2868920	yes, this is a pointer to many items,
+2868920	2871240	but the pointer itself doesn't tell you how many.
+2872280	2875960	And then there's a pointer to an unknown number of characters
+2876360	2878440	with a null terminator at the end.
+2878440	2880360	And this is in the type system.
+2880360	2884360	So, for example, if you by mistake think that
+2885160	2889120	you're trying to create a string off of another string.
+2889120	2893040	And so like you maybe take a tiny slice from the middle of the string
+2893040	2895400	and you try to pass it to another application
+2895480	2900880	and you forget that that API is expecting an alt terminator at the end,
+2900880	2904160	which is not going to be there because you just split off like a tiny
+2904160	2906160	like two characters from the middle of a string, right?
+2906160	2908560	So there's not going to be an alt terminator on the other side.
+2909000	2911920	The Z-type system will tell you, it will give you a compile error
+2911920	2915520	because it will tell you, I'm expecting an alt term into the string.
+2916040	2919840	But the operation that you like,
+2919840	2922280	the slicing operation that you did on the other string
+2922800	2924760	does not yield an alt terminator string.
+2924800	2926880	So you will get a compile error right away
+2926880	2929320	instead of having your program read random garbage
+2929320	2932360	and maybe sometimes crash.
+2933280	2934680	Yeah, yeah.
+2934680	2936960	That's that's one other question I have to ask you then,
+2936960	2941960	because I can see right now this appealing to people that need to use C,
+2942080	2947240	don't want to use C, got into Rust, didn't make friends with the borough checker.
+2947600	2948680	Yeah.
+2948680	2952880	And now have could find ZIG being the ideal place
+2952880	2957160	if I want more type safety around C, particularly around strings.
+2957560	2959800	Yeah. What about memory management?
+2960320	2962400	Because that's the other big sticking point.
+2962400	2964360	Right. Yeah. Agreed.
+2965840	2968800	So in general, so if we want to talk about.
+2970640	2973720	If we want to talk about ergonomics, what I just what I described earlier,
+2973720	2977200	like the first statement that really helps a lot with memory management
+2978200	2983920	because you allocate a resource, defer, free it, and you're good to go.
+2983920	2989400	You need to have an explicit like malloc free call in ZIGLAND.
+2989680	2990600	Exactly.
+2990600	2994720	And to be even more concrete about this,
+2996120	2998720	ZIG does not have a global allocator.
+2999200	3003720	So in C, you have malloc and malloc is like the allocator
+3004320	3008120	and maybe different projects use a different implementation of malloc.
+3008400	3012360	There's like a few competing implementations, but in ZIG libraries,
+3012360	3017000	there's this idea that in C libraries, there's this idea that you have
+3017760	3021520	malloc coming from the ecosystem that allows you to allocate memory
+3021880	3026200	in ZIG allocators are always passed around explicitly.
+3026760	3032240	So if a function wants to allocate, it needs to accept an allocator as input.
+3033240	3034560	Interesting.
+3034560	3040480	Yeah. So this makes it more easy, dramatically, more easy to audit
+3040480	3042520	what it is that's allocating memory or not.
+3042520	3046720	If a function doesn't accept an allocator or a data structure
+3046720	3049680	that bundles the allocator in it, like it's also like, for example,
+3049680	3053480	we have a RayList, which would be like equivalent of a C++ vector.
+3053840	3056000	So like it's a growable array, right?
+3056000	3059160	When you make an array list, you give to it an allocator.
+3059280	3061760	And then when you pass around the array list,
+3061760	3063400	the array list will be able to allocate
+3063400	3066640	because it bundles a reference to the allocator inside of it.
+3068280	3069240	That's for convenience.
+3069240	3073760	But in general, you can very quickly audit
+3073760	3075920	if a function can allocate or not.
+3077720	3082840	Does that help you audit if a function is forgetting to deallocate?
+3084480	3086040	That by itself, no.
+3086120	3091480	What it helps is that the doing that is that the what we call
+3091480	3094200	the general purpose allocator, the main allocator implementation
+3094200	3096160	that you find inside of Z in the standard library.
+3097160	3101400	That allocator in debug mode has leak detection.
+3103280	3109160	So you cannot check statically if all allocator allocations are
+3109160	3113560	afraid or rather you can't unless you're willing to become Rust.
+3113760	3114440	Rust can.
+3115440	3118960	With all the limits, they also have limits on the type of like
+3118960	3122800	memory management strategies that the borrower can understand.
+3122800	3123800	But they can.
+3123800	3130880	We can't, but we can instrument the default allocator with checks
+3130880	3133200	for leaks in the bug builds.
+3133680	3138040	So when you run your tests, basically the allocator will fail
+3138040	3141960	the test if at the end of it you have like still memory allocated.
+3142960	3143480	Okay.
+3143480	3146960	And that's default built in part of the tests we don't have to
+3147120	3148480	specifically instrument.
+3148760	3149200	Exactly.
+3149200	3150240	You don't have to do anything.
+3150720	3151760	Oh, that's nice.
+3152040	3159440	Yeah, there's another angle to this also, which is that it is
+3159440	3164800	correct for programs to want to leak memory occasionally.
+3165280	3169320	In this sense, I'll use the Z compiler itself as an example.
+3169640	3176280	So the Z compiler, when built in the bug mode, we'll make sure
+3176280	3182800	to free everything when built in release mode, it will not free
+3183360	3184360	once it's about to leave.
+3184360	3188320	It will not free memory when it wants it's about to live to close
+3188440	3191000	because the OS will clean up that memory anyway.
+3191520	3194680	And there's no point in freeing every single item that you've
+3194680	3196960	allocated if your program is about to exit.
+3197680	3201360	Like making sure to free tiny things makes perfect sense when
+3201360	3203880	your program is going to use a ton of memory, or it's going to
+3203880	3206320	be super long lived, like otherwise it's going to consume
+3206320	3209480	more and more memory over time until it eats all the available
+3209480	3211200	memory and everything explodes.
+3211440	3211720	Yeah.
+3212520	3216320	But for like, let's say one shot programs, kind of like a
+3216320	3219080	compiler is like you run utility, it runs to the end and then it
+3219080	3222080	closes cleaning stuff up at the end.
+3222600	3223880	It's just wasted time.
+3224160	3227160	So have you ever used like Visual Studio?
+3229000	3230240	Not for so long.
+3230960	3231800	Yeah, I can't believe.
+3232800	3236560	Thankfully, I haven't had to use it in a while now, but a few
+3236560	3239640	years ago, like seven years ago or something, I had to use it
+3239640	3240360	consistently.
+3240920	3246000	And it drives me nuts that when you close it, not only it takes
+3246000	3248440	forever to load, that is already not okay.
+3249400	3252560	But when you close it, it takes forever to close.
+3253400	3253880	Why?
+3253920	3255160	Why is it taking forever to close?
+3255200	3259280	Because as it's closing, it's trying to free and run the
+3259280	3263520	distractors of every single component and sub component and
+3263520	3264480	sub component.
+3264800	3267160	I have a vague memory of doing this with Eclipse and just
+3267160	3270120	getting into the habit of force quitting because who cares?
+3270400	3271760	Exactly, exactly.
+3271840	3275640	And Eclipse is another in Java, I think it's another language
+3275640	3280680	that has distractors and and so kind of makes people want to use
+3280680	3281320	them a lot.
+3281680	3285280	But then there's moments where you actually really in terms of
+3285280	3287600	like functionality that you're offering to the user, you don't
+3287600	3288200	want to do it.
+3288240	3290760	Like you just want to close it right away.
+3291240	3297440	Yeah, so long story short, I made this point because in
+3297440	3303360	reality, it is a legitimate behavior to have the program in
+3303360	3307480	specific circumstances, like memory, if you think about it.
+3307760	3310520	Because like for real, like the user experience would be
+3310560	3314440	generally significantly improved in both Eclipse and Visual
+3314440	3317440	Studio, if the thing just exited right away.
+3317640	3323160	Of course, you do want to have a toggle like a flag that makes
+3323160	3327760	sure you free all the memory cleanly so that you can guarantee
+3327760	3329960	that you do not have unwanted leaks.
+3330120	3333520	Like Visual Studio, for example, is a long running program in
+3333520	3333960	Eclipse.
+3334280	3334480	Yeah.
+3334760	3339680	So they should not be leaking memory in the normal operations.
+3339720	3340840	So it's not.
+3341320	3344640	So you still want to be able to test for that.
+3345000	3345920	There are like two minutes.
+3346200	3348480	There are at least two memory management strategies.
+3348480	3350920	One is be very careful about what you're using because it's a
+3350920	3352040	limited resource.
+3352280	3352600	Yeah.
+3352880	3356200	But for the long run, you know, whatever memory you're using at
+3356200	3358000	the end, you can just drop on the floor.
+3358240	3358560	Right.
+3358720	3359160	Exactly.
+3359360	3360720	Yeah, yeah, that makes perfect sense.
+3361480	3364600	There's one other big thing that you've talked about a little
+3364600	3368280	bit, but I'm tempted to run over our usual time slots.
+3368280	3369600	I'm fascinated by this.
+3369600	3370160	Go for it.
+3370160	3372120	I'm not in a rush, for sure.
+3372360	3372680	Good.
+3373040	3376200	So comp time, you talked a bit about that.
+3376240	3380720	And as an old list programmer, this is a concept that makes sense
+3380720	3383440	to me, but I think it's never really gone mainstream.
+3383960	3386920	So why don't we talk a bit about the separation between runtime
+3386920	3389000	programs and compile time programs?
+3389560	3390080	Sure.
+3390320	3390720	Sure.
+3392880	3397680	So let me tell you about how Zig does this more specifically.
+3399160	3405040	So comp time in Zig is interesting because Zig as a language
+3405360	3407680	doesn't have runtime type information.
+3407880	3412360	So for example, in JavaScript, Python, also in Go, you can ask
+3412360	3416560	questions to the program running at runtime about its types.
+3417320	3420760	C programs, on the other hand, don't have a runtime, and they
+3420760	3422560	don't have runtime type information.
+3422600	3425760	Usually it's not always the case, but usually runtime type
+3425760	3430400	information tends to go hand in hand with an actual runtime of
+3430400	3430960	the language.
+3430960	3436040	So for example, in Python, you can create new types at runtime.
+3436080	3437280	You can do introspection.
+3437760	3443680	And so having a runtime that can yield those dynamic properties to
+3443760	3448640	you usually benefits from having runtime type information.
+3449640	3453760	C doesn't have those facilities because a struct in C at the end
+3453760	3456720	of the day boils down to offsets in memory.
+3457680	3463680	Oh, the struct is, I don't know, 16 bytes long and eight bytes in.
+3464320	3466560	And it contains two fields.
+3466560	3469920	The first field is at offset zero and the other one is at offset
+3469920	3471760	eight, and that's the end of it.
+3471760	3473360	So everything else has disappeared.
+3476240	3481760	But it is useful to be able to inspect types and reason about
+3481760	3483320	types at least statically.
+3483320	3484320	So that's what ZIG does.
+3484320	3487520	ZIG does not give you runtime type information, but it does give
+3487520	3489880	you com time type information.
+3490200	3492840	So you are not allowed, you're not able to create new types at
+3492840	3498720	runtime, but you are able to create new types at compile time by
+3498720	3500320	reasoning on other types.
+3501040	3503680	And the way you reason on other types, and by the way, this is
+3503680	3505600	also what generic does in other languages.
+3505600	3510480	It's just that this is usually done in other imperative languages.
+3510480	3514800	This is usually done with a funky declarative syntax and a bunch
+3514800	3518400	of diamond brackets where you use diamond brackets to denote
+3518400	3523360	like the generic type and then to put constraints on it using
+3523360	3525760	like some kind of declarative syntax.
+3525760	3528560	Like I want type T to be, I don't know.
+3531280	3534560	To conform to interface A or interface B, et cetera.
+3535360	3538480	Okay, so you're using, you're saying you're using com time to do
+3538480	3541600	things like I want a list of As, but now I need to pin it down
+3541600	3543200	to be a list of eight bit integers.
+3543920	3544400	Yeah.
+3544800	3545280	Yeah, okay.
+3546000	3550800	Because you can, because the idea is that you are creating a new
+3550800	3555440	type by referring to another existing types, another existing
+3555520	3556160	type.
+3556160	3560640	And the way you do this in Zig is not via these custom syntax,
+3560640	3563520	but by using normal Zig syntax.
+3563520	3567520	So literally a list, for example, let's say you want to make a generic
+3567520	3570160	list and you want then to be able to make a list of integers,
+3570160	3571520	a list of characters, whatever.
+3572560	3575600	The way you implement this in Zig is that you create a function
+3575600	3581760	called list that accepts a type as input, which has to be marked
+3581760	3583040	as a com time parameter.
+3583040	3587520	So like the signature would literally read fn list, open parentheses,
+3588160	3591120	com time t column type.
+3591120	3595760	So it's a com time parameter named t of type type.
+3595760	3597360	You have to pass in a type.
+3597360	3599680	And so that could be like integer or whatever.
+3600480	3602720	And then this function returns another type.
+3603600	3607920	And in the function body, you create a, you create a struct,
+3607920	3611200	you return a struct definition that places,
+3611200	3614560	that defines the payload field, like a struct probably that has
+3614560	3618240	the payload field of type t, what you passed in,
+3618240	3619520	which is kind of like generic's work.
+3620480	3625520	But it's normal procedural Zig code that gets executed compile time.
+3625520	3628480	So for example, you could create like an,
+3629760	3632880	let's say you're making a simple array, but the length of that array,
+3632880	3636480	you want to be the result of other reasoning.
+3636480	3640160	You could create a Fibonacci function, run it at com time,
+3640160	3644640	and say that your array is long the 10th Fibonacci number,
+3645280	3647120	which I don't know how much it is, but it's not going to be 10.
+3647120	3648160	It's going to be a bigger number.
+3649440	3650080	Right.
+3650080	3653680	So you can call normal, run normal Z code.
+3653680	3658480	It's going to be interpreted by the compiler while compiling.
+3659040	3662240	And usually you do have some of that in other languages.
+3662240	3664320	It's just not fully general purpose.
+3664320	3667520	They give you restricted language to specify properties
+3667520	3671120	and they have their own special rules in Z.
+3671120	3672960	It's just you run the Z code.
+3672960	3677680	And the compiler has like a concept of a execution quota.
+3677680	3681280	So that like, for example, if you make a mistake and you try to make,
+3683440	3688400	you make an array that is the 1000 Fibonacci number,
+3688400	3690720	but your Fibonacci implementation is very bad.
+3690720	3692640	The compiler after a while is going to tell you
+3693600	3695680	I executed like 10,000 loops.
+3696400	3701440	And I, and since we couldn't come to a conclusion, I gave up.
+3701440	3705680	And if you really think this is, this is not like an infinite loop,
+3705680	3707840	then you can pull up that number,
+3707840	3712720	like the number of executions before giving up and we're going to try again.
+3712720	3717280	But so that way basically we, the compiler is how it deals with like infinite loops
+3717280	3718480	and undecidable stuff.
+3719120	3722000	Yeah. So you're protecting against people making,
+3722000	3724160	accidentally making compile time infinitely long.
+3724160	3724880	Exactly.
+3724880	3726080	Yeah. Yeah. Yeah.
+3726080	3729600	And Alan Turing has opinions on why you can't automate that.
+3729600	3730240	Yeah, exactly.
+3730240	3731920	So, and you know what?
+3731920	3736720	In our case, I think it's fine in practice to solve the indecidability problem
+3736720	3740720	by just giving up because ultimately, like you're trying to compile a program
+3740720	3743840	and you're not willing to sit there forever
+3743840	3746240	or up with radical long to have it compile.
+3746240	3747440	So yeah.
+3748080	3750560	Okay. So this raises two natural questions.
+3750560	3753840	And the first has got to be, what's that like as a,
+3753840	3754800	as a programmer?
+3755360	3760160	Because most of us are used to using like diamond brackets for generics.
+3760160	3761520	Do you prefer the zig way?
+3761520	3763440	Does it feel natural once you get used to it?
+3764000	3766480	I think it feels insanely natural.
+3766480	3769520	Like you mentioned earlier, Lisp to me,
+3769520	3771520	by the way, I also love Lisp.
+3771520	3773360	I've never used Lisp professionally,
+3773360	3776880	but like in university, definitely one of my favorite subjects.
+3776880	3782480	And I also loved writing macros in Lisp.
+3783360	3786320	And it feels like writing macros in Lisp.
+3786320	3790560	Or actually, I would say it's even better than writing macros in Lisp.
+3791120	3793360	Yeah, the spice opinion.
+3793360	3798960	Well, so what I think happens with Lisp is that people say macros in Lisp are nice
+3798960	3803280	because Lisp is an almost iconic language.
+3803280	3808560	So the language itself is the data structure that represents it.
+3808560	3813440	It's the list, the, well, the symbolic expression that represents it,
+3814560	3815120	which is fair.
+3815120	3823920	But I do think that the actual truth is that by having the program be a data structure,
+3824880	3832320	you are naturally, the language is steering you naturally towards treating
+3832960	3837760	the program as a data structure instead of it being a textual transformation.
+3839280	3843360	And in fact, you can write macros in Lisp that don't generalize really well,
+3843360	3849360	that like make assumptions about a specific like argument being,
+3850240	3853680	being or not being a list or being or not being quoted, for example.
+3854480	3857360	In ZIG, you are literally,
+3858480	3862560	comp time is more limited than what you can do with list macros just to be clear.
+3862560	3864000	And that's also kind of by design.
+3864000	3866400	It's kind of like a 80-20 thing.
+3866400	3872160	Like it gives you 80% of the power, but it saves you from the 20% of really cursed stuff
+3872160	3877280	that people will want to do all the time or rather with 20% of the complexity,
+3877280	3879200	which does save you from cursed stuff.
+3881280	3888240	In ZIG, what you do is like the, when you look at the time, you literally call a function,
+3889120	3893120	like you call at type info and you pass in a struct.
+3893120	3897920	So let's say that you made a struct called named person and person has age and name.
+3898880	3903040	And then you call type info on person and what you get back
+3904240	3910560	is a data structure that contains, like it's another struct that contains all the info about
+3910560	3917120	that type. Like among other things, it will contain like an array that contains the two fields
+3917120	3921840	with information about how the field is called, what's the type, etc., etc.
+3922640	3930000	And so your metaprogramming is always going to look at the program as data and never as
+3930000	3935200	syntax. And I think that's the key that makes come time weirdly, weirdly natural.
+3936160	3942080	Okay, yeah. Yeah, it does remind me, I mean, the frustration with Lisp macros was always
+3942080	3947040	that they were untyped and you could really cause things to explode in an even more spectacular way
+3947120	3952960	than normal Lisp. Absolutely. But the nice thing was that there was absolutely no difference between
+3952960	3957120	writing programs that work to compile time and runtime, because it was the same tools,
+3957120	3963600	same language, same everything. Exactly. And it's the same for zig. Because you do use the same
+3963600	3971120	syntax. You like, I have an example on a blog post that I've wrote, trying to introduce people to
+3971120	3978240	the concept of comp time. And my favorite example in there is this idea that, which is actually
+3978240	3984720	taken from real life experience. I was writing a Redis client for zig. And in Redis, you have
+3985280	3991760	commands, like the query language of Redis makes you write commands that are case insensitive.
+3991760	3996400	So if you write it uppercase or lowercase, it doesn't matter. So at some point in my client,
+3996400	4000800	I wanted to recognize some of those commands. So I wanted to check for equality between two
+4000800	4010800	strings. And my idea was, well, to slightly, very slightly improve the performance of the comparison
+4010800	4017680	function. If I know that the constant string, like the string literal that I hard code in my
+4018720	4023920	program that I used to check the user provided string against, if I know that that one is always
+4023920	4029040	going to be uppercase, I can simplify the comparison code ever so slightly. I can just remove one
+4029040	4038480	branch from the comparison. But now I have, I want to enforce that when you call my equal function,
+4039200	4043280	you always pass in the first argument, the argument that you're passing,
+4044000	4047280	like the first argument that you're passing is always going to be uppercase.
+4048480	4052640	Right. So you want some compile time code to check those strings are correctly written.
+4052640	4059120	Exactly. Now, imagine trying to do that with diamond brackets stuff. I have no idea if you
+4059120	4064240	can actually even pull it off. Here's what you do in Zig. In Zig, in the function body,
+4065040	4070000	you open a comp time block. Well, first of all, you have to mark the first argument as always
+4070000	4074160	being available at comp time. So people will be forced to give you, it doesn't have to be a string
+4074160	4080640	literal directly. It can be like a variable name. But ultimately, the value containing that variable
+4080640	4085760	needs to be resolvable at comp time. It doesn't need to depend on weird stuff like the network.
+4090320	4097200	So you open a comp time block, and in there, you have a for loop that loops over the string
+4097200	4103520	and checks that its character is in the correct range. That's it. That's all you do. Nothing
+4103520	4107200	weird. You just use the language to check the string character by character. And if you find a
+4107200	4113440	character that is not in your expected range, so in my case, it was between uppercase A and uppercase
+4113440	4121120	Z, what you do is that you emit a compile error. And you can emit a compile error that says, well,
+4121120	4125040	you are supposed to give me a uppercase string, and you didn't give me an uppercase string because
+4125040	4130640	this character is lowercase. You can even be precise and print the string and point out a
+4130640	4134880	point at the specific character if you want. You can craft the message whichever way you want.
+4134880	4140640	And that becomes the compile error. And so now, users of your API, not only the constraint is
+4140640	4145680	enforced, so if they give you a bad string, they will get a compile error. But the compile error
+4145680	4151600	is also going to be designed by you. So people will get a nice compiler from the compiler that
+4151600	4155520	will tell them you are supposed to pass an uppercase string, but you didn't.
+4156640	4162240	Nice. Yeah, so you can start doing bespoke compiler extensions, and you don't have to learn a new
+4162240	4168480	language to do it. No. That's pretty sweet. Okay. Okay, that gives me a good sense of the
+4168480	4173360	footprint of the language. So there's one other big topic I think we should talk about,
+4174960	4181680	which is, I thought it was really interesting the way that the Zig project is funded, right?
+4181680	4187120	Because every language, particularly in every open source project, has a problem with getting
+4187760	4191760	enough work done because you've got to give up your day job if you really want a language to
+4191760	4198320	take off. Yeah. And your approach, Zig's approach to funding is fairly novel. Tell me about that.
+4199200	4207520	So Zig is a 501c3 non-profit foundation, U.S. non-profit foundation, like 501c3 is a
+4208480	4214400	thing in the U.S. legal system. It's been kind of set up like a charity.
+4214480	4221680	Yeah, it's exactly what we normally would consider a charity. So it's tax exempt,
+4222720	4230320	and you cannot pay dividends. So all the money that goes into the organization has to be used
+4230320	4235840	to pursue your mission. So basically, you have to use the money to run the company. You can take
+4235840	4244080	it out and buy a yacht with it or whatever I mentioned. Zig is not the only language that
+4244080	4250640	has this legal structure. Python, I think, is also another 501c3. But not all languages are that.
+4250640	4255680	Some other languages are a different type of... It's still considered non-profit, but it's a
+4255680	4262560	different type of organization and which does have to pay taxes. This is what is... Usually,
+4262560	4268560	it's 501c6. Like, it might seem that there's not much of a difference between 3 and 6, especially
+4268560	4272880	because it's a place where we normally, in like, the marketing versioning, we would have like,
+4272880	4279600	the patch number. So you think, oh, c6c3, whatever, it's like... They fix the bug in there. No,
+4279600	4286080	that's a huge difference. We're not always consistent with version numbers, but my
+4286080	4289520	god, lawyers, they can really change the rules between versions.
+4292240	4299200	So, Zig specifically leaves mainly off of donations. So most of our income comes from
+4299200	4305760	people donating money to the foundation so that we can move forward with the development of Zig.
+4307360	4313760	Some money also comes from other things. So it's only... It's mainly donations from individuals.
+4313760	4318400	We do have also a good number of donations from companies, but I think in terms of like, if we
+4318400	4326000	were to do a pie chart and plot them both, they would, I think, roughly be balanced. So
+4326800	4334080	we do try actively to keep a balance between our sources of income, because we don't want to get in
+4334080	4339440	a situation where like, one entity or like a very small number of individuals end up having control
+4339440	4344880	basically over the foundation. Maybe not directly, right? Not legally, but if they control the money
+4344880	4351360	flow, then ultimately they do control the destiny of the organization. And we do want to be able to
+4351360	4359840	say no to people. We do have support contracts. All right, we have one with Uber, because Uber
+4359840	4370560	is using Zig to cross compile. They are cross compiling, I think, as of today, all their
+4371520	4378000	backend services that require cross compilation because of ARM servers, mainly. So like, they
+4378000	4384720	wanted a while ago to be able to have ARM servers and not just Intel, well, XAD664. And so they use
+4384720	4390880	Zig. And now they did the work to actually make sure that all their C and C++ stuff
+4390880	4396800	cross-compiles correctly. And yeah, so they have a support contract with us. But then again,
+4396800	4405040	it's not a huge chunk of our income. And that is mainly when it comes from income. So
+4405680	4412320	related to this, also, we kind of want to be independent. And we're very serious about this.
+4412320	4419760	Like, we used to joke that like the, because, you know, people sometimes say, oh, if you want to,
+4420400	4424960	if you want this, your language to succeed, like, you cannot make a successful language
+4424960	4430880	unless you are supported by a big tech company. And we kind of beg to differ, but also
+4431520	4441840	our standard offer is how much money whatever big tech company wants to give us in exchange for
+4441840	4450240	0% of the foundation and zero seats in the board of directors. But they do get Zig at the end.
+4450240	4455200	So they do get something at the end. Yeah, yeah. There is some quid pro quo, but no power.
+4455200	4464320	No power, no control at all, zero, absolute zero. And because we really want to make sure that we
+4464320	4470160	like the Zig is a BDFL run project. So also compared to other languages, we basically
+4470160	4476560	ultimately have Andrew, who is the creator who acts as like the ultimate decision maker. It's
+4476560	4481840	not only him, there's a core team, there's people, there's a process which is also very public,
+4481840	4487680	like you can read proposals to change the language on the GitHub. And discussion happens in public,
+4487680	4494720	and actually anybody can chime in. But for example, it's not a democratic process, like if
+4495440	4501920	feature proposal has a huge number of outputs that counts zero towards the decision of whether
+4501920	4510080	to include that feature of or not in Zig. Right. Yeah, that usually that has some downside,
+4510160	4516880	but usually has great upsides for design consistency. Absolutely. And it's absolutely,
+4516880	4522800	in my opinion, fundamental, if you want to have your language stay small, if you don't want it to
+4522800	4529200	eventually devolve into a kitchen sink. Yeah, that's true. And there was a talk by the creator
+4529200	4536000	of the Elm programming language recently, that I think dove into, dove into this general concept,
+4536000	4540080	I think in a very nice way. Basically, I'm paraphrasing and I'm going to oversimplify.
+4541200	4547920	The talk is titled The Economics of Programming Languages, I think. It's from a strange loop,
+4547920	4554560	and well, it was given a strange loop. I highly recommend it. But the bit that I'm interested
+4554560	4562240	about was said something along the lines of languages that are like 501c6s, like more
+4562240	4567680	corporate languages that end up having like a bunch of organizations come together into a kind
+4567680	4577360	of consortium or like a trade association. They basically look at the language as a marketplace.
+4577360	4584800	They look at the shared infrastructure and all the commerce, all the commerce, all the business
+4584800	4590160	that this thing can support. So which is reasonable, right? You look at a language like
+4590160	4595920	I don't know C sharp or Java, and those languages do enable a certain type of commerce.
+4596720	4602400	So from their perspective, they want the commerce to be as much as possible. They want to give the
+4602400	4610080	best market to their organization members. And so if an organization member wants something,
+4610080	4618000	because it helps them do their business, you have a strong incentive to say yes. And whoever
+4618000	4622880	doesn't need that feature, they cannot use it. They can disable it. They don't have to use it,
+4622880	4630560	right? So there's no point in saying no to people if your goal is to enable the have the biggest
+4630560	4638320	possible market. But as technologies, we know that, well, there's some downsides from that, right?
+4638320	4643520	Once your language becomes a kitchen sink, then it's like, it's not good over time. So there's
+4643600	4648720	huge value in keeping your thing small and consistent. And I think that's what you get by
+4649360	4654720	choosing 501c3 over 501c6, or rather not going down the path of making your
+4655440	4657440	organization like a trade association.
+4658080	4663600	Yeah, yeah. It's interesting the thought that that one decision, how you're structured
+4664240	4670000	as a company, or as a financial organization will influence how you're designed as a language.
+4670720	4679200	Yeah, it has huge influence. People, programmers, don't want to think about this stuff. They like
+4679200	4685840	to think, oh, I just want to focus on the code, which is, it's a sentiment that I can understand.
+4685840	4692160	Frankly, I would like to only focus on the code. But the hard lesson that I learned is that
+4693440	4698640	to have the best technology, you have to get right the business side. Like the business
+4698720	4702880	side comes first. Every time you make a mistake there, the technology will suffer.
+4704000	4708320	It will, in the long run, it really matters. In the short term, it doesn't. The long run,
+4708320	4715360	it has a huge effect. Yeah, that's true. Okay, well, I'm very glad we diverted into comp time,
+4715360	4721360	but we should probably wrap up and let the listeners go to run time. How's that for a segue? So
+4722240	4729920	yeah, if someone wants to get started with ZIG, I know you have LSP support, you have a VS code
+4729920	4734240	plugin, you've got all the quality of life things for a new beginner, but where should they start
+4734240	4741280	learning? My recommendation would be go to the official website, ziglang.org, and there there's
+4741280	4748480	a learn section. The learn section has a guide on how to download ZIG, install it, and it also
+4748480	4754080	links you to some learning resources. Personally, among those, the two, actually the three main ones
+4754080	4760160	that I would suggest is, as a starting point, the language reference, the documentation that
+4760160	4764080	tells you about the language, not the Sunday library. That one teaches you specifically
+4764080	4771360	about like syntax of the language, and it's one page. It's one long page, like it's not an A4
+4771360	4777280	or US letter page, but it's like just one page is not huge. And you don't have to read it all
+4778240	4784560	precisely, you can scroll through it. But that one gives you baseline understanding of ZIG.
+4785440	4790560	Then from there, I would suggest if you don't have like experience with a lower level programming
+4790560	4797280	and you want like a very smooth learning curve, ZIG links is the best starting point in my opinion.
+4797280	4802400	So ZIG links is like a community project where basically you clone the repo and you get a
+4802400	4808160	collection of very tiny programs that don't compile or that don't behave correctly.
+4809360	4816240	Yeah. And the comments tell you how to fix them. So you go one by one and you, the comment will go,
+4816240	4820320	this program is supposed to print all award, but it doesn't fix it. And that's going to be super
+4820320	4825440	simple, right? You're going to just fix the string literal. But then going forward, the
+4825440	4830320	exercises will become very smoothly, but they will become harder and they will require you to
+4830320	4832080	understand more of the syntax.
+4832080	4836960	You know, I think that's how I learned closure. They had a similar thing called, I think the
+4836960	4843360	closure cones as like a series of failing, small failing programs that you have to fix
+4843360	4847280	and you gradually learn the whole language. It's a lovely way to learn a new language.
+4847280	4852640	Yeah. ZIG links is very, very, very popular. I would say it's probably the most popular
+4853440	4859120	piece of educational content in the ZIG ecosystem. And the name ZIG links is also inspired by
+4859120	4865600	Rust links. Because Rust also has it. The same thing. And they call it Rust link.
+4866480	4869440	Right. Nice. I will link to both of those in the show notes.
+4871120	4878720	But for now, Loris, thank you very much for joining us. It's a fascinating language with
+4880240	4882960	almost more scope than C, which I can't believe.
+4883840	4888320	It has pretty much all the scope of C. It tries to fix all the things that C,
+4888320	4893440	for some reason, never wanted to fix. Think about it. Why is ZIG able to cross-compile C?
+4894320	4899600	And a C compiler is not going to be able to give you that out of the box. We didn't get into this,
+4899600	4905760	but you get a ZIG compiler and you write hello world in C and you can compile it from Linux
+4905760	4909200	to Windows. Try to do the same with Clang. It's not going to work.
+4910640	4912080	I'm not even going to try.
+4912080	4918080	Yeah, but it's insane. So yeah, the scope is all of C. All of the things that C
+4918080	4921120	should have done that he didn't do. Well, that's a little bit extra.
+4922240	4925280	Nice. That's enough to keep us busy for a while.
+4925280	4926080	Yeah.
+4926080	4927680	Loris, thank you very much for joining us.
+4928320	4928720	Thank you.
+4929760	4934480	Thank you, Loris. Since we recorded that conversation, I have been playing around
+4934480	4938960	with the Zieglings tutorial he mentioned. And yeah, I can confirm it's a nice way to learn.
+4939680	4944720	I'm also planning to find time to pull out my old Arduino microcontrollers,
+4944720	4949200	because I've dabbled with kind of embedded hardware in the past. I've never really been
+4949200	4955360	happy writing C. I've loved using Rust, but it's been a fight to get things to compile
+4955360	4961120	onto the embedded hardware. So hopefully, Zieg is going to finally make me happy when I'm tinkering
+4961120	4967680	with soldering irons and wires and LEDs and stuff. In the meantime, I leave you with links to the
+4967680	4971440	everything we've discussed. They're all in the show notes. There is a wealth of information
+4971520	4976560	out there about Zieg, how to learn it, what it does, extra features we didn't get a chance to cover.
+4977200	4983600	And I'll leave you with a funny story. If you install Zieg and type Ziegzen, it will tell you
+4983600	4989280	why it exists. I'll let you go and discover that. Before you go, please do take the time to give us
+4989280	4995280	a like or a share or a rate or a review. It is the easiest way to let us know which topics you
+4995280	5000800	find most interesting so we can do more episodes on those kinds of topics. And if you haven't already,
+5000800	5006000	click subscribe or follow to catch future episodes. And until the next episode,
+5006000	5011520	I've been your host, Chris Jenkins. This has been Developer Voices with Loris Crowe. Thanks for listening.

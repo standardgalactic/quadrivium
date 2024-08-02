@@ -1,0 +1,778 @@
+Okay, hi everyone, welcome to our 41st session of the May AI Group Exchange.
+This week we have Elba Gu from Stanford here with us to present his research on efficiently
+modeling long sequences with structured state spaces.
+Elba is a final year PhD candidate in the computer science department here at Stanford
+University, advised by Chris Ray.
+He's brought the interest in studying structured representations for advanced signal capabilities
+of machine learning and deep learning models with focuses on structured linear algebra,
+non-euclidean representations, and theory of sequence models.
+Thank you so much Elba for joining us today.
+Before we start, do you have any preference on how you want to take questions?
+Yeah, thank you, thank you for an introduction.
+For this talk, I think I'm not sure usually the level of formality, but I'm very happy
+to have the casual in terms of the conversation and the questions.
+I think there's some time, it's not going to be a full hour talk, so I'm more than happy
+to take questions during it and I'll watch the time in case it gets too long.
+And then I'll also pause a few times to pause for potential questions during some sections.
+Okay, sounds good.
+Let's try to make this session as interactive as possible.
+How further or do let me hand it over to Albert?
+Thank you.
+All right, so this talk will be about a new sequence model called S4, or structured state
+spaces.
+Now, for the purposes of this talk, when I mentioned sequence models, we will think of
+them as a black box sequence-to-sequence map composed of primitive layers, where each
+layer simply takes an input sequence and returns a sequence of the same shape.
+For our purposes right now, we'll think of them as just being a one-dimensional to one-dimensional
+map, but this can be easily converted to higher-dimensional features.
+Many sequence models have been developed that satisfy this interface, particularly in the
+context of deep learning.
+These include many classical deep learning models, such as recurrent neural networks
+or RNNs and convolutional neural networks or CNNs, as well as many more modern models,
+such as transformers or neural ODEs.
+And all of these models kind of satisfy the same interface.
+They map a sequence to a sequence of the same shape, or meaning the same length and
+field dimension.
+And then you can incorporate any of these into a deep learning model fairly easily just
+by using standard architectures, where you can include normalization layers, other linear
+or nonlinear activations, as well as with the dual connections.
+And so the core component of all of this is the core sequence model, and that's what
+we'll focus on.
+And this generic deep neural architecture based on sequence models can be used to solve
+many types of problems with many types of sequence data, from medallies such as text
+and audio to images and videos to general time series data or biosignals, for example,
+which is depicted here.
+In this talk, I'm going to draw a very rough distinction between different types of sequence
+data.
+Now much of modern sequence modeling in the context of machine learning focuses on data
+such as text.
+And very roughly I'll classify this as being a discrete sequence because the input comes
+in the form of discrete tokens.
+And other types of data like this includes things like graphs or things like DNA-based
+pairs.
+In contrast, what this talk will focus on is data that's roughly more continuous, things
+such as video or time series or audio.
+And what's common to all of these is that there's an underlying notion of time from
+which the sort of data is sampled from.
+And so I'm going to very broadly call this type of data signal data as opposed to sequence
+data.
+And roughly speaking, signals can be defined as data that's generated from an underlying
+continuous physical process, including all these examples here.
+This talk will be composed of two parts.
+The first part covers a method called HIPPO, which was the predecessor to S4.
+And it's a new conceptual framework for the online memorization of signals and led to
+a new method for modeling signals and sequences.
+And then the second part will be S4, which built right on top of HIPPO.
+And it has a lot of important properties that have been very effective for addressing some
+types of sequence modeling problems.
+And before I get into the technical stuff, I'll give a quick preview experimental results
+to highlight the types of improvements I will see and what it's good at.
+And this will kind of illustrate the types of challenges that we'll hope to address with
+these new models.
+The first challenge overall is just going to be to signal or general temporal data that
+I just defined.
+And this data is really everywhere.
+So some examples include audio waveforms, spatial temporal data like videos, biosignals
+like electrocardiograms, which have important applications of medicine, or market and financial
+data.
+And then there will be multiple time series logs being generated by every major industry
+and many other types of scientific modeling problems.
+And we'll return to these experiments later with a particular focus on some biosignal
+data.
+But for now, I will just use one example to illustrate, which is audio.
+And audio is actually one of the most common types of data because it's just raw sound.
+It's everywhere.
+And so to illustrate, machine learning right now is really all about text and so many
+headline results recently have been about people scraping together all the raw text
+data they can get, creating massive models on them.
+And that's led to very impressive results like GPT-3, which I don't know the audience,
+but hopefully many of you have heard of this model.
+In contrast, audio actually has orders of magnitude more data than text.
+For example, a single labeled dataset has more data set than all of the data used to
+train those massive language models.
+But you don't hear about benchmarks in this domain nearly as much.
+And I think part of the reason is just because audio models are, audio is very challenging
+and current models seem much worse in comparison to text.
+And so here's a concrete example where we consider basically a very general and hard
+audio generation setting of generating spoken digits, zero to nine, using a completely
+unconditional autoregressive model.
+And the gold standard here is a baseline called WaveNet.
+And here's what it sounds like trying to say these numbers.
+So it's, it's not very good.
+And here's results for S4, which was just, these results are just from the past like
+two months or so ago.
+One, two, three, four.
+So that's, that's a pretty concrete example.
+And so in this talk, we'll see how models like S4 are kind of designed for signals in
+a way and can have significant advantages for this type of data.
+And the second example up front, or the second example of a running challenge will be, can
+be motivated by examining audio more closely.
+And one reason why audio is so hard is because it's sampled at such an extremely high rate
+where a single second has 16,000 or more samples.
+In contrast, most sequence models can't deal with more than a thousand or so.
+And to illustrate, there was a benchmark in the past year called Long Range Arena that
+measured the performance of models on a suite of long range tasks.
+And the most popular sequence models these days, Transformers, were the main focus.
+But despite their many successes, they don't do so well on long context.
+And so there were dozens of variants that were tried, and they all get to around the
+same performance, which is actually not much above random guessing.
+In contrast, S4 we'll see is explicitly designed to be effective on long context, which leads
+to a huge improvement on this benchmark.
+And it's the first model to ever make progress on some really difficult long sequence tasks.
+Can I ask a quick question here, Albert?
+Yeah.
+So in the previous task, that was a generative process.
+And in this, the Long Context Channel challenge, is it a classification or what kind of task
+is it?
+These are all classification problems.
+And they're on data such that includes several data modalities, such as text, images, some
+sort of symbolic processing, stuff like that.
+I see.
+And so you can use S4 both as a generative model to actually generate sequences.
+Yeah.
+So a lot of sequence models, again, a sequence model I'm defining as a black box interface,
+really, that's just a sequence-to-sequence map.
+And many of these can be used in many ways, both for classification and generation.
+For example, transformers or RNNs are similar things that satisfy the same interface and
+can be used in many ways as well.
+Gotcha.
+Thank you.
+Yeah.
+OK, so now I'll get into the technical portions.
+And the first part will be about Hippo, as I mentioned.
+And to motivate what Hippo's goal was, I gave a bunch of examples of data that machine
+learning models currently struggle with, particularly things like time series.
+And to highlight why this is hard, I'm going to use a running example to illustrate a very
+basic capability that's difficult for modern models.
+And that's the moving average, which is perhaps the most basic method in modern time series
+analysis.
+So this figure depicts the exponential moving average or EMA, which is the blue line.
+And the way it's used is that it's a fixed non-learnable feature that's often the first
+pre-processing step that's performed in any sort of time series analysis pipeline.
+Now in the context, in the spirit of machine learning and deep learning, instead of doing
+manual processing like creating these features, we really would like to be able to learn these
+sort of things automatically from the data.
+And so in particular, here's a very simple concrete task is, suppose you have a model
+and you're feeding it this black input signal, and you want the model to predict the EMA
+or the blue signal as the output.
+And fortunately, it turns out that standard sequence models, such as attention and convolutions,
+cannot do this at all.
+And the reason why is essentially because the EMA has unbounded context.
+It's actually just a weighted average of the history of the signal with an exponentially
+decaying weight that searches back infinitely.
+Whereas in contrast, most modern models such as attention or a convolutions have finite
+context in those.
+Some people wonder about other things like RNNs.
+And the short answer is that RNNs are better than attention convolutions here, but they
+still aren't that good due to empirical problems with optimization and other things.
+So we'll see that the methods that are introduced in this talk will be very naturally suited
+for this and are much stronger versions.
+But going back to the EMA, the way that one way to think about it is that it's a very
+simple summary of the entire history of your signal.
+In other words, it's a state X, which is a single number that summarizes the entire
+history of the input U.
+And the reason why it's useful is that it's easy to compute because if you get new data,
+you can update the EMA in constant time using this weighted average.
+And beyond the simple example, though, I think these two properties are actually conceptually
+really important.
+For example, they're exactly the properties that you need in any sort of real-time decision-making
+problem.
+And really abstractly, you can even imagine that your brain is a state that's summarizing
+the entire context of your life, and it's constantly updating as you acquire new information.
+So I think that's actually a pretty general important question, and this was a direct
+inspiration for HIPPO.
+In the context of machine learning, this question has a lot of direct impact on our models because,
+as I mentioned, they struggle with long context.
+For example, text models, it's been shown typically have a context range of about 100
+to at most a few thousand tokens.
+Whereas if you want to deal with data such as speech and audio, a single word in speech
+is a sequence of length more than 10,000, and this can really stretch to unbounded length.
+And so this is the question that I was trying to, that I was thinking about.
+And what I did was I tried to convert this vague goal of long-range memory into a more
+formal mathematical question.
+The conceptual idea is that if you can compress the past into a smaller state that's accurately
+remembering it, then you should be able to reconstruct the past.
+And we can then attempt to turn this into a technical problem.
+So the idea is that we're going to observe an input signal online and try to maintain
+a good representation of it that allows us to reconstruct it.
+And so, okay, so first in this section, I'm going to formalize this idea, and then I'll
+define HIPPO and visualize it.
+And then talk about a couple of generalizations.
+So the first thing is that let me formalize this idea that I just mentioned.
+And so the idea of HIPPO is that, again, we're trying to observe an input signal online,
+and we're going to try to encode it as well as possible given a memory budget.
+So concretely, you'd think of it like this.
+So suppose at some initial time, T0, we've seen part of the input, and we're going to
+try to compress this input.
+So what you can do is store the best approximation to what we've seen so far.
+For example, we can create the best polynomial approximation and write down the coefficients
+of that polynomial.
+So now the degree of the polynomial or the number of coefficients is the memory budget.
+And we want to do this continuously at all times.
+So as we keep seeing more data at some later time T1, we'll have to update our best approximation
+and write down the new coefficients.
+Now the central question is, first of all, how do you actually find these optimal approximations?
+And moreover, how can you update this representation efficiently as you keep seeing more information?
+And so this is the main conceptual idea, and it's a little bit of work to formalize a little
+more.
+And in particular, I've been talking about optimal approximations, but that's actually
+not well-defined.
+And so what we'll need is to find a measure that specifies the quality of approximation.
+For example, we can choose the exponentially decaying measure, which says that we care
+about approximating the recent pass of the input more than the far pass.
+And this will relate back to the EMA.
+But given this, the problem is more or less well-defined.
+So basically, we have to pick the measure sort of as a hyperparameter or a prior for
+now.
+Let's talk about how you can actually learn it.
+But for now, we need to pick a measure up front, say the exponential decaying measure.
+And then you need to choose a polynomial basis.
+And then the problem's completely defined, and you can write down the coefficients in
+closed form, and you can figure out how they evolve through time.
+So I'm going to skip the details of the derivation, but you end up with a closed form method.
+And what I want to emphasize is that the derivation has some technically interesting
+new ideas.
+But the most interesting and important part of this, I think, is just this simple conceptual
+idea of the online compression and reconstruction and how to formalize that mathematically.
+So that's the main point.
+OK, and now with the definitions out of the way, things will become a lot more clear with
+some visualizations of what it does.
+So first of all, let me just be really formal about defining what HIPAA is.
+So I mentioned the problem was that we are encoding.
+So XFT is going to represent a vector of our coefficients at all times.
+And the question is, how does this evolve through time as we see more data in the input
+U?
+And it turns out that it just satisfies a simple differential equation.
+By going through the derivation, you can write down this differential equation in closed
+form and write down closed form formulas for this transition matrix involved here.
+So to be concrete, the ODE is called the HIPAA operator.
+And the matrices, the matrix in the operator are called HIPAA matrices, which have closed
+form formulas.
+In fact, the actual matrix is this matrix.
+It's an extremely simple matrix, which is a special type of structure matrix.
+And yeah, so it's just a simple formula.
+And then we write down a closed form formula for this differential equation.
+And that's how our coefficients evolve over time.
+And now, right, so this equation, again, is called the HIPAA operator or the high order
+polynomial projection operator, because we're projecting on the high degree polynomial basis
+functions.
+Now visually, the way to think about it is like this.
+The reason I call an operator is because it maps a function to a function.
+So it's an operator that maps this black input signal U to these sets of coefficients X
+and blue, where every time X of t compresses the history of the input signal U.
+And you can compute X online as you see one input at a time.
+So the black line represents our current time step.
+We're gradually seeing more of the input.
+And we are updating our coefficient vector, which is depicted in blue.
+Here I've, this is visualizing just the lowest order for coefficients of the best polynomial
+approximation.
+And now here is what the reconstruction looks like.
+So as I move along through time and update my coefficients, the coefficients that that
+polynomial defines, in a sense, is actually just this red line.
+So it is reconstructing the input just like we wanted.
+Note that we are using only, so here I've only visualized four coefficients, but I'm
+actually using 64 coefficients, but the whole function was linked to 10,000.
+So I'm compressing it a lot.
+And this, here's a static image that kind of illustrates the effect of the reconstruction.
+So because I'm compressing it, I can't perfectly reconstruct the input.
+And so how good is the reconstruction then?
+Well, it depends on the measure.
+So the green, the green line in this figure was the exponentially decaying measure that
+we are basically projecting onto.
+And so intuitively, you can see that the red reconstruction line is really accurate for
+the recent past and degrades further out in history, but still maintains some rough information
+about the whole signal.
+And so that is, that's hippo.
+Now, oh, one, oh, okay, a question here.
+No, you can continue.
+I just had one clarification, but I can ask after you finish.
+Here's fine too.
+Okay.
+So is it fair to think about X as being the state at each time point?
+And then essentially the red line is trying to reconstruct the signal given the current
+state or do you also use all the past states to reconstruct?
+That's exactly right.
+So yeah, so the reconstruction is happening using only the coefficient vector at the current
+black line.
+So every single time I'm using, I'm for, yeah, the blue line, I'm visualizing the whole
+thing, but at any given point in time, I'm remembering only the current vector, which
+has length 64.
+Here I'm only visualizing four of the components, but it has length 64.
+And using those 64 numbers, I'm reconstructing what I've seen so far in red.
+Oh, awesome.
+Thanks.
+Right.
+Now, in that previous figure, if I just take one of the blue lines, actually the lowest
+order coefficient and overlay over the function, you can see that it actually turns out to
+exactly be the EMA.
+And so it turns out that moving averages can be viewed as order zero or low order projections.
+On the other hand, hippo is essentially a very strong generalization of this that solves
+a natural mathematical question and gets back things like the EMA for free.
+So that's what hippo is, and now I'll just talk a little bit about some extensions of
+it.
+So first of all, a natural question that may be wondering is that I've been using this
+example of an exponential measure, but what about other cases?
+Well, it turns out that hippo can be derived for any measure.
+For example, here's a case that is pretty natural as well, which is what if I want to
+reconstruct along a uniform measure?
+In other words, I only care about remembering the recent past in sliding windows of my function.
+And this is possible, so you would get a different ODE, and here's a reconstruction in effect.
+So again, using just 64 numbers in memory, I'm trying to reconstruct the last 2,000 time
+steps of this function uniformly, and it's doing this quite accurately.
+Now you can generalize it even further to, for example, when the measure is changing over
+time instead of just sliding along, and so there's a very general framework here that
+can do lots of things.
+A lot of this was in follow-up work to their general hippo paper, and what we showed was
+that for essentially any measure, there exists a corresponding hippo operator where the hippo
+matrices A and B depend on the measure, and you can write them down in closed form.
+And this is important, I think, because it draws an equivalence between measures and
+these ODE's, where this means that we don't, I mentioned earlier that we had to choose the
+measure up front as a prior, such as the accidentally decaying case, but actually just by learning
+these matrices A and B, it's in some sense the same as learning the measure.
+Okay, so now even better, not only do these operators always exist, but it turns out that
+the matrices are always structured.
+Previously, we saw, for the accidentally decaying case, the matrix was actually extremely simple.
+In general, they're going to be more complicated than that, and it's, they satisfy a structure,
+which was something that I introduced in much earlier work, but they are all structured in
+some way, and that means that you can, how do you actually calculate these updates through time?
+You can actually update the state or the coefficients in nearly optimal time.
+Okay, so that was the main takeaways from HIPPO, and so just to recap, we were inspired by these
+very basic, these simple but important properties of trying to maintain a state that's summarizing
+the entire context, and we formalized this into a mathematical problem, which was pretty
+intuitive, and we were then able to solve analytically, and this resulted in a nice
+class of methods for addressing long context and signals.
+Okay, so I see a question in the chat.
+So, can these operators be expressed in terms of Z-transforms? I'm not quite sure what you mean here.
+To my understanding, Z-transforms are like the discrete version of a Laplace transfer,
+and I'm not sure if that's the one you're referring to, or another notion.
+Yes, that's what I was thinking about. It seems like as though
+just as you can express like exponentially, exponential decay in terms of Z-transforms
+of the functions, that there seems like it's likely to be a link.
+Yeah, I mean, I think all these things have a tight link, and they're connected to each other.
+It turns out actually that the way that in the next part, when I talk about S4,
+there's going to be some difficult computations, and I'm not sure if that's the one you're
+talking about. In the next part, when I talk about S4, there's going to be some difficult
+computational issues for computing certain things that I'll introduce, and to actually compute them,
+I essentially actually go through Laplace space or frequency space. So, essentially,
+I actually take the Z-transform of this equation and calculate that transform at several values,
+and then invert it to get the hippo matrices back, or to get a certain thing back.
+Sounds good. That makes sense. Yeah, great question. And yeah, so I wanted also just
+to stop around here at the summary for any other questions.
+And if there's none, that's great because usually this is a pretty complicated
+framework mathematically, but hopefully the visualizations help explain it a lot.
+Okay, so I'll move on to the next part where, so one thing I didn't include in this section
+was any experiments. So the way we evaluated this is kind of just like how good is the
+reconstruction, and actually using this method in machine learning models did pretty well,
+just naively, but where it became really effective was when incorporated into a model
+in a particular way, and so that's what S4 will be. And so to, first I'm just going to define S4,
+and I'm going to define it through hippo, which was the original motivation,
+and the motivation here is going to be very simple. So to refresh your memory, this is what
+hippo does, it maps an input signal, which in our case they're thinking of as 1D,
+to a higher dimensional signal. Now the problem is that we've blown up the dimension of the input
+from one dimension to n dimensions, where n was our memory budget or the number of coefficients,
+and typically this is going to be at least 100 or so. So the motivation for, so I work in deep
+learning, and I just wanted to incorporate hippo into a deep learning model, but this is a problem
+because you can't just stack layers of this because you just keep increasing the dimension.
+And so a very simple motivation to fix this is just, let's just decrease the dimension again.
+And the way to do this is that you can just take a very simple linear projection. So
+what we'll do is that we have a state x, which was like a 100 dimensional vector,
+and we'll just hit it with a dot product that can be learnable to get back a single number,
+which is essentially taking a linear combination of the blue lines to get the final output,
+which is the red line. And then we'll add a multiple of the original input, which can be seen as a
+skip connection. And that is the entire definition of S4. It's finally these two equations where
+the first one is the hippo equation, which takes the input to a state that's kind of memorizing it.
+And then the second equation just combines the state linearly into a single output.
+Now, for those of you with a background engineering, this definition may look really familiar.
+And this is because this is a well-known model called a state space model or SSM,
+which is sometimes depicted with this simple control diagram. And they've been around for
+decades, such as the famous common filter and use in many scientific fields. I think outside of
+controls and statistics, they're also pretty commonly used in perhaps computational neuroscience
+and many medical problems as well. Now, what the theme of this part will be is that
+we'll see that SSMs are a really elegant and natural model,
+but they haven't been used in deep learning before in this way. And for underlying reasons
+that we'll see in that S4 address. But for now, just to define S4 in terms of this model,
+the way that we'll define it is that it's just an instantiation of an SSM, these two equations,
+where we'll plug in specific values of matrices in. And although it turns out that
+although this model is simple to define, actually computing with it turns out to be
+difficult and will require new ideas and algorithms. And so my goal of this in this section is to
+convince you that this is a really elegant and fundamental model. And so first of all, I will
+talk about some general properties of SSMs that would have a lot of benefits in machine learning
+and deep learning that are independent of S4. And then I'll show how those come with associated
+trade-offs that prevent them from being really good in deep learning. And S4 will solve those
+problems. And finally, I'll show several real world experiments that show S4's effectiveness
+in a bunch of settings. So in this first part, I'm actually going to describe three different
+ways to think about SSMs, which give them a lot of nice properties. And this was theory developed
+in the predecessor work to S4 that and will have empirical concrete empirical benefits.
+And so the first way to the first property is that SSMs inherently operate on continuous time
+signals instead of discrete time sequences. So here's how to think about it. So in machine learning,
+we usually work with sequence models, which I defined as a parameterized map
+from an input sequence to an output sequence.
+What if instead of mapping a sequence to a sequence, I coined this term signal model
+to denote a parameterized map that maps a function to a function or a signal to a signal.
+And given one of these maps, you can essentially discretize the inputs and outputs however you
+want to get back a sequence. So essentially, the upshot is that signal models are in some sense
+a generalization of sequence models, where they actually map functions and functions,
+but by discretizing them, you get back a sequence model. And so the first way to think about SSMs
+is that they are just a simple parameterized signal model, where the parameters were matrices A, B,
+C, and D, and they map an input function to an output function. That's it. Just in terms of the
+interface or the API of the model, that this is what it does. The reason that this property is
+important is because even when we're working in discrete time, the model in some sense understands
+the underlying continuous domain. So I will show what I mean concretely by this later empirically.
+All right, so that's the first representation. The next perspective relates back to the original
+motivation of HIPAA, which was about online computation. So how do we actually compute
+the output of this SSM? One way to do it is to process the input one at a time, just like HIPAA did
+in an online setting. And so this is our current computation because each update can be computed
+efficiently from the previous one. And just to unpack a little why this is non-trivial, imagine
+we're processing this very long input, and we're at this current time step denoted by the vertical
+line, and we get just one more data point. So just like a single number for the input,
+and we want to compute the next output. So this output depends on the entire history of the input,
+and so you'd expect it, the computation of the next one to scale with the length of the sequence.
+But actually we can compute it in constant time. And this is a non-trivial property that most
+sequence models don't have. For example, in a transformer or a convolution, if you were to
+do this in an online or autoregressive fashion, computing mapping one input to one output,
+each computation will scale with the entire length of the context window.
+The reason that SSMs can do this so efficiently is because they're stateful,
+which is a point that's kept coming up, where in memory we're maintaining a state,
+which is the blue thing, which is a single vector that summarizing the history, and can be updated
+very efficiently. This makes them really efficient in any sort of online setting, as we've seen.
+And yeah, so we'll see again why this matters. But there's one main drawback, which is that if
+you're not in an online setting, this is slow because it's sequential. And so what if you
+actually know all the future inputs? Then ideally you wouldn't do this step by step,
+and you could do something faster and parallelizable. And so that was actually basically the main
+problem with RNNs and why they've recently fallen out of favor in machine learning,
+because they're sequential and not parallelizable when you see a lot of data at once.
+And so that motivates the final representation, which is the convolutional representation,
+which allows them to be paralyzed. And so the idea is that instead of mapping going from the input
+to the state to the output, you can actually go straight from the input to the output,
+bypassing the state, and doing the entire computation in parallel over the sequence length.
+The reason is that SSMs turn out to be equivalent to convolutions,
+where computing the map from the input U to the output Y is equivalent to convolving the input
+by a particular convolution filter, which is depicted in green here. And so to compute this
+map, you just do it's just Y equals U convolved with K for this convolution kernel. And so this
+can be done very efficiently using no techniques. So for the practitioner, what one thing I want
+to emphasize is that I think the most useful way to think about SSMs potentially is as
+essentially a very fancy CNN, where you're parameterizing the convolution kernel in a
+different way. And notably, this kernel can be infinitely long, which again points to one reason
+why this is very good at long range dependencies. So just to call back to this example again,
+the EMA, the EMA is actually literally just a single convolution where you can involve the input
+by an accidentally decaying convolution kernel. And as I mentioned, although things like CNNs
+are also literally convolutions, they can't represent the EMA because CNNs are finite
+window and the EMA is infinite window. On the other hand, SSMs do represent infinitely long
+convolutions. And in fact, there's a very, very simple way to write down the EMA as a directly
+as an SSM. And I think Chris kind of pointed to that earlier. So those were the three properties
+of SSMs that I wanted to mention. And just to recap, first of all, we're going to think of them as
+maps that operate on continuous signals, not just sequences. If your model is deployed in a
+setting where it sees inputs in real time or online, it can compute these efficiently
+recurrently. And if you see an entire input at once, such as usually during training time,
+you can compute it even more efficiently and in parallel.
+I have a quick question here, Albert. This is super cool. I was just wondering if the goal
+is actually to get a representation of your signal so that you can perform different
+downstream tasks. Isn't it better to actually have the state space representation rather than
+directly going to the outputs? In that case, would we have to stick with HIPAA instead of going to S4?
+Great question. Actually, no one's asked me that, but that's a great question.
+So the way that I think about this is that what's happening is that essentially we have
+this nice state, which is very meaningful. And then the second part of the SSM that projects it
+is kind of like the learnable thing that's figuring out how to extract the right features
+from this state. Now, I mentioned that everything I've done so far, so that's a learnable part
+that's actually using the entire state, in a sense. And I mentioned that I'm only considering
+the one-dimensional case so far with 1B inputs and outputs. But actually, what's going to happen
+in practice in our actual deep learning models is that we'll have multi-dimensional inputs and
+outputs, and we'll essentially run an SSM on each one of them. And each one of these will
+learn how to use the state in a different way. So we'll have essentially many, you can think of
+as maybe we'll have a single state, but many, many possible outputs that are all learnable,
+and we'll extract different features from that state. So we are going to get a lot of different
+features that utilize the state in however they want. I see. Okay. Thank you. But sorry,
+sorry, Joanne. But isn't it like all these dimensions also have a correlation? So do you also,
+if you run the space independently, don't you want to also preserve the correlation?
+So this is something that I think a lot of people working with time series
+are concerned with. And somehow in deep learning, we don't normally consider that aspect. And we
+kind of just throw in a really big model and a lot of these independent layers. And kind of,
+I think in practice, what usually happens at the model learns to, it learns whatever it needs to do
+for the final prediction task. And this often does involve like, I think it does end up
+decorrelating things. But it's not super clear exactly the dynamics of what happens. And this is
+kind of a more broad question for deep learning theory in general. That's not well understood
+right now. What I can say is that we've used this on many types of like noisy data that usually
+involve, so I'm going to get to experiments later, but we have tried this on many types of
+like time series and other noisy data like EEG. But one day, one day, right?
+It can work on multiple dimensions, which I kind of just pointed to you. And also I'll mention
+again later how we do that. But yeah, you can just kind of do it do it naively on multiple
+dimensions. And it just works out of the box. Okay. Okay, so before we get to the experiments,
+I just have a little bit on kind of the how S4 builds on top of SSMs. And so just to refresh
+your memory of what S4 is, it's just an SSM where we plug in certain formulas that were
+based on the theory of memorization. And we have special algorithms to compute it.
+And so first of all, why are these matrices needed? Well, the most important part of the SSM is the
+state as Nandita keeps insightfully bringing up. And so what HIPPO did was that it computed a
+very particular state that was mathematically meaningful and compresses the history of the input
+in a way that captures long range dependencies. And so basically just by plugging in that formula
+into this SSM, it learns a more meaningful state that allows the SSM to address long
+dependencies better. So just to illustrate this empirically, here's a simple experiment on a very
+standard benchmark for sequence models. The actual task doesn't matter, but it's well studied and
+standard sequence model based on such as transformers, CNNs and LSTMs all get to around the
+around the same accuracy of like 60 ish percent. Now, what happens if we use an SSM?
+If you use it naively by randomly initializing all the parameters, which is
+what you would typically do in deep learning, it actually does terribly.
+But what happens if we just plug in this formula? Plugging this in and not even needing to train
+the matrix gives a massive boost to the SSM and goes from much below the baselines to
+substantially above the baselines. And actually, I use the very small models for this ablation here,
+but the full model as far on this data set gets over 90%, which is something like 20 plus points
+better than all other sequence models. So that kind of illustrates why HIPPO is so useful.
+Now, quick question in this example. So are both A and B basically just plug in matrices or
+is A alone basically a measure? A is the more important matrix, but actually, yeah, just plugging
+in A and B essentially just just they're both fixed matrices, which are the HIPPO operators
+specifies both of these. I've only illustrated A because it's a more important one. But yeah,
+this particular experiment froze both of these matrices to specific ones.
+One question people have is that like, do we always freeze these? And actually,
+we can train them as well. This was to illustrate just like even freezing them, it does super well.
+And then, but in practice, we do train them and it makes it do a little bit better.
+Okay, so that was one thing. And that kind of points to I mentioned that SSMs have not been
+used in deep learning before in this way. And that's kind of one problem. If you do it naively,
+it doesn't work. And so you need this new theory. The second reason is actually that they're
+computationally pretty difficult to work with. And so here's the illustrate.
+Again, so to remind you, we're thinking of an SSM as a parameterized map from an input signal to
+an output signal. And I'll suppose that our input had length L. So our input would just
+give us a sequence of L numbers. Then the output of this whole thing is also a sequence of L numbers.
+And computing this map ideally takes around O of L time or not too much more.
+But here's the problem. SSMs map the input to the output through this state.
+And that state gave them a lot of nice properties, but it's also 100 dimensions higher. And so
+computing the end to end mapping through the state will take 100 times more computation and memory
+than what's needed to compute the final answer. And this is actually a real problem. And now,
+earlier I said that you don't actually have to compute the state. You can compute it using a
+convolution instead. But what happens is that before computing the convolution, I have to compute
+the kernel or the convolution filter in green. And computing that is just as slow as computing the
+state. And this sort of makes sense because it hasn't changed the computational hardness of the
+problem. So essentially computing it no matter how you do it is going to be slow and memory inefficient.
+So the main point of S4 was showing that you could substantially reduce this computation
+when the SSM is structured. And for example, when using the
+hippo matrix instead of an unstructured matrix, you can save this factor of 100
+and make S4 overall extremely efficient. So this is done through a particular algorithm,
+which I'll just flash up. But basically we're trying to work with this SSM, but we only need
+to work with specific structured cases such as this, such as some particular hippo matrices.
+And now using some algorithmic ideas, it turns out there is a way to compute the convolution
+kernel, which was depicted in green before, very efficiently. And then compute the whole thing using
+a convolution. So I won't go into details here. And I will also mention that recently we've been
+developing simplifications of the model that allow you to bypass all of this and do things much more
+simply. So hopefully in a few weeks we'll have some stuff out that's where you don't need to
+worry about this really complicated algorithm. All right, so that was the technical portion of
+that I wanted to mention for S4. And I'll stop here for questions as well.
+So if in any case you want to actually get the state, can S4 actually recover the state?
+Or is it like, yeah, so like, I don't know if that would be any use case.
+But like I was saying, like, if there's a case where I actually want the state,
+can I do that and get the convolution? Yes, you can. And in fact, that will be used in
+some experiments. I guess I didn't mention explicitly, but you can compute it in either way,
+either through the convolution or through the state. And where the state or the convolution is
+useful is during training time for parallelizability. But where the state is useful is at some sort of
+inference or deployment settings, where perhaps you might be online, and then you would actually
+be going through the state instead of the convolution and unrolling things one step at a time.
+Right. So you can do it either way, which is pretty cool. Thanks.
+I had more of a thought question. Let's say I'm interested in two different measures. Like,
+I want to see how the exponential average works, but I also want like, so is it,
+does it basically mean that I just have to create a new measure that combines this efficiently before
+this? Before I plug it into SSM or can S4 basically kind of,
+because there are two independent blocks that I can basically...
+Yeah. So I'm just about to get to the experiments. And actually, I will,
+I'll get to that slide right now, where, so first of all, the experiments will be on this type of
+signal data. And what, as I mentioned a couple of times, what we actually do is that I have to
+find this 1D to 1D map, but I'm actually going to just like, given a multidimensional input,
+I'm just going to stack a bunch of copies of this. And now as a parallel to that, you can do
+many things with these copies. So to answer your question, one thing that I've been starting to
+experiment with is just using different measures or essentially different A and B matrices for
+every copy. And that can, and so that sort of has interpretation of using multiple measures.
+I see. Because when Iman actually talked about the correlations between different dimensions,
+let's say you have an image, like two different pixels are actually correlated.
+So I was thinking like, you can have a measure that captures this correlation,
+but you can have another measure that captures it over time.
+Another thing actually, since you mentioned that, I don't know if you tried that on image
+space, I would be curious like if this kind of like long convolution actually makes any difference
+with the image space. Because image usually like, when we do the image analysis theoretically,
+when we start thinking about it, it seems that like also the local feature as well as of course
+the global feature is important. But I don't know, like if we are missing any local features by just
+using this kind of like long representation. That's a good question. I actually, we have started
+doing more experiments on images, which I didn't include in this talk, but luckily we do find that
+the local bias of convolutions does seem pretty good. I don't know, it's hard to quantify if
+we're missing features, but I think there are settings where we're not, we're only on power
+or not, or maybe a little bit worse than a standard local CNN. It is hard to say. I will
+mention though that you can forcibly incorporate locality into this just by changing the measure.
+For example, if you choose a uniform measure that has a short window, that's the same as saying
+I would just want a local convolution kernel. Because I would imagine like for this particular
+thing, like the use case where we have to have to work with a very high resolution image data,
+you know, for example, like imagine like mammogram, right? Like we have to go with like
+1000 by 1000 minimum dimension. So for this probably would be useful because they are actually,
+we want to like do the rescaling, but we cannot because we'll lose probably a lot of features
+in the middle. But this kind of like long convolution could this, this is a perfect
+problem that I will actually, I wasn't going to, but now I'll mention this in the experiments as
+well. Okay. It's actually something that we have thought about basically rescaling of convolutions
+and using. Right. Okay, I'll get to that. Before that, so I want to get the experiments and
+basically I just wanted to find, I'm only to find the simple linear one either one D map,
+but you can just do it in parallel across a lot of features and then plug it into a standard neural
+network to do sequence modeling. So the first type of data I'll see is a biosignal data.
+So here is a, there's a real world data set of trying to predict vital signs such as heart rate
+from raw biosignal data such as I wrote EKG and EG here, but I think it's actually EKG and PPG.
+And so that's visualized here. And this data is pretty challenging for deep learning models
+because you can see that it's very long. This is a sequence of like 4000. If you zoom in a lot,
+it would be pretty smooth actually, but if you zoom out, it displays a lot of
+periodicity and spikes and other things. And so a lot of methods have been tried on this data set,
+which include kind of standard machine learning techniques like XGBoost as well as many very
+modern deep learning sequence models. And S4 substantially improves over all of these in
+I think cutting the root mean squared error by at least two thirds on all of these targets
+just with that generic deep learning model that deep model that I showed.
+Actually I've, these were like older numbers and recently I've been rerunning these again and
+actually you can drop this down even more. One thing I will note is that attention and
+transformers does really poorly on this type of data. And that's something that I think I found
+pretty consistently. So there's some sort of bias toward what type of data you have and S4 is really
+good at signals and attention is not. Conversely, attention is good at some other types of discrete
+data that S4 is not as good at. Okay, so that's, that was one experiment. The next one is two time
+series data where we did a forecasting task where you're given a context window and you want to
+predict future values. Actually, I'm going to go through this kind of fast because I don't want
+that much time I want to get through some more of the bio applications and the things that you
+guys brought up. The models here are very complicated. Whereas for S4, we're actually
+doing an extremely simple setup, which is just a mask prediction. We're just going to give you,
+we're going to take the entire sequence and mask out the desired forecast range and then just
+predict what's in the mask by passing it through this generic deep model. So this is really,
+it's like a very extremely simple application. I won't unpack the numbers too much, but there's a
+lot of baselines here, including time series models, LSTMs, lots of transformers, and S4
+does better than all of them on these real time series data sets, including weather and energy
+data with much less specialization. These models were all designed for time series and we were
+just using our generic model. And you didn't even like tune the window size, right?
+We did not for this one. Actually, by tuning the window size, you can get the numbers down even
+more. Okay. Okay. The next one here points to Amon's question about rescaling. So it's actually,
+I'm going to display this to audio. But essentially, I've used audio a few times. I'm running example.
+It's sampled at extremely high rate. And it's extremely long. So this is a data set of classifying
+one second speech clips, which were length 16,000, into classifying the words. And most
+sequence models like transformers and RNNs are really bad here. The only thing that works is CNNs,
+which the red line is pointing to a speech CNN baseline. And these work okay. But what happens
+if you are resampling the signal at different frequencies? And this happens commonly in audio
+because your signal can be sampled at any rate and sound more or less the same. So for example,
+this orange sequence is a sequence of samples, but it's actually the same underlying signal
+as the original blue sequence of samples, just at a different frequency. And so it's ideal if
+the same model works on both of them. But standard models like CNNs cannot do this,
+essentially because of the local bias that was brought up earlier. I won't unpack this here,
+but if you use like a standard local CNN, it will break at a different frequency. However,
+by using a signal model such as S4, which is actually understanding the underlying continuous
+domain or the underlying continuous function, it can work here without modification. So this is
+all in a zero shot setting where it's trained at one resolution and tested on a different resolution.
+And this breaks a CNN, but S4 can do it out of the box. And that's because of this first property
+of being a continuous time model. And now the last two things I'll show are just calling back to
+the experiments at very beginning. I showed some audio generation clips. And that was an
+autoregressive setting where we're generating things one sample at a time. And despite having
+an extremely large context window, which made it do better and more coherent, we could still
+sample things autoregressively just as fast as other autoregressive models. And that's because
+of the fast online or autoregressive representation where you're computing the state and updating it
+every time. And finally, I showed this benchmark of long range modeling where S4 substantially
+outperforms other models on a range of different tasks. And this benchmark was also used to
+benchmark the speed of models during training where S4 is just as fast as all of these
+efficient transformer variants. And that's because of the efficient, paralyzable view
+along with the new algorithms we introduced. And so all these properties, as I promised,
+have concrete empirical benefits. Now for, I'm running out of time, so I just want to get to
+a couple more things. For the last part, I just wanted to, for this audience, I wanted to point to
+where I hope that this model will be useful, which is as a general tool for deep learning for
+biosignals. And I've pointed out one, one example of a data set already where we were predicting
+like heart rate from EKG signals. But this was another one that CE was working on actually and
+her and another lab mate have been trying to test S4 here, where this is a data set of raw
+EEG signals that are difficult to process because they're so noisy and long. And the state-of-the-art
+models are very recent. CE's model from a couple months ago was there they are on one of these
+EEG data sets, but it was quite involved and involved a lot of domain knowledge, such as even
+like the placement of the electrodes and a lot of different parts, components of the model.
+And so where I hope that S4 could be useful is as a generic tool or building block for
+for addressing these types of signal data without as much domain expertise and how to design the
+model. And so CE and Collid have been running some preliminary experiments using S4 on this data,
+where we don't even need to process the, you don't need to pre-process it with FFT features,
+you don't need to do a lot of these other things and just run it through these, a generic deep
+model composed of S4 layers. And Collid found some very preliminary results where it is improving
+over the baselines in some settings. This is still very preliminary, so it's not, there's other
+settings that we care about, such as incorporating self-supervision and so on, where it's not quite
+there, but I do think it has a lot of potential in this type of domain. Another example, actually
+that was published was another recent collaboration with Stanford Medicine that was submitted to a
+gastroenterology journal on detecting acid reflux from impotence sensor data. And so again,
+S4 was really good on that type of prediction task. So that is all I was going to talk about
+for this. So just to review, S4 is a, it's an SSM, which are these two equations,
+where we plug in certain formulas and have special algorithms to compute the model.
+And overall, SSMs and in particular, S4 have a number of very nice properties with
+concrete empirical benefits, as we saw, and I think can become a very effective building block for
+modeling many types of sequential data in the future. Thanks for listening and thanks for all
+the collaborators for the hard work. This slide lists a couple of resources, such as blog posts
+and related papers, as well as the audio results from an ongoing, a paper that's under submission
+right now. Feel free to reach out if you have questions and thanks. This was my last slide,
+but because you want to ask how I will, I guess I'm technically out of time, so of course people
+feel free to leave, but if you want to stay, I can show one thing about the high resolution images
+that that was brought up. Let me find that slide. Yeah, if people have conflicts, feel free to leave
+and we will put up the recording of the talk later in our YouTube channel. Otherwise, if you
+would like to stay, then yeah, I'll be able to share the slide. So yeah, I'll just really quickly go
+over this where medical, medical imaging is something that we think could be a potential
+strong use case for S4 because of this high resolution feature where, so this slide was
+about, I was moving from a different way, but the point I wanted to make was that
+Can you go to presentation mode? I think we are still seeing your screen nose.
+Yeah, sorry. Oops. Am I showing my whole screen? No, we are seeing your screen rather than the
+presentation. Okay, I thought I had it on. You can just swap the view. I thought I had it on the right
+view. Is this one still show the, oops. Yeah, I can see the high definition view.
+Okay, great. So yeah, so the point I was making is that normally image data sets are things like
+ImageNet, which are actually extremely low resolution compared to other data that we might
+find such as medical imaging where apparently the images can be up to 100,000 by 100,000 pixels.
+And this is obviously like way too big for current models, which can only operate on small
+patches at a time. So I don't know how to address this really, but it's something that fascinates
+me. But just to point out, this is part of a longer drop pack where I pointed some potential
+future directions. The one that I'll mention here relates to some things that we brought up,
+which is that just like the speech experiment that I showed, I believe that S4 should work
+training on images at different resolutions. And so what you can do is essentially try to
+train on lower dimensional versions of the image, lower resolution versions, and then transfer
+the same model to work on high dimensions, which is a very similar thing that I showed
+for the speech example. So yeah, I think that's potentially something that could work. And the
+point is that a signal model like S4 will work at different resolutions
+because you can sample at different rates essentially. And yeah, so what you need is a
+signal model that understands the continuous domain, just like the example I showed. And that
+points to this property again. So this is something where we haven't tried it and I don't know if it
+works, but it's some part of me feels like it might be the right way to or one potential
+good way to approach this type of problem. But I would think in the opposite way,
+it's not really we want to generate the high resolution from the low resolution,
+but I would imagine since you have this kind of like state-based representation and
+finally you're getting this signal, I would imagine like in some case always like we had
+to deal with this kind of situation that we had a very high resolution image. And before running
+through the convolution because of the memory computations, like computational complexity,
+memory complexity and all this kind of thing. So you have to reskill the image into a much lower
+dimension. Yeah. And we had a chance of losing a lot of features, specifically histopathology,
+exactly the example that you showed, or the mammogram, those kind of images, you know.
+Yeah, I see. So I was thinking that perhaps like what you can do is kind of like iteratively
+increase the resolution and pick up higher and higher resolution features as you go.
+But the benefit is that perhaps you can pick up the coarser grain things and then as you
+upsize the image then and you rescale your kernel essentially, then it's already going to be doing
+as everybody knows the coarse grain features, but then it as you keep training, it only has
+to learn the higher frequency features as you go. And again, I have no idea if this is,
+if this makes sense or it's promising, but it sounds pretty interesting. I think,
+I think Alba's idea is actually very similar to how pathologists analyze our hostile images.
+So they usually look at. Define zoom. Define zoom. They usually look at low resolution
+image first and localize like the potential areas where the tumor are and then they zoom
+into higher resolution. Right. Yeah. I see. Yeah. And so yeah, I don't know if this will be better
+than CNN or other things, but it definitely has different and interesting properties.
+Okay. So that was, yeah, I think that's the end of the material I have. I can say around a few
+more minutes if people still have questions. All right. Great. Thanks so much, Albert.
+I have just one question. Sure. Yeah. Thank you for the presentation. That was awesome.
+Did you find any scenario where it's better to use transformer than S4?
+Yes. Another great question. So let me just share my screen again. I have one slide prepared for
+that. Basically at the beginning, I drew this distinction between continuous kind of continuous
+and discrete data. And I think that S4 will be the best or like the ideas involved are potentially
+going to be the best thing to do for signals. But for kind of higher level concepts or more
+discrete concepts such as language or some other things, transformers, I think that's
+where transformers really shine and are probably going to be better. So here's a,
+I don't know if this is the right screen again. Sorry. Anyways, here's the one slide on language
+modeling where we took a transformer, which are currently of course the best models for
+text and NLP. And we replaced the attention with S4 and found that it doesn't do quite as well.
+But it is still better than all non, it's significantly better than all non-transformer
+models. And it also has some other benefits. Like you can do language generation much faster
+because of the fast recurrent view. That was the main point of this. But this also does
+kind of point to the fact that personally my intuition is that transformers are really good
+for dense and discrete data. Whereas S4 is really good for more like noisy and raw data.
+Yeah. And I mean the speed up here I think is very interesting. Do you know what was the window
+you would take for language modeling? Like how many tokens or words rather did you consider?
+Yeah. This experiment was done using a pretty standard length of either 512 or 1024 tokens.
+You actually can keep increasing the window length for S4, which only slows it down a little
+bit and actually improves the performance a little bit as well. But I found that out after
+the fact and I didn't feel like retraining this. Okay. Cool. Thanks. So yeah, but the
+sort of findings of this slide is the speed up, right? It's massive.
+That was the point that we did this experiment for. But yeah, so there's a lot of the speed up.
+In terms of the original question though, in terms of the raw performance of modeling the data,
+transformers are currently doing a little bit better here. Cool. Thank you.
+All right. Is there any other questions?
+Let's all give Albert a round of virtual applause. Thank you for the very comprehensive
+presentation of state-based models. Thanks for having me. Thank you, Albert.
+Thank you. Thank you, everyone, for joining us. We will put up the recording of the video,
+the talk, later to our YouTube channel. And yeah, we'll see you at the same time next week.
+Thank you. See you, guys.

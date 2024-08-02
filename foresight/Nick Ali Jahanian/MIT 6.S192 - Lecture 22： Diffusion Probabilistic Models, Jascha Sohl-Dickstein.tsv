@@ -1,0 +1,369 @@
+start	end	text
+0	3000	This meeting is being recorded.
+3000	11000	Hello, everyone. Welcome to your course, AI for Art, Aesthetics, and Creativity.
+11000	22000	Today we have a very special speaker, Joshua Soldiksten, who is a Senior Research Scientist
+22000	34000	at Google Brain, and he is one of the pioneers of diffusion models and deep learning.
+34000	43000	At least in the, as far as I can see in the literature for the area of deep learning,
+43000	49000	but he can tell me more and correct, tell us more and correct us.
+49000	64000	So let's ask Joshua to, if you would like to share a little more about his interest and what he inspires him, and then start from there.
+64000	73000	Great. Yeah, so I wasn't prepared for the interest question, but I've done a lot of different things.
+73000	82000	I mean, most in the science, but I worked on the Mars rovers after graduation, and then I went into the PhD in biophysics, and then I did computational neuroscience,
+82000	87000	and then I worked in the computational neuroscience lab, and then I started doing machine learning.
+87000	96000	And so I don't know if there's like any single coherent thread, except that I'm chasing things that I think are really, really cool.
+96000	104000	And I will say I get like an amazing sense of satisfaction from figuring things out that like no one has ever figured out before.
+104000	110000	And I think that might be one of my driving motivations.
+110000	125000	And so I think creating something new is maybe one of the most satisfying parts I feel about science, and maybe something else, something that you also feel if you're like creating art.
+125000	131000	Cool. So thanks for the invitation for being here. I hope this will be a fun talk.
+131000	143000	I'm going to tell you about diffusion probabilistic models, especially I'm going to tell you about content from these two papers in the lower right.
+143000	152000	Ali already said this a few times, but pretty please interrupt me with questions through the talk. It's like so good to get feedback from the audience from giving a remote talk.
+152000	161000	I also actually left time in the talk for questions. So if you don't ask any questions, then we're going to end up comfortably early.
+161000	166000	Cool.
+166000	186000	So before I dive in at all, I just want to start by calling out my collaborators, especially Eric and Eru and Surya on the 2015 paper and Abhishek, Ben, Dirk, Stefano and Yang on the 2021 paper.
+186000	208000	Maybe a particular call out to Yang Song, who was the first author on the most recent ICLR paper and did like an absolutely incredible job, as well as to maybe Ben Pool, who was Yang's primary mentor, and also deserves an outsize share of the credit.
+208000	216000	I'm going to spend most of this talk diving into the nuts and bolts of this class of models.
+216000	227000	Since this is an AI plus creativity class though I wanted to just start by sharing some of the ways this kind of model is already being used to create art.
+227000	247000	Maybe the first of these is there is this group of artists on Twitter, and I suppose probably in real life too, using classic techniques called guided diffusion to generate amazing images conditioned on textual pumps.
+247000	257000	And so here we see two different examples of this. Here we see the prompt is a surreal album cover depicting a boost of eternal dread, hashtag pixel art.
+257000	267000	And actually putting things in pixel art in the prompt tends to make it the model produced images that might be more likely to appear with that hashtag, and so that's actually part of the prompt.
+267000	287000	And you get some images that could be interpreted as a boost of eternal dread, or on the right you prompt is a snowstorm in Los Angeles, and you are able to produce some images that are like the models imagining what a snowstorm might look like in Los Angeles.
+287000	301000	And at least to my eyes I'm surprised and impressed by the quality of the results they can get in this way.
+301000	311000	The second of these maybe more creative uses that I'm aware of is work that uses diffusion to turn very rough sketches into high quality images.
+311000	331000	So here in the top you can see some rough sketches of a few different scenes, and then in the bottom you can see the fusion process running to turn those rough sketches into detailed imagined scenes.
+331000	349000	So I also think that this is a pretty cool example of the potential for creative use of this class of models.
+349000	362000	Okay, so shared some creative uses of diffusion models, but structure for the rest of the talk is going to look something like this.
+362000	370000	I am going to provide some physical intuition for what we're going to be doing.
+370000	374000	Then I'm going to work to make that physical intuition more mathematically precise.
+374000	386000	Then I'll show how we can generate samples from the model, and then I'll tell you about some surprising connections between diffusion processes and neural ODS, which you may or may not have already heard about.
+386000	393000	And then I'll show how we can sample and evaluate conditional distributions.
+394000	402000	At a super high level, we're going to use diffusion to destroy any structure in our training data.
+402000	415000	Then we're going to carefully characterize this destruction of structure, and we're going to reverse time, and we're going to run the destructive process backwards to build a generative model of the data.
+415000	428000	Training a model to reverse time maybe sounds a little bit crazy, but there may be two observations we can make that highlight its causability.
+428000	439000	The first of these observations is that we can use diffusion to destroy the structure in our data distribution.
+439000	448000	Here I want you to imagine, and this is going to be very much trying to ground this on my physical intuition, which if you have a physics background you might like, otherwise I apologize.
+448000	458000	Here I want you to imagine that the density of dye molecules represents a probability density, and our goal here is to learn this probability density.
+458000	463000	This is typically a very challenging thing to do.
+463000	476000	But even if we can't build a model of the structure in our data distribution directly, what we can do is we can map our data distribution to a much simpler distribution that we can model.
+476000	492000	So in this physical example, if we allow diffusion to continue long enough, then eventually the dye molecule would be evenly distributed in the jar, and we'd have a uniform distribution.
+492000	509000	It's maybe not immediately clear that this is helpful, but what if we could reverse time and run this process backwards? What if we could start at a uniform distribution and generate the data distribution?
+509000	516000	In physics, this is overwhelmingly unlikely to happen spontaneously.
+516000	528000	Liquids don't spontaneously unmix any more than a shattered glass will spontaneously reassemble, but we can maybe use machine learning to do it.
+528000	540000	And to see our first clue as to why this might be possible, let's zoom in on a small volume of fluid here.
+540000	552000	So Q super exciting keynote zoom effect.
+552000	574000	So the first clue that time reversal might be possible is that although there's this concept of macroscopic irreversibility where the reverse trajectory is overwhelmingly less probable than the forward trajectory from the microscopic perspective.
+574000	579000	The picture is completely different and is symmetric.
+579000	587000	So here we've zoomed in and now each bright spec corresponds to a single dye molecule undergoing diffusion.
+587000	597000	And if we were in person, I'd ask you whether this video was like being played forwards or backwards, but I'm just going to tell you that this video is being played backwards in time.
+597000	599000	And here I'll flip it around.
+599000	604000	And now it's the same video, but it's being played forwards in time.
+604000	619000	And you can see that despite like flipping the arrow of time, the motion of the dye molecules, the behavior of the dye molecules looks looks completely identical and make that more concrete.
+619000	625000	The diffusion kernel has the same functional form both both forwards and backwards in in time.
+625000	641000	So at every time step, the next time molecule position is drawn from a very small Gaussian centered around its current position and more generally depending on situation might also be be a drift run.
+642000	663000	This is really great for us, because it means that if our forward diffusion process was a sequence of small Gaussians, then our reverse diffusion process is also going to be a sequence of small Gaussians.
+663000	677000	And I'm showing this in continuous state space. I'm not going to talk about it today, but you can do the same thing for like diffusion over binary variables.
+677000	689000	All right, this is probably a good time to pause for questions for a question and also barking dog, which you may or may not be able to hear.
+689000	694000	Yes, you can definitely hear the dog.
+694000	700000	Cool.
+700000	707000	So just to maybe do a summary slide away, I told you we're going to use the fusion process to destroy all the structure in the data.
+707000	713000	And then we're going to learn the reversal of this diffusion process.
+713000	726000	And learning the reversal of this fusion process is going to end up being requiring estimating a function for the mean and covariance of each step of the process.
+726000	747000	And that reverse diffusion process is going to form our model of the data.
+747000	757000	So maybe just to illustrate what this means for real data, we might start with data points corresponding to images on the left.
+757000	764000	And running diffusion on these data points will correspond to mixing in more and more and more random noise to the images.
+764000	773000	And after some amount of time will be left, we'll erase all the structure and we'll just be left with a color of noise.
+773000	796000	In the right image, we see a 1D example. Here the x-axis is time and we are diffusing a 1D bimodal distribution into a 1D Gaussian.
+796000	807000	And we're going to learn the time reversal of this process. We'll be able to generate data samples by running the diffusion process that starts at noise and ends at the data distribution.
+807000	816000	And here we see this go through the images where a noise sample corresponds just a color noise image and ends up as a sampled image.
+816000	827000	And on the right you can see this for the simple 1D distribution.
+827000	840000	Okay, so I've just tried to provide intuition for what is going to happen and I'm about to dive into a bunch of math.
+840000	864000	So this is an excellent time to pause and poll for questions if anyone has anything they want to ask about.
+864000	870000	Maybe I can ask a question. If you could please go to the previous slide.
+870000	891000	In order to understand a little more of this slide. So you are saying you are sort of introducing noise in 1D. Does it mean that you are showing the noise that over time you're adding to each pixel?
+891000	901000	Yeah, so maybe something that's implicit in the slide which I should describe explicitly.
+901000	912000	So here on the right pane we're showing the evolution of samples in like a 1D distribution.
+912000	919000	So in the left in the right pane just like in the left pane there are four samples and they're evolving in 1D.
+919000	931000	If you take an image you can think of an image as being like a really long vector of length like number of pixels times number of colors.
+931000	940000	So if you have like a thousand by a thousand image with three colors then it will be like a vector of length like three million.
+940000	949000	And so then what we're doing is we're doing the same thing we're doing on the right but we're doing it in this like three million dimensional space instead of this like one dimensional space.
+949000	958000	So like you can think of that image as being a point in this three million dimensional space and we're just diffusing the image like through the space.
+958000	973000	And if you look at what that looks like that looks like noise being mixed into the image as you like take the image and like diffuse each of its coordinates by this process.
+973000	976000	Perfect, thank you so much.
+976000	984000	Thank you for the question.
+984000	990000	Yeah, so so making this a little bit more mathematical.
+990000	996000	We're going to start with samples from a data distribution Q of X zero.
+996000	1008000	So Q of X zero might for instance be like the distribution over natural images so it might be many many many examples of images.
+1008000	1022000	And for every forward diffusion step, we are going to decay the slide sample slightly towards the origin and add a small amount of Gaussian noise.
+1022000	1041000	And this this corresponds to diffusion in a quadratic well or harmonic well. And if you run this for enough steps, then at the end we're going to end up with an identity covariance Gaussian distribution centered at at the origin.
+1041000	1058000	So this is going to be our forward diffusion process, which is going to take your sample X zero and destroy all destruction your sample X zero until by X capital T, you just have like a random noise vector.
+1058000	1067000	And here once again illustrating this we're going to start with a whole bunch of points. And here you've seen a one day example and like a three million D example and here's like a 2D example.
+1067000	1077000	Here we're taking a bunch of points that originally have some like structure and we're mixing diffusing them until they have no structure left.
+1077000	1084000	Now for the reverse process, we're going to start at the identity covariance Gaussian.
+1084000	1090000	And because we know that the reverse process is the same functional form as the board process.
+1091000	1104000	We know that the reverse distribution of trajectories can match the forward distribution. If we also make it a sequence of small Gaussians.
+1104000	1115000	And so here we have to do is we have to learn the mean and the covariance of these Gaussians.
+1115000	1122000	And so if we find the right functions f mu and sigma and you make our step size small enough.
+1122000	1132000	Then then after running like big T steps of the reverse diffusion process will end up back at our data distribution.
+1133000	1143000	F mu and sigma here are going to be like super complicated functions. These are these are like the outputs of like state of the art neural networks.
+1143000	1155000	But what's nice about this is we've like transformed the problem of building a density model into the problem of learning functions for the mean and the covariance of a sequence of Gaussians.
+1155000	1163000	You can see in a second that this is basically going to be a supervised regression problem.
+1163000	1177000	You can see this this illustrated. So you start with a noise sample and your general process is going to like run a diffusion process which which turns that noise sample into into samples of the data.
+1177000	1185000	Here's just illustrating the same thing with like a cartoon panel.
+1185000	1195000	Ah, the well that we ended up at I called it a quadratic well. That's that's to respond to a to a question in the chat.
+1195000	1200000	Or or in physics sometimes they call it a harmonic well.
+1200000	1219000	So basically if you run if you run diffusion diffusion and energy landscape, which is a quadratic, then then the particles rather than just like drifting away to infinity will like will like, you know, diffuse and drift, but they'll kind of stay roughly around the origin because the quadratic energy landscape likes
+1219000	1223000	pulse them back in.
+1223000	1229000	Okay, so this is going to be the mathematical high water part our watermark probably.
+1229000	1241000	So how do we train these things. We're going to do it using using a variational bound that's essentially identical to that in in hierarchical days.
+1241000	1253000	So the probability that the generative model assigns to a data point can be found by integrating over all trajectories that end at that data point.
+1253000	1264000	This integral is intractable to compute, but we can borrow a technique called called an important sampling to to
+1264000	1277000	multiply and divide by the probability of the four diffusion trajectory, which which is Q of x one the capital T given X zero
+1277000	1288000	P X zero is now an expectation over the ratio of the four in reverse trajectory probabilities averaged over for trajectories.
+1288000	1297000	We want to train our model by maximizing the log likelihood of the data under the model.
+1297000	1303000	And this this corresponds to taking the average over the data distribution Q X zero.
+1304000	1316000	This up after the data distribution Q X zero of the log of P X zero and here I just substituted in this form up here into the log of P X zero.
+1316000	1320000	Intervals inside logs are pain in the ass.
+1320000	1333000	So we use Jensen's inequality to lower bound the log likelihood and and bring the integral outside the log.
+1333000	1338000	If the forward and reverse distributions over trajectories exactly overlap.
+1338000	1348000	So if the P and Q distributions describe exactly the same trajectory, then distribution of trajectories in this lower bound becomes becomes type.
+1348000	1359000	This everything we've just done is also equivalent to writing down the variational bound for like a very, very, very deep variational encoder.
+1359000	1365000	We're each time step here corresponds to a layer of the variational encoder.
+1365000	1374000	And and where the inference distribution Q is fixed and we're only learning the general distribution P.
+1374000	1381000	Yeah, Q is the the, let me go back a second.
+1381000	1398000	Q is the forward diffusion process Q is the distribution over over X at every time step that starts from your data and injects a little bit of Gaussian noise at every time step until until you get to the model.
+1398000	1413000	I'm sorry until you get to the prior until you get to like the isotropic Gaussian.
+1413000	1417000	Okay, where worry.
+1417000	1421000	So, if we do a little bit more algebra on this.
+1421000	1438000	You can rearrange this into a some over kale divergences between the, the posterior from the forward trajectory, which is that first term inside the kale.
+1438000	1449000	And the reverse trajectory, which is that second term inside inside the kale.
+1449000	1459000	And this is just a sum over this across across every time step. And the beautiful thing about this is that both of these distributions are Gaussian.
+1459000	1472000	The second one is Gaussian because like the entire forward diffusion process conditioned on the data sample is Gaussian. And so this is just a conditional distribution of that big joint Gaussian distribution, which is also a Gaussian.
+1472000	1490000	And the second one is Gaussian, because we know it has the same functional form, the reverse process of the same functional form and supported process. And just as reminder, this is the functional form of the reverse diffusion process.
+1490000	1515000	So we can write down our training objective. And our training objective is to minimize an expectation over training data and over time steps of this kale divergence between the forward posterior and reverse distribution for a single for a single step.
+1515000	1526000	And the kale divergence between two oceans has a super simple functional form, which basically just reduces to to regression.
+1526000	1543000	So, so we've transformed our like unstructured unsupervised learning problem into into a supervised regression problem. And, and we know how to, we know how to solve those.
+1543000	1561000	So this is the hardest part in the whole talk. So I'm going to pause here for like, like 15 seconds.
+1561000	1566000	Could you give a short refresher on the kale distance.
+1567000	1580000	The kale distance between two distributions is a information theoretic measurement of how similar the two distributions are to each other.
+1580000	1585000	It has some some nice properties.
+1585000	1588000	One of those properties is
+1589000	1616000	So one interpretation of the kale between like Q and P is it tells you how many bits it would, how many, how inefficient, how many bits you would lose if you tried to describe distribution P, but thought it was distribution Q.
+1616000	1624000	So it tells you like by how many bits your model is like an efficient inefficient.
+1624000	1638000	It also is like closely connected to log likelihood in that if you take the kale divergence between the data distribution, the model distribution. This is equal to
+1638000	1644000	a constant minus the log likelihood of the model.
+1644000	1655000	But I think just in general you should think of KL as being a measure of distance between two probability distributions.
+1655000	1674000	So you mentioned the, I guess, beautiful property of the kale distance of two Gaussians can simplify the problem. So what if, you know, there'll be let's say a different type of noise, then I guess it wouldn't necessarily simplify.
+1674000	1688000	Yeah, yeah, if you had if you had different types of noise, you would, depending on type of noise you very likely would not be able to just like analytically write down the form, you would still be able to optimize it.
+1688000	1695000	You would just have to use
+1695000	1703000	the thing that you can do analytically here is we can marginalize over over X of t minus one
+1703000	1717000	in in this expression and this this I haven't I haven't written down the order of this but but the reason that the calibrating two Gaussians is really nice is because you've been just like marginalized out the X t minus one and that gives you a much lower variance estimate
+1717000	1735000	of the loss in the radium. If you use a different form for the noise, then you would probably have to sample X of t minus one, and that would probably be a much higher variance estimate for for your learning signal, but but you could probably
+1735000	1737000	still do it.
+1737000	1741000	And something like heavy tail noise might be might be really interesting.
+1741000	1747000	There's a question for why we do KLQP instead of KLPQ.
+1747000	1751000	So,
+1751000	1756000	in general, we tend to do KL from the data to the model.
+1756000	1763000	And the reason for that is probably because of the connection between KL divergence and log likelihood.
+1763000	1783000	What we're often interested in is the log probability of the data points under model, and that means you have to take an expectation over over the data. So you want to like average over your training data of the difference between the two.
+1783000	1794000	I think also, it can be very difficult to compute the other way around, because we don't know what the log like we're trying to fit the log probability of the training data.
+1794000	1811000	And if you flip the KL around, then you have terms that look like samples from the model of the log of the data distribution, and we don't know how to evaluate those in general, which is another reason that we usually go from from Q to P using our formulation
+1811000	1814000	here.
+1814000	1830000	Yeah, so this optimization process, or at least the specific loss that we get depends on us having defined the noise like we chose the noise right like we we chose that the noise is is a bunch of like small Gaussian
+1830000	1851000	perturbations. And, and that's what makes the specific form possible is if you use this for your noise than the entire forward trajectory. So like Q of X of one to X capital T given X zero is just one big joint Gaussian, and a lot of things become easier once once your entire forward
+1851000	1864000	trajectory is one big joint Gaussian.
+1864000	1871000	Cool. Alright, so now I'm going to connect this to stochastic differential equations.
+1871000	1876000	So I just presented this in in discrete time.
+1876000	1890000	But if we take the step sizes to be smaller and smaller and smaller, then we can turn this discrete diffusion process into a limiting stochastic differential equation.
+1890000	1905000	It turns out to be extremely useful and to have some some very nice properties as as before, we're going to gradually mix noise into our data distribution until it turns into Gaussian.
+1905000	1913000	And, and as I just said, this is the continuous time limit of the discrete diffusion process I saw the moment ago.
+1913000	1921000	So here our data distribution is P sub zero. This is a slight change in notation, not a big one.
+1921000	1939000	And P sub T is the intermediate distribution from running this stochastic process for a time interval T, and then P capital T is the final final distribution which should look like just noise.
+1939000	1951000	So and little T here is between zero and big T. And so an SDE is a generalization of ordinary differential equations.
+1951000	1959000	And so we can write it down like this. And here the green term is what you would normally have in an ODE.
+1959000	1964000	And it governs the deterministic properties of the stochastic process select the drift.
+1964000	1973000	And the red term is the noise that the red term controls like the stochastic fluctuations of the process.
+1973000	1984000	So here you should think of DW as being infinitesimal Gaussian noise or like Brownian motion.
+1984000	1992000	So we've now replaced the forward process with its continuous time limit, which is stochastic differential equation.
+1992000	1996000	And we can do the same thing with the reverse process.
+1996000	2010000	One really surprising aspect of stochastic differential equations is that given their equation forward of time and given the marginal distribution PT at time T,
+2010000	2017000	the time reversal of the SDE has a very simple analytic form.
+2017000	2026000	In reverse SDE, here DT is going to be an infinitesimal negative time step.
+2026000	2031000	And DT is going to be an infinitesimal negative time step.
+2031000	2041000	And DW is still Brownian motion or DW is still Brownian motion or like little Gaussian perturbations.
+2041000	2056000	And if we know the gradient of log PFT with respect to X, then that's all the information we need to like define the reverse SDE, the time reversal of the SDE.
+2056000	2065000	And here the gradient of log PFT is the quantity which is often known as the score function.
+2065000	2074000	And so we can train an approximation S of theta to this score function.
+2074000	2087000	And the way in which you train this is using the continuous time limit of the same variational down to the log likelihood I showed like in the previous section.
+2087000	2097000	So basically you can train this thing exactly the same way that you train the discrete time version.
+2097000	2103000	There's also connection to denoising score matching, but I don't think it really matters here.
+2103000	2113000	You can train this using the same way.
+2113000	2122000	So okay, so this is just the continuous time limit of the discrete time diffusion for that version before.
+2122000	2136000	And maybe the thing that's really neat about it is we can now link these like drift terms that we were estimating to this thing called a score function,
+2136000	2146000	which is like a simple and known property of the distribution PFT.
+2146000	2151000	Okay, and so now we've defined the model two different ways.
+2151000	2153000	And we've talked about how to train the model.
+2153000	2156000	So let's talk about how to sample.
+2156000	2164000	And then let's look at some some pretty samples.
+2164000	2170000	So after training our model, I mean the sweet timer score base, I'm going to show you a score base here.
+2170000	2178000	So score base, we generate samples by, by just numerically integrating the reverse SD.
+2178000	2186000	So, so mind you, we've approximated grading of log PFT with our function s.
+2186000	2192000	And you can use any off the shelf SD integrator to solve this.
+2192000	2200000	The simplest of these is, is called the Euler-Mariama solver.
+2200000	2212000	And this is just the, the discrete time discretization of this SD, which actually maps us back to the discrete time diffusion process,
+2212000	2227000	where at every, at every time step, you like change X, you change your sample by that looks like this term times a finite changing T.
+2227000	2235000	And then you add a little noise with variance proportional to delta T.
+2235000	2244000	And you just run this over and over and over again, until you get back a sample.
+2244000	2253000	So this is, this is the, maybe the most naive discretization of the SD.
+2253000	2257000	Okay.
+2258000	2274000	If you maybe went at the sample generation procedure the right way, then, then we're actually training and generating samples with a neural network, which is like thousands of layers deep, where each layer is like a time step into the diffusion process.
+2274000	2281000	And, and so this can be interpreted as like an extraordinarily deep general model.
+2281000	2295000	If you squint that at a slightly different length, then we're proposing a general model, which has like thousands of times the compute cost of most general models, which is maybe not quite as exciting as saying thousands of layers deep.
+2295000	2302000	But, but it will turn out there are ways to make, to make the sampling process more efficient.
+2302000	2306000	And I'm going to show you one of them in the talk.
+2306000	2310000	Okay, so, so what can you do with this thing?
+2310000	2314000	Well, here are some example samples.
+2314000	2321000	These are samples from a diffusion model that we built trained on celebe HQ.
+2321000	2325000	These are 1024 by 1024 images.
+2325000	2332000	I don't know how high resolution they are after after some to me, these are like in this English full from from real human beings.
+2332000	2339000	So, so, so we've like crossed over the uncanny valley.
+2339000	2348000	So, numerically, this class of models currently beats autoregressive models.
+2348000	2357000	In terms of log likelihood where autoregressive models were the winners. This is not my work. This is a paper of dirt King was in Tim Solomon's.
+2357000	2368000	They also began in terms of like at by the inception score on some data sets. So, for instance, image that five full by five fall, again, not my work.
+2368000	2377000	So these things seem to be remarkably good generative models of images.
+2377000	2386000	They also enable you to do some cool things that you can't do with with other other techniques.
+2386000	2389000	Let me actually just to time this.
+2389000	2397000	Should I expect to end sharply attend or should I expect to take them extra like.
+2397000	2399000	Yeah, take your time.
+2399000	2414000	You know, as much as you would like because typically we end this course, even after you are done with your lecture, we may stay a little more and chat about things.
+2415000	2424000	Okay, cool. I will not take forever, but I will I will not try to do to the last last slides in four minutes as well.
+2424000	2441000	I'm actually it's probably really good time for me to pause for a second and see if there are any questions. So,
+2441000	2449000	Okay, I'm going to keep on going. I'm going to tell you about these stuff.
+2449000	2464000	One really cool thing is that any SD can be transformed into a corresponding ordinary differential equations non stochastic differential equation.
+2464000	2477000	Without changing the marginal distributions pt of x, that is, there is an ODE, which has the same distribution over x at all times t.
+2477000	2485000	And so this corresponding ODE would allow us to sample from the same distribution starting from the same prior distribution.
+2485000	2492000	But by solving ODE instead of an SD, this is this is here is what the ODE looks like.
+2492000	2503000	We show the SDH trajectories in red, and the ODE trajectories in, in white, and they both the SD and the ODE are starting from the same points.
+2503000	2515000	And you can see that the SD is a stochastic trajectory that converts the starting distribution final distribution easy the ODE.
+2515000	2532000	Similarly, trace has the same marginal distribution at every time point, so it starts from the same distribution, and then it ends up the same distribution, but it does this in a deterministic way.
+2532000	2542000	Given the SDE, the corresponding ODE, this is just the general general relationship between SDEs and ODE's.
+2542000	2557000	Given the SDE, the corresponding ODE, like once again only depends on the score function of pt, for which we already learned, we've already learned the estimator for the score functions.
+2557000	2578000	So, so this is just S of, S of theta. So, if we want to generate samples, we can generate samples by integrating this ODE instead of by integrating the SDE.
+2578000	2586000	This kind of blew my, so Yang is the one who realized you could do this, and this kind of completely blew my mind when he shared that we could do this.
+2586000	2607000	So, so I hope, I hope at least some fraction of you are similarly like scandalized that you can turn SDEs and ODE's like this.
+2607000	2626000	So, the question is, are there benefits to modeling with an SDE if there is an ODE equivalent, and the, the two parts to, to the answer.
+2627000	2639000	Part number one is the SDE formulation is what allows us to train it. So, so we have to at least like conceptually go through, through SDE space in order to train it.
+2639000	2657000	Part number two is that we're training this function S theta to match the score function, but in practice, this function S of theta probably does not correspond to the gradient of any well defined like log probability distribution.
+2657000	2668000	Like if we were to train S of theta perfectly, then we would have S of theta is equal to like gradient of X of log P of t, but in actuality S of theta, it's just like a vector.
+2668000	2675000	And it probably is not a vector that actually corresponds to the gradient of the log probability.
+2676000	2692000	And, and because of that inconsistency in the definition of S of theta, you actually get slightly different distributions if you integrate the ODE and integrate the SDE.
+2692000	2698000	And visually, if you integrate the SDE, the samples tend to look just a tiny bit better.
+2699000	2715000	But, but I think we don't, we don't fully understand why, but the, the reason distributions are a little bit different is because we're violating this assumption that like S of theta is actually the, the gradient of, of the log marginal density.
+2722000	2736000	Okay, so we have this ODE. If you've heard of neural ODE, you can think of this as being like a specific example of a neural ODE, because like S of theta is a super complicated neural network.
+2737000	2750000	What's really cool is once you have an ODE, you can use just like off the shelf ODE solvers to, to generate samples and like ODE solvers are like really remarkably good.
+2750000	2763000	I didn't, I didn't realize quite how good they were in that they can like just off the shelf ones can just like generate like a few million dimensional like samples from a super high dimensional ODE.
+2764000	2776000	So here, for instance, is the samples you get from running the an adaptive ODE sampler with a different allowed number of samples.
+2776000	2792000	And you can see that after maybe like 86 this samples from the ODE solvers, so allowing the ODE solver to evaluate the, the ODE equation at like 86 time points.
+2792000	2798000	You get what's a pretty high quality image, whereas it takes like thousands for, for the SDE.
+2798000	2814000	The other thing you can do with ODE is you can compute an exact log probability for four data points, which means that you can get exactly like this.
+2814000	2817000	We can, I can show you a table of performance.
+2818000	2823000	Our numbers are bold. This table is now like almost a year old because our paper is now almost a year old.
+2823000	2836000	But, but take home message is this class of techniques works like surprising the well both in terms of log likelihood and in terms of measures of perceptual performance like like FID.
+2836000	2845000	And I want to tell you about one more thing before, before I break, but maybe this is another good place to pause for a second.
+2845000	2847000	If there are any questions about the ODE.
+2847000	2876000	Okay, cool. Let me tell you about one more thing, which may actually be one of the most relevant things if you want to use this class of models for, for like creative applications, which is that there is a very well motivated way to control generation under under this class of models.
+2878000	2885000	So, just to back up a second.
+2885000	2895000	At training time, we return our data sample X zero by running our SDE and we get a noise sample.
+2895000	2900000	We want to perform control generation at test time.
+2900000	2907000	So we want to be given, we're going to be given a control signal, which I'm going to know is why here.
+2907000	2913000	So, for instance, why might be a class label.
+2913000	2923000	And so the forward diffusion process will then perturb a conditional data sample X zero given why to complete noise.
+2924000	2928000	And by reversing this procedure.
+2928000	2949000	We should be able to start from isotropic Gaussian noise ball and obtain a sample X zero given why the reverse time procedure condition and why can be given by the following conditional reverse time SDE.
+2949000	2960000	So here, all we've done is we've just replaced the score function of PT with the score function of PT of X, given why.
+2960000	2962000	So this is nice.
+2962000	2973000	But at first sight, this seems like you have to train a whole bunch of like an entirely new model, because the conditional distribution is function of T is unknown.
+2973000	2978000	But what we can do is we can apply basis rule to this.
+2978000	2985000	So the first term is just the unconditional score function.
+2985000	2996000	And is what we like already spent the rest of the talk talking about how to train exactly the same as what we were training before.
+2996000	3002000	The second term can be trained completely separately.
+3002000	3009000	From the score base model, or even sometimes can just be like written down in in close form using using the main knowledge.
+3009000	3021000	And so, and so the product of these two terms plus the constant is equal to to the log P of T of X given why.
+3021000	3026000	And I'm sorry, because these are logs, I should have said that some of these two terms.
+3026000	3033000	This is just this. This is just base rule applied to PT of X given why.
+3033000	3046000	And so, this is a particularly cool capability, because it's not something you can do at test time for like gams or VES or autoregressive models or any of these.
+3046000	3055000	Here we can train a ginormous like unsupervised model images, and then we can train a little classifier like PT of Y given X later.
+3055000	3061000	And we can use that little classifier to like guide our image generation.
+3061000	3072000	So one example of this is here we have a here we're making PT we're making why the actual class.
+3072000	3084000	And so we can use this to do like post hoc sampling of CFR 10 images that come from the class bird on the left or come from the class deer on the right.
+3084000	3086000	You can also do this for in painting.
+3086000	3099000	So here, why is the part of the image that you know, and you want to generate the entire image like conditioned on the part of the image that you actually know.
+3099000	3103000	And so here are the first column is the true image, the ground truth image.
+3103000	3110000	The second column, we've thrown away all but the part of the image that you can actually see.
+3110000	3115000	So you've thrown away all we've thrown away the surround or the center.
+3115000	3124000	And then in the remaining columns, we're showing independent samples of in painting all the missing content in in these images.
+3124000	3135000	And you can see that an off the shelf diffusion model not trained to do in painting can can still do a good job in painting.
+3135000	3139000	You can also see that there's like diversity in the images that it generates.
+3139000	3153000	It doesn't generate same bedroom over and over and over again it generates like a sequence of plausible in paintings of missing information.
+3154000	3160000	We can do this for colorization.
+3160000	3166000	So we can take an image we can make grayscale and then we can infer infer the colors.
+3166000	3170000	Cool.
+3170000	3175000	This also let me just actually jump way back to being talking again.
+3175000	3181000	This is also the same technique essentially that's used to generate these these art examples.
+3181000	3188000	So they're rather than using some pt of y given X as a guiding signal.
+3188000	3194000	They're using the output of like the clip classifier as the guiding signal and they're like multiply by some scalar.
+3194000	3203000	But but they are guiding the diffusion generation in the same way as as I just showed.
+3203000	3210000	And then using it to create novel artistic creations.
+3210000	3216000	Cool. Okay, so to summarize.
+3216000	3220000	I have shown you a general model based on diffusion processes.
+3220000	3224000	We first corrupt data to a known noise distribution using diffusion.
+3224000	3231000	And then we learn the time reversal of this diffusion process in either discrete or continuous time.
+3231000	3239000	And we can then generate samples by drawing a random noise vector and simulating the reverse diffusion process.
+3239000	3243000	There are some advantages of our framework.
+3243000	3248000	First, image quality is super duper high.
+3248000	3259000	Second, there's equivalence to neural OVs or flow models, which allows us to do things like like exact likelihood computation.
+3259000	3267000	I didn't get a chance to talk about this, but but I actually talked about it very briefly before before the talk proper, but
+3267000	3275000	our encoding is also uniquely identifiable, meaning that every well trained model will have identical latent codes for identical input data points.
+3275000	3281000	This is either a positive or negative depending on how you look at it, but it is a unique property of this class of models.
+3281000	3287000	And finally, we can do controllable generation without without retraining the model.
+3287000	3291000	Examples like include like class conditional generation.
+3291000	3299000	Including some of LA clip guided diffusion measure at the beginning.
+3299000	3301000	Yeah.
+3301000	3305000	Okay, that's what I got. Thank you so much for listening.
+3305000	3308000	Thank you so much. This was awesome.
+3308000	3312000	Really helpful.
+3312000	3327000	Seems that this controllable generation is really cool because once you have the sort of probability of X and then you can.
+3327000	3344000	So that is sort of task agnostic in a way and then whatever task you want, learn it and then use that sort of backbone that you have already trained will learn from the data.
+3344000	3346000	This is, this is really cool.
+3346000	3374000	And then I think that this fact that you can identify encoding or do the reverse process is also very cool because there is a great deal of how to, for instance, take my image and then map it to the latent space of again, so that I can modify it.
+3374000	3377000	Yeah.
+3377000	3383000	People have been trying to train inverters.
+3383000	3391000	They are getting better and better, but it seems that in this case, the inverter comes for free.
+3391000	3394000	Yeah, yeah.
+3394000	3401000	That's very cool. So are there questions?
+3401000	3425000	I think more on a high level. I mean, what, I guess, having a physics background clearly probably helped come with an idea that is, let's say, kind of, I mean, yeah, based on physical intuition, but it's so different from I guess the GAN architecture.
+3425000	3448000	So like, in terms of more like human creativity, like how do we have to look more into the nature to find more inspiration for those, maybe even other models that or other paradigms or what is your suggestion for people who are interested in this field?
+3448000	3453000	Yeah, you mean like in machine learning, how do you come up with creative different ideas?
+3453000	3454000	Yeah.
+3454000	3475000	Yeah, I mean, so definitely, I mean, I'm biased on my own background, so my answer is going to be be like me, which is not really a good answer. But no, one thing I do think is really actually good, though, is I think it's good to have, I think it's good to have a background, which is not the straight machine learning background.
+3475000	3482000	I think having exposure to ideas and having a novel perspective like definitely helps.
+3482000	3504000	I think probably even more important than that is like talking with and collaborating with people with different ideas than you. Like whatever your background is, if you can like work on a team and work closely and talk closely with people that have a very different background, then you're going to come up with ideas that no one else is going to come up with.
+3504000	3511000	And so I think, yeah.
+3511000	3514000	Very cool. I think there are questions on the chat.
+3514000	3518000	Yeah, I just say, yeah, I think I just saw that as well.
+3518000	3536000	Okay, so one question is like just out of curiosity, what happens if the initial input X zero is out of distribution. And so before the fusion process, the process that takes X zero and turns it in the noise is a is a fixed process.
+3536000	3542000	So it will take an action. Maybe let me open up for a second.
+3542000	3547000	So, um,
+3547000	3552000	Yeah, so just to be the
+3552000	3555000	Good thing.
+3555000	3567000	Okay, so the forward process is is a fixed process. So any sample X zero on the left here is going to get turned into a sample from an unimole calcium.
+3567000	3576000	And I should I should one subtle to cure which is pretty important is that every sample on the left gets mapped to the entire distribution on the right.
+3576000	3586000	So if you were to start from the same same sample on the left over and over and over again and run the diffusion process again, like every time you ran the diffusion process, you would get a different trajectory, and you would get a different sample on the right.
+3586000	3598000	So the forward process maps every single like possible input sample to the entire like PT like like isotropic calcium prior sample.
+3598000	3609000	And the reverse is also true. If you start with a sample on the right and you run the SD then you will get a sample from your model of the distribution.
+3609000	3617000	But if you run if you were to start from the same sample on the right over and over and over again. Every time you did that you get a different sample from your distribution.
+3617000	3624000	And so every sample from the prior is actually also mapped to the entire distribution.
+3624000	3636000	And so it's not like there, unless you're using OD formalism, there's not like the one to one correspondence between the image space and the latent space.
+3636000	3648000	And so and so you would turn X zero into the same sample from the same latent distribution and then when you came back to the image, you wouldn't know anything X zero anymore.
+3648000	3656000	There's another question here. Is it possible to work with multiple classes within one diffusion probabilistic model.
+3656000	3672000	And I mean the answer is, so you can train your diffusion model on any distribution that you want to train on, I guess, so so I think the answer is yes, I think, I think the more precise answer would depend on exactly what you wanted to do.
+3672000	3683000	But, but there's no reason that multiple classes should be harder than one class.
+3683000	3685000	Okay, great.
+3685000	3692000	Maybe I can stop there recording here and if there are more questions, you can ask.

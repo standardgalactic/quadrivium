@@ -1,0 +1,1040 @@
+WEBVTT
+
+00:00.000 --> 00:08.000
+After that, we have our discussion session for about half an hour from 4 to 4.30.
+
+00:08.000 --> 00:20.000
+So, the next talk will be given by my colleague, Major Naik, who will talk about scallops and other seafood.
+
+00:20.000 --> 00:25.000
+Hi, everyone. Thanks, Val.
+
+00:25.000 --> 00:38.000
+So, I'll be talking about this programming language and compiler that we have been building over the last three years on this exciting topic called Neurosymbolic Programming.
+
+00:38.000 --> 00:51.000
+As a disclaimer, I'm a programming languages researcher, mostly consuming all the cool stuff that folks in databases and AI have been doing so.
+
+00:51.000 --> 01:04.000
+So, you won't see much in terms of novelty, but you'll see a lot of interesting synergies and empirical results that come from importing good theory from other fields.
+
+01:04.000 --> 01:10.000
+Let me first motivate the need for Neurosymbolic programming.
+
+01:10.000 --> 01:16.000
+So, there are these two prevalent paradigms of modern programming, as all of you know.
+
+01:16.000 --> 01:27.000
+So, these are commonly called System 1 and System 2 by noted psychologist Daniel Kahneman in his book Thinking Fast and Slow.
+
+01:27.000 --> 01:36.000
+So, if you see System 1 is deep learning where you have a lot of benefits.
+
+01:36.000 --> 01:41.000
+For example, you have subsymbolic knowledge.
+
+01:41.000 --> 01:50.000
+What that means is you have meaning associated with, say, a name Tom that likely is a male and so on, right?
+
+01:50.000 --> 01:57.000
+There's open domain knowledge. You don't have to write and code everything explicitly.
+
+01:57.000 --> 02:10.000
+They're good at rapid reasoning, handling noise and naturalness, and what we nowadays see with foundation models is in context learning or more accurately prompt engineering.
+
+02:10.000 --> 02:24.000
+On the other hand, we have classical algorithms, which is System 2, where you can explicitly encode knowledge and get more data efficient solutions.
+
+02:24.000 --> 02:37.000
+You can also do complex reasoning, things like multi-hop reasoning using recursion, but also negation, aggregation, and so on, which traditionally deep learning isn't great at.
+
+02:37.000 --> 02:44.000
+You have other benefits like interpretability, modular reasoning, and better generalizability.
+
+02:44.000 --> 02:53.000
+Traditionally, these two systems don't talk to each other very well.
+
+02:53.000 --> 02:58.000
+But we do want features of both for many AI applications, right?
+
+02:58.000 --> 03:04.000
+And so that has given rise to this field called neurosymbolic programming.
+
+03:04.000 --> 03:14.000
+Now, this term means slightly different things to different people, and so I'm going to define more specifically what it means to us.
+
+03:14.000 --> 03:25.000
+There is a much richer taxonomy of different styles of neurosymbolic programming that we don't necessarily encompass.
+
+03:25.000 --> 03:35.000
+But I will show you that at least this form that we consider is interesting enough to write a lot of useful applications, right?
+
+03:35.000 --> 03:50.000
+So what I've shown here is a picture of the three approaches before proceeding to why it is hard to combine deep learning and classical algorithms in a single system.
+
+03:50.000 --> 04:07.000
+So in deep learning, much of the success comes from gradient descent algorithms for backpropagating the loss to learn the parameter theta of this neural model.
+
+04:07.000 --> 04:16.000
+X and Y are in these double boxes indicating that you have supervision on them, right?
+
+04:16.000 --> 04:29.000
+On the other hand, classical algorithms such as this program P can typically work on structured data, which I'm going to indicate with R, okay?
+
+04:29.000 --> 04:44.000
+And in neurosymbolic, this is a simple neurosymbolic program where there's initially a neural component and theta, which takes input X, produces an intermediate representation R, which is structured,
+
+04:44.000 --> 04:51.000
+which in turn is fed to a classical algorithm P to produce an output Y, right?
+
+04:51.000 --> 05:08.000
+And we have gradient descent here, dr by d theta, but we'd also like to somehow backpropagate the loss across this program, this discrete program P, okay?
+
+05:08.000 --> 05:22.000
+And even though this looks like a supervised learning setting, we have actually used neurosymbolic programming in many different settings that I'll show you today, including RL and even unsupervised learning with foundation models.
+
+05:22.000 --> 05:26.000
+So what are some of the challenges that we tackled in building Scallop?
+
+05:26.000 --> 05:32.000
+So the first question is what is the symbolic representation we use for R?
+
+05:32.000 --> 05:38.000
+And the second is what is the reasoning language for programs P, right?
+
+05:38.000 --> 05:45.000
+As you can imagine, there's a lot of different choices for these decisions.
+
+05:45.000 --> 05:59.000
+Most importantly, how can we obtain an automatic and efficient differentiable reasoning engine to learn this dy by dr under what we call algorithmic supervision, right?
+
+05:59.000 --> 06:02.000
+What that means is you're not given supervision on R, right?
+
+06:02.000 --> 06:06.000
+And that makes this whole problem more challenging.
+
+06:06.000 --> 06:13.000
+We only have supervision end to end on end to end observable input output data X and Y, okay?
+
+06:13.000 --> 06:19.000
+But not on sort of intermediate data R. And this makes sense for a lot of applications.
+
+06:19.000 --> 06:21.000
+If you think of a healthcare application, right?
+
+06:21.000 --> 06:27.000
+You have data about a patient, all of their lab measurements and so on.
+
+06:27.000 --> 06:31.000
+We also have some outcome Y of, say, a treatment.
+
+06:31.000 --> 06:41.000
+But even an expert clinician might not have time to label every intermediate piece of information or might not even know how to label it, right?
+
+06:41.000 --> 06:44.000
+Even if they could.
+
+06:44.000 --> 06:50.000
+So that makes this problem particularly challenging.
+
+06:50.000 --> 06:52.000
+We also have two other challenges here.
+
+06:52.000 --> 07:03.000
+We'd like to tailor learning of this computing dy by dr by different applications, characteristics, okay?
+
+07:03.000 --> 07:12.000
+At this point, we are looking at approximate algorithms which go along well with gradient descent, which is already approximate.
+
+07:12.000 --> 07:18.000
+And lastly, we'd like to integrate with all the existing training pipelines.
+
+07:18.000 --> 07:21.000
+This is more of an empirical challenge here.
+
+07:21.000 --> 07:24.000
+We don't want to reinvent something like PyTorch.
+
+07:24.000 --> 07:33.000
+And so we'd like to reuse all the existing models and training pipelines.
+
+07:33.000 --> 07:38.000
+So here are some of the design decisions that we made.
+
+07:38.000 --> 07:42.000
+Much of this borrows from work by other researchers.
+
+07:42.000 --> 07:49.000
+I'm not necessarily inspired by DeepProblog, but would later learn that there was work by many other researchers as well.
+
+07:49.000 --> 08:00.000
+And our main contribution here was really using Datalog and putting all of this together in a practical system, right?
+
+08:00.000 --> 08:08.000
+So the first design decision here was to use a relational representation for R, right?
+
+08:08.000 --> 08:17.000
+And I don't need to tell a database community about how the relational model has withstood the test of time.
+
+08:17.000 --> 08:25.000
+It can represent very general forms of data in arbitrary graphs.
+
+08:25.000 --> 08:34.000
+There are many other nice properties about relations, as I will show you when we tag tuples with probabilities and more general kinds of information,
+
+08:34.000 --> 08:38.000
+so this relational representation is really helpful.
+
+08:38.000 --> 08:45.000
+The second is the choice of the language for P, and here we use a Datalog-based language.
+
+08:45.000 --> 08:50.000
+We started out literally with Datalog, but it has grown over the years.
+
+08:50.000 --> 08:55.000
+We have support for algebraic data types, foreign functions, and so on.
+
+08:55.000 --> 08:58.000
+Actually, it is at this point Turing complete.
+
+08:58.000 --> 09:06.000
+So depending on what subset of a language you use, you get different guarantees.
+
+09:06.000 --> 09:14.000
+Perhaps the most interesting piece here for this audience is we accidentally discovered provenance semirings.
+
+09:14.000 --> 09:27.000
+We were playing with different kinds of tags and eventually realized that they could generalize them in this very elegant work,
+
+09:27.000 --> 09:32.000
+which was mentioned at the beginning of this workshop on provenance semirings.
+
+09:32.000 --> 09:37.000
+I will show you the different semirings that we have in my talk.
+
+09:37.000 --> 09:43.000
+Lastly, we have integration with both PyTorch and JAX.
+
+09:43.000 --> 09:50.000
+PyTorch for getting models that might be pre-trained and so on that we might want to fine-tune,
+
+09:50.000 --> 09:58.000
+but also for computing the loss here using something like JAX.
+
+09:58.000 --> 10:05.000
+It is a pretty usable framework and to end with lots of moving pieces.
+
+10:05.000 --> 10:11.000
+Let me give a simple motivating example of the kinds of things we can do with Scala.
+
+10:11.000 --> 10:16.000
+This is a simple strategy game called Pac-Man.
+
+10:16.000 --> 10:19.000
+It is actually a simplified version which is called Static Pac-Man.
+
+10:19.000 --> 10:21.000
+The ghosts are not moving.
+
+10:21.000 --> 10:23.000
+The setup is as follows.
+
+10:23.000 --> 10:26.000
+There is this grid of 5x5 cells.
+
+10:27.000 --> 10:37.000
+Each time in each instance of this game, we randomly assign these ghosts, the Pac-Man agent and the goal in different cells.
+
+10:37.000 --> 10:53.000
+As I said, the ghosts do not move and so the goal is to learn to reach the goal without hitting any of the ghosts.
+
+10:54.000 --> 11:01.000
+We set this up as a simple RL reinforcement learning problem.
+
+11:01.000 --> 11:12.000
+We use a simple model here which is BQN, BQ networks to train this agent.
+
+11:12.000 --> 11:18.000
+The baseline here is an end-to-end neural model, a convolutional neural network,
+
+11:18.000 --> 11:27.000
+which is not given supervision on which cells contain ghosts or the goal post or the Pac-Man itself.
+
+11:27.000 --> 11:30.000
+All of this is the intermediate representation to be learned.
+
+11:30.000 --> 11:38.000
+The only supervision one gets is after an entire game episode where either the Pac-Man reached the goal,
+
+11:38.000 --> 11:45.000
+so you get a reward of 1 or it didn't and in which case it gets a reward of 0.
+
+11:46.000 --> 11:54.000
+We formulate this problem in Scalop by decomposing it into a neural model which is doing this low-level perception.
+
+11:54.000 --> 12:01.000
+The goal of the neural model is to simply learn what each cell might contain.
+
+12:01.000 --> 12:03.000
+There are four choices.
+
+12:03.000 --> 12:10.000
+It can either be empty or it can contain a ghost or it can contain the Pac-Man itself or it can contain the goal.
+
+12:10.000 --> 12:12.000
+These are the four choices.
+
+12:12.000 --> 12:24.000
+Now this neural model outputs these choices to a logic program in Scalop whose goal is to do the path planning.
+
+12:24.000 --> 12:35.000
+In summary, instead of having a monolithic neural network which is trying to learn end-to-end how to do both entity extraction and path planning,
+
+12:35.000 --> 12:42.000
+we decompose this task into entity extraction which is sort of low-level perception that is best done by a neural module
+
+12:42.000 --> 12:48.000
+and a logic program, a classical algorithm which does the path planning.
+
+12:48.000 --> 12:55.000
+At each step, the goal is to decide whether the Pac-Man should move up, down, right or left.
+
+12:55.000 --> 13:01.000
+You'll get the reward only after an entire episode of around 20 steps.
+
+13:02.000 --> 13:08.000
+Here is our empirical result.
+
+13:08.000 --> 13:18.000
+In just 50 such episodes with this Scalop program that I showed you, we can get an accuracy of 99.4%.
+
+13:18.000 --> 13:29.000
+Whereas if you do this with a baseline of end-to-end neural, you get a much lower accuracy and it requires over 50,000 episodes.
+
+13:30.000 --> 13:39.000
+There's some hand-waving here. This is not entirely a fair comparison because we have written a domain knowledge using logic rules.
+
+13:39.000 --> 13:43.000
+I probably skipped over the program itself so here goes.
+
+13:43.000 --> 13:51.000
+This is our syntax for our data log-based language, in this case for path planning.
+
+13:51.000 --> 13:57.000
+The goal here is to compute the next action, one of these four choices.
+
+13:57.000 --> 14:07.000
+That in turn depends on whether there's a path from an adjoining position where the Pac-Man currently is to the goal.
+
+14:07.000 --> 14:12.000
+The definition of a path is itself a recursive predicate.
+
+14:12.000 --> 14:21.000
+It's a path that does not collide with any of the hosts and that is encoded using what we call safe cells.
+
+14:21.000 --> 14:24.000
+Any questions so far?
+
+14:29.000 --> 14:34.000
+The programmer writes this discrete program without any probabilities and so on.
+
+14:35.000 --> 14:51.000
+What we will see happening under the hood when both at training and inference time is a neural model will compute these predicates such as actor, goal and enemy only with different degrees of certainty.
+
+14:51.000 --> 15:00.000
+In some sense, we have all of these possible words being tracked simultaneously by the scallop engine.
+
+15:01.000 --> 15:12.000
+All of that computation will be done through tags which you don't see here at the level of the values that are being propagated.
+
+15:12.000 --> 15:17.000
+Can I ask you a quick question on this? Is there a notion of a shortest path or is it any path?
+
+15:17.000 --> 15:28.000
+Great question. Here we say any path but if I understand this correctly, the tags will penalize paths that are longer.
+
+15:29.000 --> 15:31.000
+Cycles in the path you will...
+
+15:37.000 --> 15:49.000
+Let me get into the semirings. The short answer is the tags will be tracking a finite amount of information so they won't necessarily compute all paths with cycles and so on.
+
+15:50.000 --> 16:03.000
+In this example, the neural network is responsible for extracting the state of the program and then you have an actual program to perform the logic.
+
+16:03.000 --> 16:09.000
+The neural network extracts action information or something else.
+
+16:09.000 --> 16:12.000
+So the neural network only extracts...
+
+16:12.000 --> 16:18.000
+So the question was whether the neural network extracts these predicates actions.
+
+16:19.000 --> 16:20.000
+If it did.
+
+16:23.000 --> 16:27.000
+So that is the baseline that I was showing you that you don't have a logic program.
+
+16:27.000 --> 16:37.000
+So the neural network is taking in this grid of pixels, 200 by 200 pixels and producing one of these four outputs or other distribution over these four outputs.
+
+16:37.000 --> 16:41.000
+So that is the baseline. If you were using that, then you wouldn't need scallop.
+
+16:41.000 --> 16:47.000
+Here we are trying to show you that you can actually do more data efficient and robust and so on.
+
+16:47.000 --> 16:53.000
+By the way, this program, which is learned, generalizes very nicely to much larger grids, even 25 by 25.
+
+16:53.000 --> 17:03.000
+So you see, whereas a network which was trained end to end would probably not generalize well to other grid sizes.
+
+17:03.000 --> 17:08.000
+So let me briefly talk about what is going on in the scallop compiler.
+
+17:08.000 --> 17:11.000
+So we have this differentiable reasoning framework.
+
+17:12.000 --> 17:15.000
+First, a preview of our entire compiler.
+
+17:15.000 --> 17:18.000
+So the surface syntax looks like this.
+
+17:18.000 --> 17:23.000
+In this case, it even has limited forms of quantifiers.
+
+17:23.000 --> 17:32.000
+We have a front end which produces these abstract syntax trees and there are several passes here for type inference and so on.
+
+17:32.000 --> 17:43.000
+Then we have a back end where, which is based on extended data log where we do a lot of optimizations including query planning and magic set transformations and so on.
+
+17:43.000 --> 17:54.000
+And finally, we have this relational algebra machine or RAM, which is what is actually executed at training and inference time.
+
+17:54.000 --> 18:02.000
+And this is what the equivalent scallop RAM program looks like for that high level constraint.
+
+18:02.000 --> 18:06.000
+So where does prominence come in?
+
+18:06.000 --> 18:16.000
+So the semantics of SEL RAM, which is essentially just extended relational algebra, which is the semantics of data log.
+
+18:16.000 --> 18:22.000
+We have implemented a very general framework for tracking provenance.
+
+18:22.000 --> 18:30.000
+And this is inspired by the work on provenance semirings that was mentioned at the beginning of this workshop.
+
+18:30.000 --> 18:38.000
+And we even have this very clean interface to define new provenance structures.
+
+18:38.000 --> 18:46.000
+So again, covered in the original tutorial, but briefly there's this tag space that you have to define yourself.
+
+18:46.000 --> 18:52.000
+And then various operations for disjunction, conjunction, negation and saturation.
+
+18:52.000 --> 18:58.000
+I've shown one instance of this abstract structure here, which we call max min probabilities.
+
+18:58.000 --> 19:10.000
+Here the set of tags is real numbers between 0 and 1 and disjunction is max, conjunction is min and so on and so forth.
+
+19:10.000 --> 19:20.000
+If you apply this max min probe to a particular rule during the execution of the program I showed you,
+
+19:20.000 --> 19:24.000
+let's say the rule which computes whether a cell x comma y is safe.
+
+19:24.000 --> 19:30.000
+So it is safe if it is indeed a grid cell, a cell in the grid, in the 5 by 5 grid,
+
+19:30.000 --> 19:34.000
+and we do not believe that there's an enemy in the cell.
+
+19:34.000 --> 19:39.000
+So this is the standard semantics of data log, of discrete data log, untagged semantics.
+
+19:39.000 --> 19:44.000
+So let us say that in 1 comma 2 and 2 comma 3 are two different grid cells.
+
+19:44.000 --> 19:50.000
+And let us say the enemy is in the cell 2 comma 3, then we know how to compute this difference.
+
+19:50.000 --> 19:53.000
+So that's just the tuple 1 comma 2.
+
+19:53.000 --> 20:01.000
+But in the tagged semantics, something much richer is happening, which is that we have these tags t1, t2 and t3 now.
+
+20:02.000 --> 20:09.000
+And they are propagated here along with the output values of each rule.
+
+20:09.000 --> 20:16.000
+And once you use a particular provenance semiring, in this case the max min probe,
+
+20:16.000 --> 20:22.000
+we can for example say that in this case we believe the enemy is in cell 2 comma 3
+
+20:22.000 --> 20:27.000
+with the probability of 0.2 coming from the convolutional neural network.
+
+20:27.000 --> 20:33.000
+And so now you can imagine every cell has some probability of an enemy being there.
+
+20:33.000 --> 20:43.000
+And accordingly you can now get estimates of which cells are safe, okay?
+
+20:43.000 --> 20:46.000
+Yes, go ahead.
+
+20:47.000 --> 20:54.000
+So the difference with prob log is that you use this fuzzy logic, we are propagating the probability.
+
+20:54.000 --> 20:56.000
+The difference to prob log?
+
+20:56.000 --> 20:59.000
+Yes, so the prob log has this weighted model accounting semantics, right?
+
+20:59.000 --> 21:03.000
+So you use the fuzzy semantics to propagate the probability.
+
+21:03.000 --> 21:07.000
+So we, so I wouldn't know the answer to that.
+
+21:07.000 --> 21:12.000
+We can probably take that offline, but we do have, so this was as I said inspired by deep prob log.
+
+21:12.000 --> 21:15.000
+We do have weighted model counting.
+
+21:15.000 --> 21:19.000
+I just showed you, so max, I see, so you mean fuzzy as in this max min.
+
+21:19.000 --> 21:20.000
+Okay, okay.
+
+21:20.000 --> 21:23.000
+So I just showed you a simple semiring.
+
+21:23.000 --> 21:25.000
+In practice we don't use any of those.
+
+21:25.000 --> 21:29.000
+We just use them early on while we are developing applications,
+
+21:29.000 --> 21:36.000
+but very quickly turns out these fuzzier semirings don't really help learn the model, okay?
+
+21:36.000 --> 21:42.000
+So the one that we really use, so as I said, there's the discrete execution.
+
+21:42.000 --> 21:46.000
+There's the probabilistic one, and then finally there's the differentiable one,
+
+21:46.000 --> 21:49.000
+which is what we use for learning, right?
+
+21:49.000 --> 21:54.000
+And the one that you are probably talking about is what we call top K proofs.
+
+21:54.000 --> 22:01.000
+So along with each tuple, we track, you know, what we call, you know, up to the top K proofs,
+
+22:01.000 --> 22:08.000
+which I think Eric in the first talk referred to as I believe W of X, okay?
+
+22:08.000 --> 22:15.000
+So we don't count how many times a tuple was used or anything like that.
+
+22:15.000 --> 22:21.000
+Yes, with respect to the negation and saturation operations, right?
+
+22:21.000 --> 22:28.000
+Can you expand a little bit on what your requirements for them are, for this to work?
+
+22:28.000 --> 22:31.000
+Yeah, this is sort of too low level for me to explain.
+
+22:31.000 --> 22:32.000
+So I wouldn't know.
+
+22:32.000 --> 22:37.000
+I'll be happy to get you in touch with the students.
+
+22:37.000 --> 22:39.000
+First of all, it will be stratified negation.
+
+22:39.000 --> 22:43.000
+But I think you are asking me a deeper question than that.
+
+22:43.000 --> 22:49.000
+What's the structure, what's the test, what's the negation has to prove that?
+
+22:49.000 --> 22:51.000
+So if it comes to me, I'll let you know.
+
+22:51.000 --> 22:58.000
+I do know exactly what you're asking, and I'll try to see if I can remember, okay?
+
+22:58.000 --> 23:06.000
+There are certain restrictions on all of these, on negation and saturation, okay?
+
+23:06.000 --> 23:10.000
+But you prove them once and for all when you're defining the semi-ring, okay?
+
+23:10.000 --> 23:13.000
+And so you can then use it.
+
+23:13.000 --> 23:19.000
+So I'm not going to go too much further into semi-rings other than to just say that the nice thing here,
+
+23:19.000 --> 23:24.000
+at least to me, is that the programmer writes as if they are programming against a deterministic
+
+23:24.000 --> 23:27.000
+neural model that is producing these outputs, right?
+
+23:27.000 --> 23:35.000
+But under the hood, you have all of these probabilistic and differentiable reasoning happening through these tags, okay?
+
+23:36.000 --> 23:45.000
+We have applied this to a wide range of benchmarks and are now moving to even more sophisticated ones in robotics
+
+23:45.000 --> 23:49.000
+and healthcare, for explainable healthcare and so on.
+
+23:49.000 --> 23:56.000
+But I'll just show you some core, you know, some challenges in the field of AI that we started out with.
+
+23:56.000 --> 24:02.000
+These include, you know, benchmarks in computer vision, which have images and video.
+
+24:02.000 --> 24:09.000
+For example, here, this is this Mugen benchmark where the goal is given a short video and a piece of text
+
+24:09.000 --> 24:19.000
+to give a score between zero and one that tells how likely is this text talking about the frames in this video, right?
+
+24:19.000 --> 24:27.000
+So this, as you can imagine, has applications in video captioning, video search, video recommendation and so on, right?
+
+24:27.000 --> 24:30.000
+There is, we have benchmarks in NLP as well.
+
+24:30.000 --> 24:38.000
+Again, fairly standard ones and then we also have multimodal benchmarks.
+
+24:38.000 --> 24:45.000
+And much of these benefits of relational, the relational model are useful here.
+
+24:45.000 --> 24:50.000
+For example, we extract scene graphs from images which can be represented as relations.
+
+24:50.000 --> 24:58.000
+We extract abstract syntax trees from in semantic parsing, which are again represented as relations, right?
+
+24:58.000 --> 25:02.000
+This is where the rubble meets the road. All of this theory is elegant.
+
+25:02.000 --> 25:08.000
+But if it doesn't work in practice, then it's not, then it doesn't help us, right?
+
+25:08.000 --> 25:17.000
+When we started this project, many of these baselines, both neural and neurosymbolic, were far behind us, right?
+
+25:17.000 --> 25:24.000
+But by the time we got all of this published, some of them had even crept back up ahead of us, right?
+
+25:24.000 --> 25:28.000
+So this is sort of the challenge we face against the end-to-end deep learning paradigm, right?
+
+25:28.000 --> 25:40.000
+Which is, it will, you know, as newer neural architectures and so on are designed, they might even outperform, say, the neurosymbolic approaches, okay?
+
+25:40.000 --> 25:44.000
+So, any questions before I proceed? Yes.
+
+25:44.000 --> 25:47.000
+Maybe also, right, so accuracy is one thing, right?
+
+25:47.000 --> 25:52.000
+But I could also see that since you're encoding some of the main knowledge into your program, right?
+
+25:52.000 --> 25:59.000
+I could see that, for example, you might need less data to learn the model and things like that, and maybe it's more performant.
+
+25:59.000 --> 26:01.000
+Yes, so great question.
+
+26:01.000 --> 26:09.000
+And we have all of these results in our PLDI paper, PLDI 2023, where we talk about better interpretability.
+
+26:09.000 --> 26:19.000
+So if you remember, the intermediate representation R on which no supervision was given, we can actually look back what did it actually learn the right representation, right?
+
+26:19.000 --> 26:27.000
+And the answer is yes, so it is more interpretable, it is more robust and better generalizable.
+
+26:27.000 --> 26:33.000
+So these better neural networks, are they kind of trying to do what you do with your structured constraints?
+
+26:33.000 --> 26:36.000
+Are they trying to do that through network structure?
+
+26:36.000 --> 26:40.000
+Are they trying to simulate, basically, what you can do in a more elegant way?
+
+26:40.000 --> 26:44.000
+So, first of all, these are end-to-end deep neural models, right, like transformers and so on.
+
+26:44.000 --> 26:49.000
+We wouldn't necessarily know what they are trying to do, but they are solving this problem.
+
+26:49.000 --> 26:51.000
+Let me show you one, right?
+
+26:51.000 --> 26:56.000
+So this pathfinder was a benchmark by, I think, Google Research a few years ago called PathX.
+
+26:56.000 --> 27:03.000
+You see, they're two tiny dots, and you have to tell whether there's a dotted path from one to the other, okay?
+
+27:03.000 --> 27:12.000
+And even for a human, it can take up to two minutes to tell for some of these difficult images whether there's actually a dotted path or not.
+
+27:12.000 --> 27:15.000
+So it's a binary classification problem, right?
+
+27:15.000 --> 27:25.000
+So, you know, so the state of the art now here is actually a transformer which, I'm sorry, which beats what we have.
+
+27:25.000 --> 27:31.000
+So you see for PathX, there's this transformer model which is doing even better than ours.
+
+27:31.000 --> 27:36.000
+In our case, we simply, you know, we have the rule for computing transitive closure.
+
+27:36.000 --> 27:45.000
+So once you know which, where are the two dots and where are the edges, you can use, you know, simple these two rules to tell whether they are reachable or not.
+
+27:45.000 --> 27:51.000
+But you don't know if their model is trying to do something like that in the deep learning model directly?
+
+27:51.000 --> 27:55.000
+Right, so we haven't actually seen, you know, like for explanations within them.
+
+27:55.000 --> 27:57.000
+So it would be nice to see that.
+
+27:57.000 --> 28:00.000
+There are also some neuro-symbolic baselines here.
+
+28:00.000 --> 28:02.000
+I mean, work that Guy and others have done.
+
+28:02.000 --> 28:08.000
+By the way, a lot of his work has gone into this with sentential decedent diagrams and so on in our weighted model accounting.
+
+28:08.000 --> 28:11.000
+You know, just ignore, you know, not mentioning here.
+
+28:11.000 --> 28:20.000
+But there are other neuro-symbolic works as well based on, you know, abductive reasoning and so on that we were able to outperform.
+
+28:20.000 --> 28:21.000
+Yeah.
+
+28:21.000 --> 28:25.000
+So I have a question about the gradient semi-ring, which was mentioned several times today.
+
+28:25.000 --> 28:33.000
+So I don't understand how it's useful in the context here because the gradient semi-ring really computes the forward derivatives,
+
+28:33.000 --> 28:38.000
+which means that if you have a neural network for object detection with a million parameters,
+
+28:38.000 --> 28:43.000
+you have to push forward a million dimensional vector through your whole computation path.
+
+28:43.000 --> 28:49.000
+And what you really need for machine learning is the backward derivatives, which are, you know, linear time.
+
+28:50.000 --> 28:54.000
+So even though mathematically the gradient semi-ring is a beautiful thing,
+
+28:54.000 --> 28:56.000
+it's actually the wrong tool for machine learning.
+
+28:56.000 --> 28:59.000
+You want the backward derivative not to forward.
+
+29:03.000 --> 29:06.000
+Yeah, so I think we'll have to talk about this more offline.
+
+29:06.000 --> 29:07.000
+Sorry about that.
+
+29:07.000 --> 29:11.000
+I wasn't paying too close attention to the gradient semi-ring.
+
+29:11.000 --> 29:13.000
+Let's talk more.
+
+29:14.000 --> 29:17.000
+Could you go back once?
+
+29:17.000 --> 29:18.000
+Yeah.
+
+29:18.000 --> 29:23.000
+So for the first two examples, we have the MNIST bit.
+
+29:23.000 --> 29:24.000
+Yeah.
+
+29:24.000 --> 29:34.000
+And then this is, like after you recognize, so another approach is that you recognize bit and then you just write Python to something to get.
+
+29:34.000 --> 29:35.000
+Right.
+
+29:35.000 --> 29:38.000
+So why is this any better?
+
+29:38.000 --> 29:40.000
+Why are we doing anything better?
+
+29:40.000 --> 29:43.000
+Your supervision is not given on the individual MNIST digits.
+
+29:43.000 --> 29:44.000
+Okay.
+
+29:44.000 --> 29:46.000
+It's only given on the final result.
+
+29:46.000 --> 29:47.000
+Yeah.
+
+29:47.000 --> 29:51.000
+So but this example is, it feels a little bit confined.
+
+29:51.000 --> 29:52.000
+Right.
+
+29:52.000 --> 29:54.000
+So I could have done this by doing the two basic approach.
+
+29:54.000 --> 29:55.000
+Yeah.
+
+29:55.000 --> 29:56.000
+Yeah.
+
+29:56.000 --> 30:01.000
+For example, here we are this kind of more streamlined approach has a clear benefit.
+
+30:01.000 --> 30:06.000
+So if you had supervision on the intermediate results, you wouldn't need scallop at all.
+
+30:06.000 --> 30:07.000
+Okay.
+
+30:07.000 --> 30:08.000
+Right.
+
+30:08.000 --> 30:09.000
+Right.
+
+30:09.000 --> 30:16.000
+So in, in none of these benchmarks, do we have intermediate supervision, even though many of them are synthetic and you actually know the intermediate labels.
+
+30:16.000 --> 30:23.000
+So that is how we actually, you know, measure whether you know, you know, the degree of interpretability, how much has it actually recovered the information.
+
+30:23.000 --> 30:29.000
+So I'm not showing you, you know, we have heat maps for all of this to show you actually what intermediate representation was learned.
+
+30:29.000 --> 30:36.000
+And it is, it matches the synthetic data's labels.
+
+30:36.000 --> 30:37.000
+Yes.
+
+30:37.000 --> 30:38.000
+Okay.
+
+30:38.000 --> 30:41.000
+So, you know, that is, you know, I'm just going to show you some fun things here.
+
+30:41.000 --> 30:51.000
+There's not much more I can say here with, you know, so now what happened was in these two years that we did this work, LLMs and more generally foundation models came on the scene.
+
+30:51.000 --> 30:53.000
+And we wondered, you know, can we catch up?
+
+30:53.000 --> 30:54.000
+Right.
+
+30:54.000 --> 30:56.000
+Can we somehow integrate this into scallop?
+
+30:56.000 --> 30:58.000
+And the answer surprisingly is yes.
+
+30:58.000 --> 30:59.000
+Okay.
+
+30:59.000 --> 31:00.000
+And this is still open.
+
+31:00.000 --> 31:04.000
+I think Joe also brought this up, you know, if I understood correctly what you're saying.
+
+31:04.000 --> 31:12.000
+So what is the, the programming, you know, abstraction for say, you know, these generative models, and surprisingly, the relational model still works.
+
+31:12.000 --> 31:18.000
+If you think of any foundation model, right, it is a binary relation which takes a prompt and gives a response.
+
+31:18.000 --> 31:19.000
+Right.
+
+31:19.000 --> 31:23.000
+And these are data types where the strings or tensors and so on are all supported in scallop.
+
+31:23.000 --> 31:24.000
+Okay.
+
+31:24.000 --> 31:31.000
+And it's actually a relation, not a function because based on the temperature and so on that you use the same prompt could have different responses.
+
+31:31.000 --> 31:32.000
+Right.
+
+31:33.000 --> 31:35.000
+You know, very well into scallop.
+
+31:35.000 --> 31:38.000
+And we built this library of plugins.
+
+31:38.000 --> 31:49.000
+We now have 12 foundation models integrated into scallop and you can add new ones very easily using our foreign function and predicate interface.
+
+31:49.000 --> 32:01.000
+I'm not going to go too much into these, but I can, you can sort of see how we are, we have these decorators for relations.
+
+32:01.000 --> 32:14.000
+And you can use a few short examples or you can use chain of thought, you can use auto GPT, you can even fine tune, you know, layers of these models in scallop using again just end to end supervision.
+
+32:14.000 --> 32:28.000
+In this case, you know, we break down this task into sort of this in context learning which extracts tuples, you know, which are the basic relationships between pairs of people mentioned in this passage.
+
+32:28.000 --> 32:38.000
+And then we write a few rules in this case just three, which can compute the answer to a question which is how is a particular pair of people in this passage related.
+
+32:38.000 --> 32:39.000
+Right.
+
+32:39.000 --> 32:42.000
+So this is sort of showing you multi hop reasoning.
+
+32:42.000 --> 32:51.000
+By the way, we even have rule learning here so the parameters don't just have to be in the neural model but for example this relation composition is itself noisy.
+
+32:51.000 --> 32:56.000
+And you could learn the weights of individual tuples of this relation.
+
+32:56.000 --> 33:08.000
+You can extend it to vision models as well. So here's a simple one, which is actually a multi model model clip from open AI, which also provides probabilities.
+
+33:08.000 --> 33:11.000
+So in this case, the input is an image.
+
+33:11.000 --> 33:14.000
+It's a bound argument and the output is the label.
+
+33:14.000 --> 33:23.000
+So in this case, if you give a set of labels such as cat and dog, it will tell you the probability of this image being cat or a dog.
+
+33:24.000 --> 33:27.000
+We have also integrated meta segment anything models.
+
+33:27.000 --> 33:38.000
+So this in this case, you are given an image as an input, and it produces a set of tuples with an ID of each segment and the tensor representation of the segment.
+
+33:38.000 --> 33:39.000
+Right.
+
+33:39.000 --> 33:44.000
+You can put these all together and build very interesting multi model applications in scallops.
+
+33:44.000 --> 33:59.000
+So in this case here, what you see is three different models put together to solve the problem from this clever benchmark, which asks in this case, some some question that involves elementary reasoning about a scene.
+
+33:59.000 --> 34:00.000
+Right.
+
+34:00.000 --> 34:02.000
+How many green objects are there in the image.
+
+34:02.000 --> 34:05.000
+I'm not showing you all of the rules that we wrote in scallop.
+
+34:05.000 --> 34:09.000
+There are about 100 rules that we wrote for this particular task.
+
+34:09.000 --> 34:13.000
+But we use these three different models to extract basic information.
+
+34:13.000 --> 34:23.000
+In this case, doing the semantic parsing of this question, extracting segments from this image and finally labeling each segment with a piece of text.
+
+34:23.000 --> 34:28.000
+Finally, we can get the answer that there are three main objects in this image.
+
+34:28.000 --> 34:29.000
+Okay.
+
+34:29.000 --> 34:31.000
+So I'm not going to show you the imperial results.
+
+34:31.000 --> 34:35.000
+This work is still under review.
+
+34:35.000 --> 34:41.000
+We have applied it to a wide range of benchmarks, including those involving vector databases.
+
+34:41.000 --> 34:48.000
+So, you know, you're having retrieval and generation, but also image generation and so on.
+
+34:48.000 --> 34:49.000
+Right.
+
+34:49.000 --> 34:55.000
+And you can actually run many of these applications at this URL.
+
+34:55.000 --> 34:59.000
+And there's a lot more resources at this particular URL.
+
+34:59.000 --> 35:01.000
+Thank you very much for your attention.
+
+35:01.000 --> 35:06.000
+Any questions?
+
+35:06.000 --> 35:07.040
+Thank you.
+
+35:07.040 --> 35:09.320
+And once
+

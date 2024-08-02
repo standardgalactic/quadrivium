@@ -1,0 +1,739 @@
+start	end	text
+0	11000	Transducers. Of course, everything is just some combination of the same ingredients.
+11000	18000	The shell is on the outside, the inside, the cheese is in, it's on top, whatever. I'm not claiming any novelty here.
+18000	29000	This is just another rearrangement of the same old stuff as usual. But, you know, sometimes the cheese on top, you know, tastes better than when it's inside.
+29000	43000	Alright. So, what are transducers? The basic idea is to go and look again at map and filter and see if there's some idea inside of them that could be made more reusable than map and filter.
+43000	54000	Because we see map and filter being implemented over and over again in different contexts, right? We have map and filter on collections, we have map and filter on streams, we have map and filter on observables.
+54000	65000	We were starting to write map and filter and so on on channels and there was just, there's no sharing here, there's no ability to create reusable things.
+65000	74000	So, we want to take the essence out and see if we can reuse them. And the way that we're going to do that is by recasting them as process transformations.
+74000	90000	And I'll talk a lot more about that, but that's essentially the entire idea. Recasting the core logic of these, what were sequence processing functions as process transformations and then providing context in which we could host those transformations.
+90000	100000	So, when I talk about processes, what am I saying? It's not every kind of process. There are all kinds of processes that cannot be modeled this way, but there are a ton of processes that can, right?
+100000	116000	And the critical words here are that if you can model your process as a succession of steps, right? And if you can talk about a step or think about a step as ingesting an input, as taking in or absorbing some input, a single input.
+116000	128000	So, something going on, there's an input, we're going to absorb that input into the something going on and proceed. That's the kind of process that we can use transducers on.
+128000	143000	And when you think about it that way, building a collection is just one instance of a process with that shape, right? Building a collection is you have the collection so far, you have the new input, and you incorporate the new input into the collection and you keep going, right?
+143000	156000	But that's a specialization of the idea. The general idea is the idea of a seeded left reduce of, you know, taking something that you're building up and a new thing and continually building up.
+156000	167000	But we want to get away from the idea that the reduction is about creating a particular thing and focus more on it being a process. Some processes build particular things, other processes are infinite.
+167000	178000	They just run indefinitely. So, we made up words. Actually, we didn't make up a word. Again, this is actually a word. But why this word?
+178000	188000	Well, we think it's related to reduce, and reduce is already a programming word, and it's also already a regular word, and the regular word means to lead back, right?
+188000	198000	To bring something back. And we've sort of, the word has come to mean over time to bring something down or to make something smaller.
+198000	207000	But it doesn't necessarily mean that. It just means to lead it back to some, you know, mothership, and in this case we're going to say this process that we're trying to accomplish.
+207000	219000	The word ingest means to carry something into, so it's the same kind of idea, but that's about one byte, right? Reduction is about a series of things, and ingest itself means one thing.
+219000	228000	And transduce means to lead across. And the idea basically is, as we're taking inputs into this reduction, we're going to lead them through a series of transformations.
+228000	236000	We're going to carry them across a set of functions. So we're going to be talking about manipulating input during a reduction.
+236000	247000	So this is not a programming thing. This is a thing that we do all the time in the real world. We don't call them transducers. We call them instructions, right?
+247000	255000	And so we will talk about this scenario through the course of this talk, which is put the baggage on the plane.
+255000	262000	And that's the overall thing that we're doing. But I have this transformation I want you to do to the baggage, right?
+262000	267000	I want you to, while you're doing it, while you're putting the baggage on the plane, break apart the pallets.
+267000	274000	So we're going to have pallets, you know, big, you know, wooden things with a pile of luggage on it that's sort of shrink wrapped.
+274000	282000	We want to break them apart, so now we have individual pieces of luggage. We want to smell each bag and see if it smells like food.
+282000	290000	If it smells like food, we don't want to put it on the plane. And then we want to take the bags and see if they're heavy, and we want to label them.
+290000	295000	Right, that's what you have to do. So we're talking to the luggage handlers, we say, that's what you're going to do.
+295000	308000	And they all say, great, I can do that. One of the really important things about the way that was just said and the way you talk to luggage handlers and your kids and anybody else you need to give instructions to,
+308000	314000	is that the conveyance and the sources and the sinks of that process are irrelevant.
+314000	322000	Right, do the luggage handlers get the bags on a conveyor belt or on a trolley?
+322000	334000	We didn't say, we don't care. In fact, we really don't want to care. We don't want to say to the luggage guys today, there's going to be luggage on a trolley, do this to it, and then put it on another trolley.
+334000	339000	And then tomorrow when we switch to conveyor belts, have them say, we didn't know what to do.
+339000	349000	We came on a conveyor belt and like, I have rules for trolleys.
+349000	359000	So the rules don't care, the instructions don't care. This is the real world. Then we have programming. What are we doing programming?
+359000	366000	We have collection function composition, we're so cool. We have lists, we have functions from list to list.
+366000	372000	So we can compose our functions. We're going to say, well, labeling the heavy bags is like mapping, right?
+372000	379000	Every bag comes through and it gets a label or it doesn't. But for every bag that comes through, there's a bag that comes out and maybe it has a label or it doesn't.
+379000	388000	And taking out the non-food bags is, or keeping the non-food bags, is a filter. It's analogous to filter.
+388000	396000	Is it food? We don't want it. If it's not food, we're going to keep it. So we may or may not have an input depending on this predicate.
+396000	404000	And unbuttling the pallets is like map cap. There's some function that, given a pallet, gives you a whole bunch of individual pieces of luggage.
+404000	411000	So we already know how to do this. We're done. We're finished. Programming can model the real world.
+411000	418000	Except there's a big difference between this and what I just described happens in the real world, right?
+418000	424000	Because map is a function from whatever, collection to collection or sequence to sequence or pick your programming language.
+424000	430000	But it's basically a function of aggregate to aggregate. And so is filter and so is map cap, right?
+430000	435000	And the rules that we have only work on those things. They're not independent of those things.
+435000	443000	If we have something new, like a channel or a stream or observable, none of the rules we have apply to that.
+443000	452000	And in addition, we have all this in-between stuff. It's as if we said to the luggage guys, take everything off the trolley, trolley, right?
+452000	459000	And unbutton the pallet and put it on another trolley, right? And then take it off that trolley and then see if it smells like food.
+459000	466000	And if it doesn't, put it on another trolley. And then take it off that trolley. And if it's heavy, put a label on it and put it on another trolley.
+466000	470000	This is what we're doing in programming. This is what we do all the time, right?
+470000	480000	And we wait for a sufficiently smart supervisor to come and, like, say, what are you guys doing, right?
+480000	486000	So we don't want to do this anymore, right? We don't have any reuse, right?
+486000	491000	Every time we do this, we end up writing a new thing, right? A new kind of stream. We have a new set of these functions, right?
+491000	499000	You invent Rx. Boom. You know, it was 100 functions. We were starting to do this enclosure, right?
+499000	507000	We had channels, and we're starting to write map and filter again. So it's time to say, time out. Can we do this?
+507000	514000	Because there are two things that happen. One is, all the things we're doing are specific, and the other is, there's a potential inefficiency here, right?
+514000	520000	Yeah, maybe there are sufficiently smart compilers, and maybe for some context, they can make the intermediate stuff go away.
+520000	529000	Maybe they can. The problem is our initial statement really doesn't like what we normally do. It's not general. It's specific.
+529000	533000	We're relying on something else to fix it, right?
+533000	538000	We also have this problem, right, where we're going to go from, you know, one kind of conveyance to another.
+538000	545000	And now, all of a sudden, well, you know, map is from X to X, and whatever, you know, how do we fix this?
+545000	550000	And I know what everybody's thinking, of course.
+550000	556000	Yeah.
+556000	562000	So, I mean, that may fix some of this, but in general, it doesn't solve the problem.
+562000	568000	And the problem is mostly about the fact that we're talking about the entire job, right?
+568000	576000	Those instructions, they were about the step. They weren't about the entire job. The entire job was around it.
+576000	580000	While you're doing this thing, here's what you're going to do to the inputs.
+580000	583000	Here's how you're going to transform them, while you're doing the bigger thing, which could change, right?
+583000	586000	We could change from conveyor belts to trolleys and stuff like that.
+586000	589000	So we want to just take a different approach, right?
+589000	597000	If we have something that's about the steps, we can build things that are about the whole jobs, but not vice versa.
+597000	604000	Okay. So, there's just going to be some usages here, and then I'll explain the details in a little bit.
+604000	608000	Because usually I do it the opposite way, and people are like, oh, my brain hurt for so long.
+608000	612000	And then, like, 40 minutes in, you show me the thing that made it all valuable.
+612000	616000	So here's the value proposition, right? We make transducers like this.
+616000	619000	We say, I want to make a transducer. I want to make a set of instructions.
+619000	621000	I'm going to call it process bags.
+621000	629000	I'm going to compose the idea of map catting using unbundled pallet as the function, right?
+629000	631000	So I want to unbundle the pallets.
+631000	635000	Then I want to filter out the non-food, or keep the non-food, filter out the food.
+635000	640000	And I want to map labeling the heavy bags.
+640000	644000	And in this case, we're going to compose those functions with comp,
+644000	647000	which is Clojure's ordinary function composition thing.
+647000	653000	So map catting, filtering, and mapping return transducers.
+653000	659000	And process bags, which is the composition of those things, is itself a transducer.
+659000	662000	So we're going to call map catting, call filtering, call mapping,
+662000	667000	get three transducers, compose them, and make another transducer.
+667000	674000	Each transducer takes a process step, or it's reducing function,
+674000	676000	and transforms. It changes it a little bit.
+676000	680000	It says, before you do that step, do this.
+680000	684000	I'll explain why that seems backwards in a little bit.
+684000	688000	Having made those instructions, we can go into completely different
+688000	691000	Contexts and reuse them.
+691000	695000	Amongst the several contexts that we're supporting in Clojure in the first
+695000	699000	Version is supporting transducers in intu, and intu is Clojure's
+699000	702000	Function that takes a collection and another collection and pours one
+702000	705000	Into the other. Instead of having, you know, more
+705000	708000	Object-oriented, you know, collections that know how to absorb
+708000	711000	Other collections with build from, we just have the standalone
+711000	713000	Thing called intu, but it's the same idea.
+713000	716000	Your source and destination could be different.
+716000	719000	So we want to pour the pallets into the airplane, but we're going to
+719000	722000	Take them through this process bags transformation first.
+722000	725000	So this is collection building. Intu was already a function in
+725000	727000	Clojure. We just added an additional
+727000	731000	Arity that takes transducers. Then we have sequence.
+731000	737000	Sequence takes some source of stuff and makes a lazy sequence out of it.
+737000	742000	Sequence now additionally takes a transducer and will perform
+742000	746000	That transformation and all the stuff as it lazily produces results.
+746000	749000	So we can get laziness out of this.
+749000	752000	There's a function called transduce, which is just like reduce,
+752000	757000	Except it also takes a transducer. So that takes a transducer,
+757000	761000	An operation, an initial value, and a source.
+761000	765000	So the transducer is a modification of process bags.
+765000	769000	I'll talk about in a second. The operation is sum.
+769000	772000	The initial value is zero and the source of the pallets.
+772000	778000	So what does this composition do? What is this going to do?
+778000	782000	It's going to sum the weight of the bags. It's the weight of all the bags.
+782000	785000	So it's cool. Look, we can take the process that we already had and
+785000	789000	Modify it a little bit. We can add weighing the bags at the end of that
+789000	794000	Set of instructions and that gives us a number and we can use that number
+794000	798000	With plus to build the sum.
+798000	801000	So that's transduced. The other thing we can do is go to a
+801000	804000	Completely different context now. So we have some channels.
+804000	807000	We're going to be sending pallets of luggage across channels.
+807000	810000	But they don't really fit. But the idea is there.
+810000	813000	This is a very different context. Channels run indefinitely.
+813000	816000	You can feed them stuff all the time and get stuff out of the
+816000	820000	Other end on a continuous basis. But the critical thing here is
+820000	823000	That these things are not parameterized.
+823000	826000	They're not, i'm a thing that you can tell me later.
+826000	830000	You're going to tell me if it's trolleys or conveyor belts.
+830000	834000	This is the exact same process bags i defined here.
+834000	838000	This concrete thing being reused in completely different
+838000	842000	Context. So this is concrete reuse, not
+842000	846000	Parameterization. So we can use transducers on channels.
+846000	850000	The channel constructor now optionally takes a transducer and
+850000	853000	It will transduce everything that flows through.
+853000	857000	It has its own internal processing step and it's going to
+857000	861000	Modify its inputs accordingly with the transducer it's given.
+861000	864000	It's an open system. I can imagine, but i did not get time
+864000	868000	To implement, that you could plug this into rx java trivially
+868000	872000	And take half of the rx java functions and throw them away.
+872000	876000	Because you can just build a transducer and plug it into one
+876000	879000	Observable function that takes an observable and a transducer
+879000	884000	And returns an observable. And that's the idea.
+884000	887000	So we call all of these things into and sequence and transduce
+887000	892000	And transduceable processes. They satisfy the definition of
+892000	896000	Process we gave before. And they accept a transducer.
+896000	900000	So transducers have two parts. You make functions that create
+900000	903000	Transducers and in context where they make sense, you start
+903000	906000	Accepting transducers. And then you have these two
+906000	910000	Orthogonal legos you can put together. Inside each process,
+910000	914000	They're going to take that transducer and their internal
+914000	917000	Processing function. So what's the internal processing
+917000	920000	Function of into? The thing that adds one thing to a
+920000	924000	Collection. In closure, it's called conge for conjoin.
+924000	929000	Similarly, inside lazy sequences, there's some
+929000	932000	Thunk mechanism that produces a result on demand and then
+932000	935000	Waits to produce the next thing. So that has a step inside of it
+935000	939000	That can be transformed this way. Channels also take inputs
+939000	943000	Somewhere inside channels is a little step function that adds
+943000	946000	An input to a buffer. That step function has exactly the
+946000	950000	Same shape as conge. And as laziness.
+950000	954000	So it can transform its fundamental internal operation.
+954000	957000	But the operation remains completely encapsulated.
+957000	960000	The transducible context takes the transducer, modifies its
+960000	965000	Own step function and proceeds with that.
+965000	968000	So as i said before, there's nothing new.
+968000	972000	Two papers i find useful for helping you think about these
+972000	975000	Things are lectures and construct functional programming
+975000	978000	Which is a lot closer to the source of when people started
+978000	985000	Thinking about folds and their relationship to lists.
+985000	989000	And the second grand paper is a summary paper which summarizes
+989000	992000	The current thinking at the time it was written.
+992000	995000	So they're both really good. But now i'm going to take you
+995000	999000	Through how do we get to this point? How do we think about these things?
+999000	1002000	So one of the fundamental things that the bird paper and the work
+1002000	1005000	That preceded it talk about is the relationship between these
+1005000	1009000	List processing operations and fold. In fact, there's a lot of
+1009000	1013000	Interesting mathematics that shows that they're the same thing.
+1013000	1018000	That you can go backwards and forwards between a concrete list
+1018000	1023000	And the operations that constructed it. They're sort of isomorphic to each other.
+1023000	1027000	So many of the list functions that we have can be redefined in
+1027000	1031000	Terms of fold. There's the definition of map in several
+1031000	1035000	Talks here, i think. But the traditional definition of
+1035000	1039000	Map says if it's empty, return empty sequence, if you're
+1039000	1043000	Getting a new input, cons that input onto the result of mapping
+1043000	1048000	To the rest of the input. It's recursive and calls itself.
+1048000	1051000	But map does that, filter does that, map cat does that.
+1051000	1055000	They all have these structures. But filter is a little bit different.
+1055000	1058000	It has a predicate inside. It has a conditional branch.
+1058000	1062000	And then it then it recurses in two parts of the branch with different arguments.
+1062000	1066000	So what this work, this earlier work did was say you can think about
+1066000	1070000	All these things as folds. If you do, you get a lot of regularity
+1070000	1073000	And things that you can prove about folds which are now all uniform
+1073000	1076000	Will apply to all these functions that otherwise look a little
+1076000	1079000	Different from each other. So there's a lot of value to this.
+1079000	1083000	Fold encapsulates the recursion. And it's easy to reason about.
+1083000	1087000	If we look at a redefinition of map, it's not often defined this way.
+1087000	1091000	But if we look at a redefinition of map in terms of fold,
+1091000	1098000	Then we say we're going to fold this function that cons is the first thing onto the rest.
+1098000	1102000	And we start with an empty list. So this is fold, fold right.
+1102000	1106000	And we do that over a collection. We can similarly define filter this way.
+1106000	1110000	And what's really interesting about these things is that the fold are the empty list
+1110000	1114000	And the call, that's all boilerplate, right? It's exactly the same.
+1114000	1117000	Map and filter are precisely the same in those things.
+1117000	1121000	All that's different is what's inside the inner function definition.
+1121000	1125000	And even there, there's something the same.
+1125000	1129000	So it ends up that you can similarly redefine these functions
+1129000	1133000	Or define these functions in terms of fold L.
+1133000	1136000	And fold L is just left reduced.
+1136000	1139000	And so here's some what if definitions of map and filter.
+1139000	1145000	And we added map cat that are left folds that use left reduced.
+1145000	1148000	And so the trade off between left reduced and right reduced
+1148000	1151000	Is right reduced sort of puts you on the laziness path
+1151000	1153000	And left reduced puts you on the loop path.
+1153000	1157000	It ends up that the loop path is better and faster and more general
+1157000	1159000	For the kinds of things we want to apply this to.
+1159000	1165000	Especially if we can get laziness later, which I just said we kind of could.
+1165000	1168000	So we like that. So this means we can turn these things into loops.
+1168000	1170000	Because reduced becomes a loop.
+1170000	1173000	But the same thing. We have the boilerplate. We have reduced.
+1173000	1178000	These definitions use vectors, which in closure are like arrays.
+1178000	1181000	But their fundamental conging operation adds at the end.
+1181000	1184000	So this has the same shape I want to talk about for the rest of the talk.
+1184000	1187000	We have something that we're building up, a new input,
+1187000	1190000	And we produce a new thing. And sort of the stuff's coming from the right
+1190000	1192000	And getting added to the right-hand side.
+1192000	1196000	So it just makes more sense here. So these are eager and they return vectors.
+1196000	1198000	But it's the same idea. We're reducing.
+1198000	1201000	We have a function that takes, you know, the vector so far.
+1201000	1205000	And a new value. We're conjoining the new value.
+1205000	1209000	Having applied f to it, right? That's the idea of mapping, right?
+1209000	1214000	There's an idea behind mapping that luggage handlers understand, right?
+1214000	1217000	Put the label on everything that comes through.
+1217000	1220000	It's very general, right? That's mapping.
+1220000	1223000	They get that. We get that. We're all human beings.
+1223000	1226000	We understand the same thing. As programmers, we've mucked this up.
+1226000	1229000	Because look at what's happening here.
+1229000	1233000	Map says there's this fundamental thing that you do to everything as it comes through.
+1233000	1237000	Filter says there's this fundamental tiny thing that you do to everything as it comes through.
+1237000	1242000	And map cat says there's this fundamental tiny thing that you do to everything as it comes through.
+1242000	1248000	What's the problem? Conge.
+1248000	1253000	Conge is basically like saying to the trolley or to the conveyor belt, right?
+1253000	1261000	It's something about the outer job that's leaked or it's inside the middle of the idea.
+1261000	1265000	Inside the middle of the idea of mapping is this conge.
+1265000	1270000	It does not belong. Inside the middle of the idea of filter is this conge.
+1270000	1273000	It shouldn't be there. Same thing with map cat.
+1273000	1278000	This is specific stuff in the middle of a general idea.
+1278000	1281000	The general idea is just take stuff out.
+1281000	1285000	We don't want to know about conge. Maybe we want to do something different.
+1285000	1288000	So again, we have a lot of boilerplate. We have these essences.
+1288000	1292000	And the other critical thing is the essences can be expressed as reducing functions.
+1292000	1296000	Each of these little inner functions is exactly the same shape as conge.
+1296000	1301000	It takes a result so far and a new input returns the next result.
+1301000	1307000	So to turn those inner functions into transducers,
+1307000	1311000	we're just going to parameterize that conge, right?
+1311000	1316000	We're going to parameterize the old-fashioned way with the function argument.
+1316000	1319000	Anything higher order, blah, blah, blah.
+1319000	1322000	We're going to take an argument, which is the step.
+1322000	1326000	So right in the middle body of this mapping...
+1327000	1330000	You can't see my cursor.
+1330000	1333000	Right in the middle body, this is the same as it was on the last slide.
+1333000	1336000	This is where it said conge. Now we say step.
+1336000	1340000	We put that inside a function that takes the step.
+1340000	1342000	So this is a function.
+1342000	1346000	Mapping takes the thing that you're going to map, you know, label the baggage.
+1346000	1350000	And it returns something that is a function that expects a step.
+1350000	1352000	What are we doing? Putting stuff on conveyor belts.
+1352000	1355000	What are we doing? We're putting stuff on trolleys.
+1355000	1362000	Okay? And it says, before I do that, I'm going to call f on the luggage.
+1362000	1364000	I'm going to put a label on the luggage.
+1364000	1366000	But I don't know about luggage anymore.
+1366000	1368000	The step you're going to tell me later. What are we doing today?
+1368000	1371000	Conveyor belts or trolleys? Conveyor belts. Cool.
+1371000	1376000	I got the rules. I understand how to do mapping and filtering and map catting.
+1376000	1378000	So same thing, filter.
+1378000	1380000	And what's beautiful about this is what's the essence of filtering.
+1380000	1384000	Apply a predicate, then maybe you do the step, or maybe you don't.
+1384000	1387000	There's no stuff here, right? It's a choice about activity.
+1387000	1392000	It's a choice about action. Same thing with concatenate, cat.
+1392000	1395000	What does it do? It basically says, do the step more than once.
+1395000	1398000	I'm giving you an input that's really a set of things.
+1398000	1403000	Do it to each thing. And map catting is just composing
+1403000	1407000	Mapping cat, which it should be.
+1407000	1412000	Okay. So we can take these transducer returning functions.
+1412000	1416000	So mapping returns a transducer, filtering returns a transducer,
+1416000	1421000	cat is a transducer, and map catting returns a transducer.
+1421000	1424000	And we can then plug them into the code we saw before.
+1424000	1428000	Like, how could we define map now that we've made mapping into this abstract thing
+1428000	1432000	that doesn't really know about lists or vectors anymore?
+1432000	1435000	And what we do is we just call mapping. That gives us a transducer.
+1435000	1440000	It says, if you give me a step function, I'll modify it to do F first on the input.
+1440000	1444000	And we say, okay, here's the step function, conge.
+1444000	1447000	Now I rebuilt the functions I had before.
+1447000	1451000	Except conge is not inside mapping and filtering and map catting anymore.
+1451000	1455000	It's an argument. Woo-hoo!
+1455000	1459000	We now have the essence of these things, a la carte.
+1459000	1461000	And that's the point.
+1461000	1464000	Transducers are fully decoupled.
+1464000	1466000	They don't know what they're doing.
+1466000	1468000	They don't know what process they're modifying.
+1468000	1471000	The step function is completely encapsulated.
+1471000	1473000	They have some freedom.
+1473000	1477000	They can call the step function, not at all, once exactly per input
+1477000	1479000	or more than once per input.
+1479000	1482000	But they don't really know what it does, so that's what they're limited to doing,
+1482000	1484000	using it or not using it.
+1484000	1486000	That's pretty much it.
+1486000	1488000	Except they do have access to the input.
+1488000	1491000	So when we said map cat, unbundled pallet,
+1491000	1494000	the function we're supplying there is something that knows about pallets.
+1494000	1496000	It doesn't know about conveyor belts.
+1496000	1499000	It doesn't know what the overall job is, but it knows about pallets,
+1499000	1504000	and it's going to know how to turn a pallet into a set of pieces of luggage.
+1504000	1507000	There's a critical thing about how they use that step function that they've been passed,
+1507000	1510000	and it goes back to that successor notion I mentioned before.
+1510000	1516000	They must pass the previous result from calling the step function
+1516000	1520000	as the next first argument to the next call to the step function.
+1520000	1525000	That is the rule for step functions and their use, and no others.
+1525000	1529000	They can transform the input argument, the second argument.
+1529000	1533000	So let's talk a little bit about the backwards part,
+1533000	1535000	because this is a frequent question I get.
+1535000	1537000	What did you do?
+1537000	1539000	Does transducers change comp?
+1539000	1541000	That is the first thing.
+1541000	1543000	They ruin comp or something like that.
+1543000	1546000	So what we have to do is look at what transducers do.
+1546000	1553000	A transducer function takes a function, wraps it, and returns a new step function.
+1553000	1556000	That is still happening right to left.
+1556000	1559000	This is ordinary comp, and it works right to left.
+1559000	1562000	So mapping gets run first.
+1562000	1567000	We're going to have some operation, you know, put stuff on a trolley or conge.
+1567000	1570000	Mapping will be the first thing that happens.
+1570000	1574000	It's going to make a little modified step that labels the heavy bags
+1574000	1577000	before it calls, put it on the airplane.
+1577000	1579000	Then filtering gets called.
+1579000	1581000	It does go right to left.
+1581000	1585000	That step, I'll make you a new step that first sees if it's food.
+1585000	1588000	If it's food, I'm going to throw it away.
+1588000	1590000	If it's not food, I'm going to use it.
+1590000	1594000	Then map catting runs, or the result of map catting runs.
+1594000	1598000	And that says, give me a step, and I will take its input,
+1598000	1600000	presume it's a pallet, unbundle it,
+1600000	1603000	and supply each of those arguments to the nested thing.
+1603000	1607000	So the composition of the transformers runs right to left.
+1607000	1611000	But it builds a transformation step that runs in the order
+1611000	1614000	that they appear, left to right, in the comp.
+1614000	1616000	In other words, comp is working ordinarily.
+1616000	1618000	It's building steps right to left.
+1618000	1622000	The resulting step runs the transformations left to right.
+1622000	1626000	So when we actually run this, we'll unbundle the pallets first,
+1626000	1629000	call the next step, which is to get rid of the food,
+1629000	1631000	call the next step, which is to label the heavy bags.
+1631000	1634000	So that's why it looks backwards.
+1634000	1638000	Okay, so the other nice thing about transducers is that there's
+1638000	1640000	no intermediate stuff.
+1640000	1642000	They're just a stack of function calls.
+1642000	1643000	They're short.
+1643000	1645000	Potentially they could be inlined.
+1645000	1647000	There's no laziness overhead.
+1647000	1648000	There's no laziness required.
+1648000	1650000	There's no laziness utilized.
+1650000	1652000	There's no interim collections.
+1652000	1654000	We're not going to have you make everything into a list.
+1654000	1656000	So you can say an empty list is nothing.
+1656000	1658000	Now, nothing is nothing.
+1658000	1660000	Empty list is an empty list.
+1660000	1661000	And one thing is one thing.
+1661000	1663000	A list of one thing is a list of one thing.
+1663000	1666000	And these are not the same.
+1666000	1669000	So you use the step function or you don't.
+1669000	1672000	And there's no extra boxes required of boxing for communicating
+1672000	1675000	about the mechanism.
+1675000	1679000	So the other thing that was sort of interesting was,
+1679000	1682000	sorry to talk about transducers and a lot of people in Haskell
+1682000	1684000	were trying to figure out what the actual types were
+1684000	1687000	because I had a shorthand in my blog post.
+1687000	1690000	And I'm not going to get into that right now.
+1690000	1694000	Except to say that I think it's a very interesting type problem
+1694000	1698000	and I'm very excited to see how people do with it
+1698000	1700000	in their various languages.
+1700000	1703000	I've seen results that were sort of, it works pretty well to,
+1703000	1706000	and types are, you know, these types are killing me.
+1706000	1709000	Depending on whether the user's type system could deal with it.
+1709000	1713000	But let's just try to capture what we know so far graphically.
+1713000	1715000	And somebody who reviewed these slides for me said
+1715000	1717000	these should have been subscripts,
+1717000	1721000	computers are so hard to use I couldn't switch them in time.
+1721000	1723000	So they're superscripts.
+1723000	1727000	But the idea is that if you're trying to produce the next process
+1727000	1733000	n, you must supply the result from step n minus one as the input.
+1733000	1737000	If you try to model this in your type system saying r to r,
+1737000	1739000	that's wrong, right?
+1739000	1742000	Because I can call the step function five times
+1742000	1745000	and then on the sixth time take the return value from the first time
+1745000	1748000	and pass it as the first thing. That's wrong.
+1748000	1751000	So you ought to make your type system make that wrong.
+1751000	1753000	So figure that out.
+1753000	1757000	Also, if you make the black box and the black box the same thing,
+1757000	1760000	that's also arbitrarily restrictive, right?
+1760000	1763000	You can have a state machine that every time it was given x,
+1763000	1766000	returned y, every time it was given y, returned z,
+1766000	1768000	every time it was given z, returned x.
+1768000	1770000	That's a perfectly valid step function.
+1770000	1773000	It has three separate input types and three separate output types
+1773000	1775000	that only happen at particular times.
+1775000	1777000	There's nothing wrong with that state machine.
+1777000	1779000	It is a perfectly fine reducing function.
+1779000	1783000	It may be tough to model in a type system.
+1783000	1786000	And don't say x or y or z, because it doesn't take x or y or z
+1786000	1788000	and return x or y or z.
+1788000	1791000	When it's given x, it only returns y. It never returns z.
+1791000	1797000	So it seems like a good project for the bar later on.
+1797000	1800000	But the thing that we're capturing here is that the new step function
+1800000	1802000	might take a different kind of input.
+1802000	1804000	It might take a b instead of an a.
+1804000	1806000	Our first step does that.
+1806000	1809000	It takes a palette and returns a set of pieces of luggage,
+1809000	1813000	but each step returns a piece of luggage.
+1813000	1815000	Okay.
+1815000	1820000	So there are other interesting things that happen in processes, right?
+1820000	1823000	Ordinary reduction processes everything.
+1823000	1826000	But we want this to be usable in cases that run arbitrarily long.
+1826000	1829000	We're not just talking about turning one kind of collection
+1829000	1831000	into another kind of collection, right?
+1831000	1833000	A transducer that's running on a channel
+1833000	1835000	has got an arbitrary amount of stuff coming through.
+1835000	1838000	A transducer on an event stream has an arbitrary amount of stuff coming through.
+1838000	1841000	But sometimes you want, you know, either the reducing process
+1841000	1844000	or somebody who says, whoa, I have had enough.
+1844000	1846000	I don't want to see any more input.
+1846000	1848000	We're done. I want to say we're done now,
+1848000	1850000	even though you may have more input.
+1850000	1852000	So we're going to call that early termination.
+1852000	1854000	And it may be desired by the process itself,
+1854000	1856000	like the thing at the bottom.
+1856000	1859000	Or it may be a function of one of the steps.
+1859000	1862000	One of the steps may say, you know what, that's all I was supposed to do.
+1862000	1865000	And so I don't want to see any more input.
+1865000	1867000	And the example here will be, you know,
+1867000	1869000	we're going to modify our instructions and say,
+1869000	1871000	if the bag is ticking, you're finished.
+1871000	1873000	Go home.
+1873000	1875000	We're done loading the plane.
+1875000	1877000	So we're going to add that.
+1877000	1879000	Taking while.
+1879000	1881000	Taking while non-ticking.
+1881000	1884000	And taking while non-ticking needs to stop the whole job in the middle.
+1884000	1886000	It doesn't matter if there's more stuff on the trolley.
+1886000	1888000	When it's ticking, we're finished.
+1888000	1890000	Okay?
+1890000	1892000	So how do we do that?
+1892000	1894000	It ends up in closure.
+1894000	1896000	We already have support for this idea in reduced.
+1896000	1900000	There's a constructor of a special, you know,
+1900000	1906000	wrapper object called reduced, which says this represents the end of the...
+1906000	1908000	It just says, I don't want to see any more input.
+1908000	1910000	Here's what I've come up with so far.
+1910000	1912000	And don't give me any more input.
+1912000	1914000	There's a predicate called reduced question mark
+1914000	1917000	that allows you to ask if something is in this wrapper.
+1917000	1921000	And there's a way to unwrap the thing and look at what's in it.
+1921000	1923000	So you can say, you know, is the reduced thing reduced?
+1923000	1925000	That will always return true.
+1925000	1927000	And you can de-wrap a reduced thing and get the thing.
+1927000	1929000	That's inside it.
+1929000	1931000	This is not the same thing as maybe, right?
+1931000	1935000	Because maybe also wraps the other things that are not reduced, right?
+1935000	1939000	Or either, or all those other boxy kind of things.
+1939000	1941000	So we don't do that.
+1941000	1945000	We only wrap when we're doing this special termination.
+1945000	1950000	So like reduce, transducers also must support reduced.
+1950000	1955000	That means that the step functions are allowed to return a reduced value.
+1955000	1961000	And that if a transducing process or a transducer gets a reduced value,
+1961000	1964000	it must never call the step function with input again.
+1964000	1966000	That's the rule.
+1966000	1969000	Again, implement the rule in your type system, have at it.
+1969000	1971000	But that's the rule.
+1971000	1973000	So now we can look at the insides of taking while.
+1973000	1975000	It takes a predicate.
+1975000	1977000	It takes a step that it's going to modify.
+1977000	1979000	It runs the predicate on the input.
+1979000	1983000	If it's okay, it runs the step.
+1983000	1986000	If it's not okay, it takes what has been built up so far and says,
+1986000	1989000	we're finished, reduced result.
+1989000	1991000	That's how we bail out.
+1991000	1995000	But notice the ordinary result is not in a wrapper.
+1995000	1998000	And so the reducing processes must also play this game, right?
+1998000	2001000	The transducer has to follow the rule from before.
+2001000	2004000	And a reducing process similarly has to support reduced.
+2004000	2009000	If it ever sees a reduced thing, it must never supply input again.
+2009000	2013000	The dereference value is the final accumulated value.
+2013000	2016000	But the final accumulated value is still subject to completion,
+2016000	2018000	which I'm going to talk about in a second.
+2018000	2021000	So there's a rule for the transducers as well.
+2021000	2023000	They have to follow this rule.
+2023000	2027000	So now we get new pictorial types in the graphical type language.
+2027000	2030000	That is Omnigraphil.
+2030000	2036000	So we can have, you know, a process, right,
+2036000	2041000	that takes some black box at the prior step and an input
+2041000	2043000	and returns a black box at the next step.
+2043000	2048000	Or maybe, right, it returns a reduced version of that.
+2048000	2050000	So one of those two things can happen.
+2050000	2052000	Or vertical bars, or.
+2052000	2056000	And it returns another step function that similarly can take
+2056000	2059000	a different kind of input, a black box, returns a black box,
+2059000	2062000	or reduced black box.
+2062000	2066000	Same rules about successorship apply.
+2066000	2068000	All right.
+2068000	2072000	So some interesting sequence functions require state.
+2072000	2074000	And in the purely functional implementations,
+2074000	2078000	they get to use the stack or laziness to put that state.
+2078000	2082000	They get somewhere in the execution machinery,
+2082000	2084000	a place to put stuff.
+2084000	2087000	Now we're saying, I don't want to be in the business of specifying
+2087000	2095000	if we're lazy or not lazy or recursive.
+2095000	2098000	I'm not going to give you space inside the execution strategy
+2098000	2101000	because I'm trying to keep the execution strategy from you.
+2101000	2104000	And that means that state has to be explicit when you have transducers.
+2104000	2107000	Each transducer that needs state must create it.
+2107000	2111000	So examples of sequence functions that need state are take, partition,
+2111000	2113000	all partition by, and things like that.
+2113000	2117000	They're counting or accumulating some stuff to spit it out later.
+2117000	2119000	Where's that going to go?
+2119000	2121000	And it has to go inside the transducer object.
+2121000	2123000	They have to make state.
+2123000	2125000	And there's some rules about that.
+2125000	2128000	If you need state as a transducer author, you have to create it
+2128000	2131000	every time uniquely, and again, every time you're asked to transform
+2131000	2133000	a step function.
+2133000	2137000	So a new, you're going to create state every time you transform a step function.
+2137000	2140000	That means that if you build up a transducer stack,
+2140000	2144000	which are stateful transducers, and you apply it,
+2144000	2147000	not when you build it, no state exists then.
+2147000	2149000	After you call it comp, there's no state.
+2149000	2153000	When you've applied it, you now have a new process step.
+2153000	2156000	But as we should be thinking about all transducer process steps,
+2156000	2160000	including the ones at the bottom, that may be stateful.
+2160000	2166000	You don't know that the very bottom process isn't launched stuff into space.
+2166000	2170000	So you should always treat an applied transducer stack as if it
+2170000	2174000	returned a stateful process, which means you shouldn't alias it.
+2174000	2177000	What ends up happening in practice is all of the transducable
+2177000	2180000	processes, they do the applying.
+2180000	2182000	It's not in the user's hands to do it.
+2182000	2187000	You pass around a transducer and input to the job, to the job.
+2187000	2190000	The job applies the transducer to its process,
+2190000	2194000	gets a fresh set of state when it does that, and there's no harm.
+2194000	2197000	But you do have to do this by convention.
+2197000	2200000	So here's an example of a stateful transducer dropping
+2200000	2202000	while a predicate is true.
+2202000	2205000	So we start with our flag that says it's true.
+2205000	2207000	As long as it's still true, we're going to drop.
+2207000	2211000	When we see that it's not true, we're going to reset it and
+2211000	2213000	continue with applying the step.
+2213000	2216000	And then from then on forward, we're going to apply the step.
+2216000	2221000	So that is not the prettiest thing.
+2221000	2223000	I talked before about completion.
+2223000	2225000	So we have the idea of early termination.
+2225000	2228000	The other idea that transducer support is completion, which is
+2228000	2232000	that at the end of input, which may not happen, there'll be
+2232000	2234000	plenty of jobs that don't complete.
+2234000	2236000	They don't have ends.
+2236000	2239000	They're not consuming a finite thing like a collection.
+2239000	2242000	They're processing everything that comes through a channel or
+2242000	2244000	everything that comes through an event source.
+2244000	2246000	There's no end.
+2246000	2248000	But for things that have an end, there's a notion of
+2248000	2253000	completion, which is to say, if either the innermost process
+2253000	2257000	step wants to do something finally when everything's
+2257000	2259000	finished, they can.
+2259000	2261000	Or if any of the transducers have some flushing they need to
+2261000	2263000	do, they can do it.
+2263000	2266000	So the process may want to do a final transformation on the
+2266000	2267000	output.
+2267000	2271000	Any stateful transducer, in particular, a transducer like
+2271000	2276000	partition, it's aggregating to return aggregates.
+2276000	2279000	You say partition five, and it collects five things and spits
+2279000	2280000	it out.
+2280000	2282000	If you say we're done, it's got three things.
+2282000	2284000	It wants to spit out the three things.
+2284000	2288000	But you need to be able to tell it we exhausted input.
+2288000	2290000	In order to do that, the way that's implemented in the
+2290000	2293000	closure implementation of transducers is that all the
+2293000	2295000	step functions must have a second operation.
+2295000	2299000	So there's the operation that takes a new input and the
+2299000	2303000	accumulated value so far and returns a new accumulated value
+2303000	2304000	or whatever.
+2304000	2306000	I mean, it's up to the process what the meaning of the black
+2306000	2307000	box is.
+2307000	2311000	But there must be another operation which takes just the
+2311000	2314000	accumulated value and no input.
+2314000	2317000	So an Rd1 operation.
+2317000	2318000	So that's required.
+2318000	2321000	So we'll talk about what that does or how that gets used.
+2321000	2325000	If the process itself, if the overall job has finished, if
+2325000	2328000	it's exhausted input or it has a notion of being finished, this
+2328000	2329000	is not bailing out.
+2329000	2331000	This is like there's nothing more to do.
+2331000	2333000	There's no more input ordinarily.
+2333000	2337000	It must call the completion operation exactly once on the
+2337000	2338000	accumulated value.
+2338000	2339000	So there's no more inputs.
+2339000	2341000	I'm going to call you once with no input.
+2341000	2343000	Do whatever you want.
+2343000	2345000	Each transducer must do the same thing.
+2345000	2348000	It has to have one of these completion operations and it
+2348000	2351000	must call its nested completion operation.
+2351000	2356000	It may, however, before it does that, flush.
+2356000	2359000	So if you have something like partition that's accumulated
+2359000	2364000	some stuff along the way, it can call the ordinary step
+2364000	2368000	function and then call complete on the result.
+2368000	2372000	And that's how we accomplish flushing.
+2372000	2374000	There's just one caveat here, which is that if you're a
+2374000	2377000	stateful thing like partition and you've ever seen reduced
+2377000	2381000	come up, well, the earlier rule says you can never call the
+2381000	2382000	input function.
+2382000	2384000	So you just drop whatever you have hanging around because
+2384000	2386000	somebody bailed out on this process.
+2386000	2389000	There's going to be no ordinary completion.
+2389000	2395000	So we can look at our types again in Omnigraphful 2000,
+2395000	2401000	latest programming innovation, and think about a reducing
+2401000	2404000	function as a pair of operations.
+2404000	2406000	They'll be different in each programming language.
+2406000	2408000	It's not really important.
+2408000	2411000	In closure, it ends up a single function can capture both of
+2411000	2412000	these arities.
+2412000	2415000	But whatever you need to do to take two operations, the first
+2415000	2419000	one up there that takes no input is the completion operation.
+2419000	2422000	And the second is the step operation that we've been seeing
+2422000	2423000	so far.
+2423000	2425000	It takes a pair of those things and returns a pair of those
+2425000	2426000	things.
+2426000	2429000	That's it.
+2429000	2431000	And again, we don't want to concretely parameterize the
+2431000	2433000	result type there either.
+2433000	2435000	You've got to use rank two polymorphism or something because
+2435000	2439000	if you concretely parameterize that, you'll have something that
+2439000	2443000	only knows about transducing into airplanes as opposed to the
+2443000	2446000	general instructions.
+2446000	2447000	OK.
+2447000	2449000	There's a third kind of operation that's associated with
+2449000	2454000	sort of processing in general, which is init.
+2454000	2456000	We've had talks before that mentioned monoids and things like
+2456000	2457000	that.
+2457000	2461000	The basic idea is just sometimes it's nice for a
+2461000	2464000	transformation operation to carry around an initialization
+2464000	2466000	capability.
+2466000	2469000	It need not be the identity value or anything like that.
+2469000	2471000	It does not matter.
+2471000	2474000	What does matter is that a reducing function is allowed to
+2474000	2477000	may support arity zero.
+2477000	2481000	In other words, given nothing at all, here's an initial
+2481000	2484000	accumulator value from nothing.
+2484000	2488000	Obviously, a transducer can't do that because it's a black box.
+2488000	2490000	The one thing it definitely does not know how to do is make a
+2490000	2492000	black box out of nothing.
+2492000	2493000	Can't do it.
+2493000	2497000	So all it can ever do is call down to the nested function.
+2497000	2502000	So transducers must support arity zero init, and they just
+2502000	2505000	define it in terms of a call to the nested step.
+2505000	2508000	They can't really do it, but they can carry it forward so that
+2508000	2512000	the resulting transducer also has an init, if the bottom
+2512000	2515000	transducer has an init.
+2515000	2517000	I've talked about the arity overloading, and so here's an
+2517000	2518000	example.
+2518000	2520000	Oh, I'm over time already.
+2520000	2521000	I'm sorry.
+2521000	2522000	So here's an example.
+2522000	2526000	Plus, from Lisp, this is older than transducers.
+2526000	2528000	Lisp programmers have been doing this for a while.
+2528000	2529000	Sorry, currying fans.
+2529000	2531000	This is what we do.
+2531000	2535000	Plus with nothing returns the identity value for plus zero.
+2535000	2538000	Multiplication with nothing returns one.
+2538000	2542000	It implements plus of an accumulated result as identity,
+2542000	2546000	and the binary operation that does the work.
+2546000	2548000	So here's the types again.
+2548000	2553000	We now have an optional init from nothing, and we're taking a
+2553000	2556000	set of three operations and returning a new set of three
+2556000	2557000	operations.
+2557000	2561000	In closure, we just use arity to do this.
+2561000	2563000	A transducer enclosure then is just something that takes the
+2563000	2566000	reducing function and returns one, where a reducing function
+2566000	2568000	has these three arities.
+2568000	2570000	We haven't actually called the reducing functions mapping and
+2570000	2572000	filtering and ing this and ing that.
+2572000	2574000	I think that's an Englishism that's not going to carry over
+2574000	2578000	very well, and we have available to us arity overloading
+2578000	2580000	because we don't have currying.
+2580000	2583000	So the map of f with no collection argument returns the
+2583000	2587000	transducer, and we've modified so far all of these sequence
+2587000	2590000	functions to do that.
+2590000	2594000	So this is a final example of filter returning a transducer.
+2594000	2599000	It takes a predicate and returns a step modifying function,
+2599000	2602000	which takes a reducing function, which presumably has these
+2602000	2605000	three arities, and defines a function with three arities.
+2605000	2607000	init, which just flows it through because it doesn't know
+2607000	2609000	what it could possibly do.
+2609000	2612000	Complete, filter doesn't have anything special to do, so it
+2612000	2613000	just flows that through.
+2613000	2616000	And then the result and input one, which is the one we've
+2616000	2617000	seen before.
+2617000	2621000	Then we can see, we can define the collection implementing one
+2621000	2624000	by just calling sequence with this transducer.
+2624000	2626000	And that's true of all of these functions.
+2626000	2629000	You can define the collection version exactly like this,
+2629000	2633000	which shows that transducer is more primitive than the other.
+2633000	2635000	So this is what we're trying to accomplish.
+2635000	2637000	You define a set of transducers once.
+2637000	2639000	You define all your new cool stuff.
+2639000	2642000	It's a channel today, observables tomorrow, whatever the next
+2642000	2643000	day.
+2643000	2645000	You just make it accept transducers.
+2645000	2649000	And every specific implementation of these things you get for
+2649000	2650000	free.
+2650000	2654000	And every recipe that somebody creates, that's a composition of
+2654000	2658000	those transducing operations, works with your thing right
+2658000	2659000	away.
+2659000	2661000	That's what we want.
+2661000	2664000	We're going to take Perlis and just say, it's even better.
+2664000	2668000	We want 100 functions with no data structure.
+2668000	2672000	So transducers are context independent.
+2672000	2674000	There's tremendous value in that.
+2674000	2676000	They're concretely reusable.
+2676000	2679000	So somebody can make this and not know how you're going to use it.
+2679000	2681000	That has tremendous value.
+2681000	2684000	It's much stronger than parameterization because you can
+2684000	2686000	Flow it.
+2686000	2688000	It supports early termination.
+2688000	2690000	They support early termination completion.
+2690000	2692000	You can compose them just as easily as you can compose the
+2692000	2693000	Other ones.
+2693000	2695000	They're efficient and tasty.
+2695000	2697000	Thanks.

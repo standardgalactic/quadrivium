@@ -1,0 +1,1967 @@
+WEBVTT
+
+00:00.000 --> 00:05.320
+Hello everyone, and welcome to another episode of Coding Adventures.
+
+00:05.320 --> 00:10.440
+Today, I'd like to dive into the world of fluid simulations.
+
+00:10.440 --> 00:18.280
+So to begin with, let's draw a circle.
+
+00:18.280 --> 00:19.960
+Very nice.
+
+00:19.960 --> 00:24.920
+This circle represents a tiny bit of water, or whatever fluid we want to imagine, and
+
+00:24.920 --> 00:28.280
+it's going to move around in response to various forces.
+
+00:28.280 --> 00:31.600
+For instance, gravity is probably a good place to start.
+
+00:31.600 --> 00:36.000
+So back in the code, I'll add in a gravity variable, and let's also keep track of the
+
+00:36.000 --> 00:39.880
+particle's position and velocity.
+
+00:39.880 --> 00:44.280
+Each time step, we'll then want it to be accelerated downward by gravity, and to then
+
+00:44.280 --> 00:47.840
+move according to its new velocity.
+
+00:47.840 --> 00:50.000
+Let's take a look.
+
+00:50.000 --> 00:55.920
+Okay, not bad, but it is falling off the screen, which is a bit annoying, so I've added a
+
+00:55.920 --> 01:00.560
+tiny function that just checks if the particle has moved outside of a box, and if so, we
+
+01:00.560 --> 01:05.320
+shove it back into the box, and send it bouncing off in the opposite direction.
+
+01:05.320 --> 01:10.320
+I'd actually also like to multiply the velocity by some collision-dumping factor between
+
+01:10.320 --> 01:15.160
+0 and 1 here, so that we can control how much energy it loses with each bounce.
+
+01:15.160 --> 01:20.880
+Alright, so we can set up our little bounding box, and turn on the gravity again, and off
+
+01:20.880 --> 01:23.720
+we go bouncing.
+
+01:23.720 --> 01:27.560
+By the way, I've also made it so that we can control the display size of the particle
+
+01:27.560 --> 01:29.560
+here.
+
+01:29.560 --> 01:36.600
+Okay, let's then also try out our collision-dumping setting, and we can see the particle now bounces
+
+01:36.600 --> 01:40.600
+low and low each time until it comes to a stop.
+
+01:40.600 --> 01:45.280
+Believe it or not though, one particle is not enough particles to simulate a fluid,
+
+01:45.280 --> 01:50.160
+so I've quickly upgraded our position and velocity variables to instead store a whole
+
+01:50.240 --> 01:54.800
+array of positions and velocities, which we can then loop over and just do the same
+
+01:54.800 --> 01:58.600
+update as before to each of them.
+
+01:58.600 --> 02:02.840
+I've also created a simple function that runs at the beginning to set up the particles
+
+02:02.840 --> 02:08.120
+in a little grid arrangement, just so that they're not all on top of one another.
+
+02:08.120 --> 02:12.960
+So let's make a bunch of particles, and I'll quickly tweak the size and spacing over here
+
+02:12.960 --> 02:17.600
+to something more reasonable, and then we can let this run.
+
+02:18.480 --> 02:22.360
+Okay, there's a pretty clear problem though, which is that the particles are all just collapsing
+
+02:22.360 --> 02:27.520
+on top of one another, so I guess we need some sort of force to push them apart.
+
+02:27.520 --> 02:32.040
+I'm curious to learn how this is typically handled in the fluid simulation world, so
+
+02:32.040 --> 02:33.760
+I'm going to do some reading.
+
+02:33.760 --> 02:38.400
+I found a bunch of intriguing particle-based fluid papers, and I've just spent the last
+
+02:38.400 --> 02:41.640
+few hours trying to work my way through those.
+
+02:41.640 --> 02:46.800
+Honestly, most of the maths has gone well over my head, as it often does, but the broad
+
+02:46.800 --> 02:52.000
+ideas at least are encouragingly simple, so I think my goal for today is not to try and
+
+02:52.000 --> 02:56.480
+make some amazingly accurate simulation, but just to build a rough starting point from
+
+02:56.480 --> 03:00.720
+which we can delve deeper into the maths and physics in the future, when I'm hopefully
+
+03:00.720 --> 03:02.480
+a little bit smarter.
+
+03:02.480 --> 03:07.760
+Anyway, the first step to fixing that overlapping particle problem we were having is to be able
+
+03:07.760 --> 03:11.680
+to estimate the density of our fluid at any point.
+
+03:11.680 --> 03:16.080
+So I've just scattered our particles around randomly for this example, and of course since
+
+03:16.080 --> 03:19.960
+we're imagining that this represents some kind of fluid, in reality there should be
+
+03:19.960 --> 03:24.560
+way more particles in this, but we're always going to be limited by what our computers
+
+03:24.560 --> 03:30.480
+can handle, so to approximate reality, we can just cheat a little bit by blurring or
+
+03:30.480 --> 03:35.360
+smoothing out the few that we have, so that it appears more as a continuous field than
+
+03:35.360 --> 03:37.680
+a bunch of individual points.
+
+03:37.680 --> 03:42.800
+This simple idea is the basis of smoothed particle hydrodynamics, a technique introduced
+
+03:42.800 --> 03:47.440
+back in the 70s to help solve astrophysics problems and further our understanding of
+
+03:47.440 --> 03:51.960
+the universe, which today we'll be using for the equally lofty goal of making some
+
+03:51.960 --> 03:54.840
+little pixels go splash splash for our amusement.
+
+03:54.840 --> 04:00.120
+Alright, so to see how we're going to calculate this sort of density field we have here, let's
+
+04:00.120 --> 04:05.280
+zoom in on a single particle and define a smoothing radius, which gives us this circle
+
+04:05.280 --> 04:10.000
+of influence around the particle, where it will have maximum influence at the centre,
+
+04:10.000 --> 04:13.280
+falling off to no influence at all at the outer edge.
+
+04:13.280 --> 04:18.040
+Let's draw a little graph of this behaviour, so on the x-axis we'll have the distance
+
+04:18.040 --> 04:22.120
+from the centre of the particle, and because negative distance doesn't make a huge amount
+
+04:22.120 --> 04:27.480
+of sense, I'll just make the left side of the graph be a mirror of the positive side.
+
+04:27.480 --> 04:32.760
+Then the y-axis will represent the influence of the particle at any given distance, and
+
+04:32.760 --> 04:36.920
+let's say for now that our smoothing radius is just 1.
+
+04:36.920 --> 04:41.240
+So a simple simple function we could use would be something like this, just subtracting
+
+04:41.240 --> 04:45.920
+the distance from the radius and clamping it to never go below zero, and here's what
+
+04:45.920 --> 04:48.240
+that gives us.
+
+04:48.240 --> 04:53.520
+This is not very smooth though, so we could take that straight line and qubit for example,
+
+04:53.520 --> 04:57.680
+which will ease it out as it approaches zero.
+
+04:57.680 --> 05:01.920
+Another option if we wanted to be smooth at the start as well, would be to also square
+
+05:01.920 --> 05:06.840
+the radius and distance before subtracting them, and here's how that comes out.
+
+05:06.840 --> 05:10.800
+Obviously we could also try different powers or different functions altogether, I think
+
+05:10.800 --> 05:14.680
+it's mostly a case of just playing around and seeing what works best.
+
+05:14.680 --> 05:17.100
+But let's go with this one for now.
+
+05:17.100 --> 05:21.260
+So I've used that to write this little density function, which takes in the point we want
+
+05:21.260 --> 05:25.680
+to find the density at, and then for each particle it gets the distance to that sample
+
+05:25.680 --> 05:30.200
+point, which determines how much influence the particle has at that location, and then
+
+05:30.200 --> 05:36.260
+it simply increases the density by the particle's mass, multiplied by the influence value.
+
+05:36.260 --> 05:40.860
+And the mass I've just defined to always be one for simplicity.
+
+05:40.860 --> 05:45.380
+So let's test this quickly with an evenly spaced grid of particles, and I'll just try
+
+05:45.380 --> 05:51.420
+sampling the density at the centre here, with a radius of 0.5 for example.
+
+05:51.420 --> 05:56.620
+Now at the moment the density is coming to about 0.48, but if we squish the particles
+
+05:56.620 --> 06:01.180
+closer together, we can see that the density value goes up, which makes sense, and if we
+
+06:01.180 --> 06:05.520
+move them further apart, it goes down of course.
+
+06:05.520 --> 06:08.800
+But what about if we increase the smoothing radius?
+
+06:08.800 --> 06:14.160
+Well, our density value has just shut up through the roof, which is very concerning, because
+
+06:14.160 --> 06:19.200
+making the radius bigger should only make the result more blurry, which for this uniform
+
+06:19.200 --> 06:23.220
+grid of particles should actually have no effect on the density at all.
+
+06:23.220 --> 06:25.280
+So let's think about this a bit.
+
+06:25.280 --> 06:30.760
+For each particle we are calculating an influence value, which we could draw as a height, and
+
+06:30.760 --> 06:34.760
+here we can of course see the shape of our smoothing function emerge.
+
+06:34.760 --> 06:39.200
+Now we're effectively just adding all these heights together to create our density value,
+
+06:39.200 --> 06:43.080
+but it's kind of helpful to note that if we were to first also multiply the heights
+
+06:43.080 --> 06:47.000
+by the width and breadth of these little boxes I've drawn here, what we'd actually
+
+06:47.000 --> 06:52.260
+be doing is estimating the volume of the smoothing function.
+
+06:52.260 --> 06:56.240
+So with that in mind, I think it's reasonable to say that if we want the density to stay
+
+06:56.240 --> 07:01.000
+the same as we change the smoothing radius, then what we'll need to do is make sure that
+
+07:01.000 --> 07:06.640
+the volume of our smoothing function remains the same when we change the smoothing radius.
+
+07:06.640 --> 07:10.440
+That means we're going to need to calculate its volume, or make Wolfram calculated for
+
+07:10.440 --> 07:16.560
+us at any rate, and that is come out to pi times the smoothing radius to the power h
+
+07:16.560 --> 07:18.480
+divided by 4.
+
+07:18.480 --> 07:22.760
+We can then just go back to our smoothing function and calculate the volume in here,
+
+07:22.760 --> 07:27.080
+and then simply divide the output by the volume, which means that now the new volume of the
+
+07:27.080 --> 07:30.400
+function will always be 1.
+
+07:30.400 --> 07:35.320
+Let's quickly make sure this is working, so the density is 187 at the moment, and now
+
+07:35.320 --> 07:40.360
+if we change the smoothing radius that should stay the same, which it does.
+
+07:40.360 --> 07:44.320
+Of course if we make the radius too small, the results will get a little dodgy since
+
+07:44.320 --> 07:49.080
+there just aren't enough particles, but apart from that we now have a nice way of determining
+
+07:49.080 --> 07:53.760
+the density at any point, with whatever smoothing radius we choose to use.
+
+07:53.760 --> 07:59.380
+Ok, so let's return to our random arrangement of particles, and we can now properly visualize
+
+07:59.380 --> 08:04.180
+the density values here as we increase the smoothing radius.
+
+08:04.180 --> 08:08.460
+Now we're claiming that this represents a fluid, so one would probably assume it's
+
+08:08.460 --> 08:13.180
+a guess at the moment, because we have all these regions with different densities.
+
+08:13.180 --> 08:19.300
+But I'm more interested in simulating liquids today, which in practical terms are incompressible,
+
+08:19.300 --> 08:23.500
+meaning their molecules are packed together as tightly as they can be, and so we'd expect
+
+08:23.500 --> 08:26.260
+the density to be the same everywhere.
+
+08:26.260 --> 08:30.020
+For our simulation to behave at least somewhat like a liquid then, we're going to need
+
+08:30.020 --> 08:35.860
+to rapidly correct these density differences by moving particles from areas of high density
+
+08:35.860 --> 08:38.100
+towards areas of low density.
+
+08:38.100 --> 08:42.740
+So we need to figure out how to calculate that, but I started to get a bit confused at
+
+08:42.740 --> 08:47.060
+this point while I was doing my research, so I'd like to take a step back for a moment
+
+08:47.060 --> 08:51.180
+and just play around a bit with an abstract example to try and wrap my head around some
+
+08:51.180 --> 08:57.260
+stuff first, and then we'll come back and apply what we've learnt to our actual problem.
+
+08:57.260 --> 09:02.140
+So here's a simple little function that takes in a point in 2D space and outputs a single
+
+09:02.140 --> 09:04.580
+value, which looks like this.
+
+09:04.580 --> 09:08.820
+And what it represents is nothing at all, it's just a made up function that we're
+
+09:08.820 --> 09:13.340
+going to try and represent with particles to hopefully gain a better understanding of
+
+09:13.340 --> 09:17.180
+this whole smooth particle business we're working with today.
+
+09:17.180 --> 09:22.020
+So I've now added some code that spawns in a bunch of particles at random positions,
+
+09:22.020 --> 09:26.460
+and each of these just looks up the value of the example function at its location and
+
+09:26.460 --> 09:30.980
+stores that in this vaguely named particle properties array.
+
+09:30.980 --> 09:35.460
+Now we're going to pretend that we no longer have access to that example function for whatever
+
+09:35.460 --> 09:40.700
+reason, so we only know the values at the particle positions, and our first goal is
+
+09:40.700 --> 09:44.020
+to simply approximate the missing values.
+
+09:44.020 --> 09:47.740
+To do that, we'll use the same smoothing idea from when we calculated the density
+
+09:47.740 --> 09:48.740
+earlier.
+
+09:48.740 --> 09:53.700
+So I've made this little calculate property function that takes in a point in space, loops
+
+09:53.700 --> 09:59.140
+over all the particles, and just adds up the values of their properties multiplied by the
+
+09:59.140 --> 10:03.260
+smoothing function, since again that just tells us how much influence the particle has
+
+10:03.260 --> 10:08.380
+at the current point, and then also multiplied by the mass, since that effectively scales
+
+10:08.380 --> 10:10.660
+how much influence the particles have.
+
+10:11.140 --> 10:15.980
+Let's see how that comes out, so here's the original function again just for reference,
+
+10:15.980 --> 10:18.180
+and here's our approximation.
+
+10:18.180 --> 10:22.660
+Obviously, the shape isn't perfect, but we could simply use more particles to improve
+
+10:22.660 --> 10:23.660
+that.
+
+10:23.660 --> 10:28.700
+What's more concerning though is that the values are clearly being greatly exaggerated.
+
+10:28.700 --> 10:33.380
+Now we could try to correct this by reducing the particle mass, but that just reveals a
+
+10:33.380 --> 10:38.180
+deeper problem, which is that the values are being particularly exaggerated in regions
+
+10:38.180 --> 10:43.020
+of high particle density, since obviously more values are being added together there
+
+10:43.020 --> 10:45.780
+than in regions of low density.
+
+10:45.780 --> 10:50.380
+So to fix that, all we actually need to do is calculate the density at each particle,
+
+10:50.380 --> 10:54.780
+using the function we wrote earlier of course, and then divide each particle's contribution
+
+10:54.780 --> 10:56.780
+by its density.
+
+10:56.780 --> 11:01.420
+Now our approximated result looks like this, without needing to make any adjustments to
+
+11:01.420 --> 11:07.940
+the mass, which is a whole lot better, and it's reasonably close to the original function.
+
+11:07.940 --> 11:12.500
+So what we've arrived at here is actually one of the core equations of this whole technique,
+
+11:12.500 --> 11:17.780
+which says that to calculate some property a at any position x, we just need to loop
+
+11:17.780 --> 11:22.740
+over all the particles and add together the value of that property that's stored in
+
+11:22.740 --> 11:28.420
+each particle, multiplied by the particle's mass, divided by its density, and finally
+
+11:28.420 --> 11:32.980
+multiplied by the smoothing function, given the distance between the particle and the
+
+11:32.980 --> 11:35.340
+sample point.
+
+11:35.340 --> 11:39.300
+What's interesting to note here is, say that the property we want to calculate with
+
+11:39.300 --> 11:43.180
+this equation is the particle's density.
+
+11:43.180 --> 11:47.620
+In that case, we replace a with the density, which then cancels out with the density over
+
+11:47.620 --> 11:52.260
+here, leaving us with just mass times the smoothing function, which is exactly what
+
+11:52.260 --> 11:57.140
+we came up with in the beginning, so that bit of math seems to check out at least.
+
+11:57.140 --> 12:01.740
+Okay, that's nice and all, but what we're more interested in right now than calculating
+
+12:01.740 --> 12:06.900
+the value of a property at any point, is calculating in which direction it's most
+
+12:06.900 --> 12:11.300
+rapidly changing, since that's essential to our problem of correcting the density in
+
+12:11.300 --> 12:12.660
+our fluid.
+
+12:12.660 --> 12:16.860
+So I've started writing this little calculate gradient function to do that, and all this
+
+12:16.860 --> 12:22.340
+does is define a tiny step size, and then figure out how much the value changes if we
+
+12:22.340 --> 12:27.660
+take that tiny step along the x and y axes, using the calculate property function we just
+
+12:27.660 --> 12:28.860
+wrote.
+
+12:28.860 --> 12:33.580
+And the estimated gradient is just those two changes, each divided by the size of the step
+
+12:33.580 --> 12:34.580
+that we talk.
+
+12:34.580 --> 12:39.100
+Let's try it out, so I've drawn in some little arrows to visualize the gradients
+
+12:39.100 --> 12:43.500
+at different points, and just visually it looks like these are all correctly pointing
+
+12:43.500 --> 12:47.180
+along the direction where the values are most rapidly increasing.
+
+12:47.180 --> 12:49.340
+So that's great.
+
+12:49.340 --> 12:53.980
+What's less great is that it's taking almost 20 seconds to calculate all of these, which
+
+12:53.980 --> 12:56.020
+is ridiculously slow.
+
+12:56.020 --> 12:59.140
+Unfortunately though, there is a more efficient approach.
+
+12:59.140 --> 13:03.380
+Imagine we have just a single particle, and I'll draw on the smoothing radius here as
+
+13:03.380 --> 13:08.340
+well, and we're trying to calculate the gradient of whatever property at this point
+
+13:08.340 --> 13:09.340
+over here.
+
+13:09.340 --> 13:14.580
+Well, first of all, the direction in which that property will most rapidly be increasing
+
+13:14.580 --> 13:19.860
+is either directly towards the particle, or directly away from it if the property is negative,
+
+13:19.860 --> 13:21.780
+so that's easy enough.
+
+13:21.780 --> 13:25.980
+The gradient doesn't only tell us the direction though, but also how fast the property is
+
+13:25.980 --> 13:30.980
+changing, and that depends purely on our smoothing function.
+
+13:30.980 --> 13:34.620
+At the current distance, we can see that the smoothing function isn't very steep, which
+
+13:34.620 --> 13:38.860
+means that the property will be changing quite slowly over here, whereas of course if our
+
+13:38.860 --> 13:43.980
+sample point was over here for example, then it would be changing a lot more rapidly.
+
+13:43.980 --> 13:53.660
+So after struggling to remember how basic calculus works for a few minutes, I finally
+
+13:53.660 --> 13:57.500
+figured out the equation for the slope of the smoothing function, which I've just
+
+13:57.500 --> 14:00.180
+translated into code over here.
+
+14:00.180 --> 14:06.020
+And that means that we can now easily look up the slope value at any distance.
+
+14:06.020 --> 14:10.060
+So let's return to our fast attempt at the gradient function, and I'll delete the old
+
+14:10.060 --> 14:14.740
+code and replace it with our CalculateProperty code, since that's almost exactly what
+
+14:14.740 --> 14:19.060
+we need, except since we want to know the gradient now, we'll multiply not by the
+
+14:19.060 --> 14:24.220
+smoothing function, but by the slope of the smoothing function, and then also by the direction
+
+14:24.220 --> 14:29.660
+towards the current particle.
+
+14:29.660 --> 14:35.260
+By summing up all these individual gradients, we should logically get the overall gradient.
+
+14:35.260 --> 14:39.580
+Then if we return to our little visualization and just run it again, it should look exactly
+
+14:39.580 --> 14:41.340
+the same as before.
+
+14:41.340 --> 14:45.580
+Which it doesn't, I guess I got the direction back to front, so I'll just stick a minus
+
+14:45.580 --> 14:46.900
+sign in there quickly.
+
+14:46.900 --> 14:50.820
+I come from the trial and error school of mathematics, but now it does look the same
+
+14:50.820 --> 14:52.420
+as before.
+
+14:52.420 --> 14:58.260
+This optimization has taken us from 20 seconds down to about 5, which is still uselessly
+
+14:58.260 --> 15:01.580
+slow, but headed in the right direction at least.
+
+15:01.580 --> 15:05.900
+Okay, I've just been having another look at our gradient function, and we definitely
+
+15:05.900 --> 15:08.460
+need to stop calling CalculateDensity all the time.
+
+15:08.460 --> 15:12.220
+I somehow forgot already that that's also looping over all the particles.
+
+15:12.220 --> 15:14.700
+No wonder this is so slow.
+
+15:14.700 --> 15:19.500
+So what we can do is just create an array of density values, and then pre-calculate those
+
+15:19.500 --> 15:25.900
+for each particle, so that we can just use those cached values in our gradient function.
+
+15:25.900 --> 15:31.140
+That brings our computation time down from 5 seconds to 18 milliseconds.
+
+15:31.140 --> 15:33.420
+I probably should have started with that.
+
+15:33.420 --> 15:38.340
+Anyway, it's still not fantastic, but it's at least usable for now.
+
+15:38.340 --> 15:42.780
+So let's return at last to our little density test over here, and see if we can apply this
+
+15:42.780 --> 15:46.780
+gradient stuff to make the density be the same everywhere.
+
+15:46.780 --> 15:51.500
+So in the code, I've defined a target density that we want to aim for, along with a pressure
+
+15:51.500 --> 15:56.100
+multiplier, which is just how strongly we're going to push the particles to try and reach
+
+15:56.100 --> 15:57.820
+that density.
+
+15:57.820 --> 16:02.180
+Then I've also added this little function for converting the density to a kind of pressure
+
+16:02.180 --> 16:06.900
+value, and this just looks at how far away the density is from what we want it to be,
+
+16:06.900 --> 16:10.060
+and then multiplies that by the pressure multiplier.
+
+16:10.060 --> 16:14.020
+From what I understand, this isn't really a super realistic way to calculate pressures
+
+16:14.020 --> 16:19.540
+in a liquid, it more so describes the behavior of gases, but it still seems to be a popular
+
+16:19.540 --> 16:23.540
+choice for its simplicity, so let's stick with it for now at least.
+
+16:23.540 --> 16:27.780
+I would like to quickly visualize these values, so I've set up three different colors over
+
+16:27.780 --> 16:32.260
+here, one for the regions where it's negative, just meaning that the density is lower than
+
+16:32.260 --> 16:36.780
+we want it to be, another for where the value is positive, meaning of course that the density
+
+16:36.780 --> 16:41.420
+is higher than we want it to be, and finally one for the boundary between them, where the
+
+16:41.420 --> 16:43.020
+density is just right.
+
+16:43.020 --> 16:47.860
+I'll also change the particle color to black, so that it stands out a bit better here.
+
+16:47.860 --> 16:52.620
+Okay, so let's finally get these particles moving along the pressure gradient, and for
+
+16:52.620 --> 16:57.220
+that we can just use the gradient function we wrote, which I'll rename to calculate
+
+16:57.220 --> 17:01.740
+pressure force, and then the property we're interested in here is of course the pressure,
+
+17:01.740 --> 17:06.460
+so let's substitute in our little pressure calculation.
+
+17:06.460 --> 17:11.340
+Then our simulation update loop now looks like this, we still have the gravity, position,
+
+17:11.340 --> 17:15.660
+and collision stuff from before, but I've added in the density caching we decided to
+
+17:15.660 --> 17:16.820
+do.
+
+17:16.820 --> 17:20.740
+We still need to actually apply the pressure forces here though, so I'll make another
+
+17:20.740 --> 17:25.220
+loop quickly to calculate those for each of the particles, and then we know that force
+
+17:25.220 --> 17:30.700
+equals mass times acceleration, so acceleration is force over mass.
+
+17:30.700 --> 17:35.500
+So my first thought was to just calculate the acceleration like this, but actually we're
+
+17:35.500 --> 17:40.860
+thinking about the movement of tiny volumes of fluid here, and density is the mass per
+
+17:40.860 --> 17:44.660
+volume, so it's in fact the density that we want to use instead.
+
+17:44.660 --> 17:48.900
+Alright, all that's left then is to just increase the particles of velocity by this
+
+17:48.900 --> 17:53.140
+acceleration, and we can finally try it out.
+
+17:53.140 --> 17:58.420
+This has been a long time coming, so let's get a little drumroll going.
+
+17:58.420 --> 18:03.380
+Ah, the curse of the drumroll continues.
+
+18:03.380 --> 18:08.180
+Okay, the positions are all not a number I see, so most likely we're dividing by
+
+18:08.180 --> 18:09.180
+zero somewhere.
+
+18:09.180 --> 18:14.380
+Oh, of course, we're being given the position of a particle here, but then we're also
+
+18:14.380 --> 18:18.580
+looping over all the particles and finding the distance between the two.
+
+18:18.580 --> 18:21.100
+And that's where everything's going wrong.
+
+18:21.100 --> 18:25.140
+I guess what I'll do is just have this function take in the particle index instead of the
+
+18:25.140 --> 18:29.620
+position, and that way we can very easily just skip over the case where the two particles
+
+18:29.620 --> 18:31.340
+are the same.
+
+18:31.340 --> 18:36.780
+Okay, I just need to fix this up quickly, and I suppose it is technically possible for
+
+18:36.780 --> 18:41.540
+two different particles to be in the same position, so if that edge case occurs, let's
+
+18:41.540 --> 18:44.100
+just pick a random direction then.
+
+18:44.100 --> 18:47.940
+Alright, let's try this out again.
+
+18:48.940 --> 18:53.620
+Well, at least everything hasn't blinked out of existence, but the particles are getting
+
+18:53.620 --> 18:56.860
+more dense, which is the opposite of what we want.
+
+18:56.860 --> 18:59.620
+I guess I need to stick another minus sign in there somewhere.
+
+18:59.620 --> 19:03.380
+Let's see if this works now at the third time.
+
+19:03.380 --> 19:10.300
+Okay, that's… that was looking promising for a moment there, for a brief instant I
+
+19:10.300 --> 19:11.540
+thought it was working.
+
+19:11.540 --> 19:14.460
+But there's still a lot more red areas than I'm hoping to see.
+
+19:14.460 --> 19:19.900
+Ideally, the whole screen should turn white, since that represents our target density.
+
+19:19.900 --> 19:23.740
+So to try and figure out what's going on, I want to see what happens if, instead of
+
+19:23.740 --> 19:28.660
+adding the acceleration to the velocity, we just assign it directly, so we're removing
+
+19:28.660 --> 19:32.940
+any inertia from the particles, they're just purely moving based on the current pressure
+
+19:32.940 --> 19:33.940
+force.
+
+19:33.940 --> 19:39.180
+Okay, if we run this now, nothing happens, but that's fine, we aren't accumulating
+
+19:39.180 --> 19:43.300
+velocity anymore, so I guess we just need to turn the pressure multiplier up really
+
+19:43.300 --> 19:44.300
+high.
+
+19:44.300 --> 19:47.300
+Alright, that looks interesting.
+
+19:47.300 --> 19:51.500
+I am a bit surprised by how close together some of these particles are, although they
+
+19:51.500 --> 19:54.860
+seem to gradually be pushing each other apart.
+
+19:54.860 --> 19:58.560
+And I actually remember one of the papers mentioning this potential problem with the
+
+19:58.560 --> 20:03.300
+smoothing function we're using, since its slope becomes very shallow as the distance
+
+20:03.300 --> 20:07.860
+becomes small, meaning that our pressure force will also be small when the particles are
+
+20:07.940 --> 20:09.740
+close together.
+
+20:09.740 --> 20:15.380
+That seems odd, so let's maybe ditch this nice smooth curve for the spiky version instead,
+
+20:15.380 --> 20:19.060
+since of course the slope of this one just gets steeper towards zero.
+
+20:19.060 --> 20:23.780
+So I had to do the volume and derivative calculations again, but ended up with these
+
+20:23.780 --> 20:26.020
+two functions here.
+
+20:26.020 --> 20:30.220
+Plugging those in, we can see our little map looks just ever so slightly different, and
+
+20:30.220 --> 20:35.460
+then I'm going to turn up the pressure multiplier again now, and see what happens.
+
+20:36.420 --> 20:38.980
+Okay, that's looking a lot better actually.
+
+20:38.980 --> 20:42.940
+The question now though is what does it look like if we put the acceleration back to how
+
+20:42.940 --> 20:44.700
+it's supposed to be.
+
+20:44.700 --> 20:50.860
+So I've changed it back, and I'm going to try running this again.
+
+20:50.860 --> 20:55.060
+Let's maybe try increasing the pressure multiplier a bit, so that the particles can react more
+
+20:55.060 --> 20:57.380
+quickly.
+
+20:57.380 --> 21:01.860
+That's looking reasonably good I think, although maybe I'm imagining this, but it
+
+21:01.860 --> 21:05.380
+seems to be getting worse over time.
+
+21:05.380 --> 21:11.060
+Okay, I'm definitely not imagining it.
+
+21:11.060 --> 21:15.620
+So another thing we need to think about is Newton's third law of motion.
+
+21:15.620 --> 21:24.660
+Every force has an equal and opposite reaction force.
+
+21:24.660 --> 21:28.780
+So when we're adding on this pressure force between the current particle and some other
+
+21:28.780 --> 21:34.420
+particle, we want to make sure that the other particle experiences the same force, just in
+
+21:34.420 --> 21:35.420
+the other direction.
+
+21:35.420 --> 21:40.380
+I've seen a bunch of different suggestions on how to actually do this, but a nice simple
+
+21:40.380 --> 21:45.620
+version is to calculate this shared pressure, which is literally just the average of the
+
+21:45.620 --> 21:49.940
+pressure values calculated at both particles.
+
+21:49.940 --> 21:58.580
+So let's try that out quickly, and I'll just increase the pressure multiplier again.
+
+21:58.580 --> 22:01.500
+And this does seem to have made a pretty big difference.
+
+22:01.500 --> 22:05.100
+I guess maybe that Newton guy was onto something.
+
+22:05.100 --> 22:09.140
+Now we're only dealing with a few hundred particles at the moment, which is not very
+
+22:09.140 --> 22:14.780
+many, so let's ramp this up to a few thousand instead.
+
+22:14.780 --> 22:18.220
+And this is running at 5 frames per second.
+
+22:18.220 --> 22:20.420
+So we'd better start optimizing.
+
+22:20.420 --> 22:24.900
+And by far the most critical place to do that is when we're calculating the densities
+
+22:24.900 --> 22:29.940
+and pressure forces, we should rarely avoid looping over all the particles that lie outside
+
+22:29.940 --> 22:34.220
+of the smoothing radius, since those don't contribute anything, and they're slowing
+
+22:34.220 --> 22:37.020
+us down immensely.
+
+22:37.020 --> 22:41.680
+To do this, we're going to need to chop space up into a grid, and we'll choose the size
+
+22:41.680 --> 22:46.820
+of the grid cells to be the same as our smoothing radius, since that means, if we imagine there's
+
+22:46.820 --> 22:51.380
+a bunch of particles on here, that means that to find the particles inside of the smoothing
+
+22:51.380 --> 22:57.620
+radius, we only need to consider the 3x3 grid of cells around the center of our circle.
+
+22:57.620 --> 23:05.180
+And in that way of course, we cut out a huge amount of unnecessary work.
+
+23:05.180 --> 23:09.500
+Now to actually implement this, we could say that each cell has its own list that grows
+
+23:09.500 --> 23:13.780
+or shrinks to hold however many particles are currently inside of it.
+
+23:13.780 --> 23:17.660
+But we're probably going to want to convert the whole simulation to a compute shader at
+
+23:17.660 --> 23:22.780
+some point to run on the GPU, and there we need to be able to specify ahead of time how
+
+23:22.780 --> 23:24.700
+much memory we're going to use.
+
+23:24.700 --> 23:29.020
+So I'd like to experiment with a different GPU friendly approach, which I've been reading
+
+23:29.020 --> 23:31.260
+about in this paper here.
+
+23:31.260 --> 23:35.100
+I'm going to modify it very slightly though, so that we don't need to know the dimensions
+
+23:35.100 --> 23:39.620
+of the grid ahead of time, meaning that particles can travel anywhere in the world, and it'll
+
+23:39.620 --> 23:42.380
+still work.
+
+23:42.380 --> 23:48.300
+So what we'll do is create a single array with at least as many entries as we have particles,
+
+23:48.300 --> 23:53.660
+so here it has 10 entries, meaning in this case we could have at most 10 particles.
+
+23:53.660 --> 23:57.220
+Then for each of these particles, we're going to calculate the coordinate of the cell that
+
+23:57.220 --> 23:58.220
+it's in.
+
+23:58.220 --> 24:04.980
+So for example particle 0, which happens to be this one over here, is in the cell 2,0.
+
+24:04.980 --> 24:09.260
+We need to turn that coordinate into a single number to make it easy to work with though,
+
+24:09.260 --> 24:13.980
+so we can just do something like multiply the x and y by two different prime numbers,
+
+24:13.980 --> 24:17.820
+and then add them together to get some arbitrary hash value.
+
+24:17.820 --> 24:22.140
+We can then wrap that around the length of the array so that it becomes a valid index,
+
+24:22.140 --> 24:28.500
+3 in this case, and let's call that our cell key, not to be confused with the seal people.
+
+24:28.500 --> 24:34.780
+So since this was point 0, we'll store the cell key over here at index 0 in the array.
+
+24:34.780 --> 24:40.060
+And the next point, it turns out, has a key of 6, and so we'll record that in the next
+
+24:40.060 --> 24:41.420
+place.
+
+24:41.420 --> 24:48.100
+And so on and so forth for all of the particles that we have.
+
+24:48.100 --> 24:52.500
+Now we want the points that share a cell to be next to one another in this array, so that
+
+24:52.500 --> 24:54.740
+we can efficiently loop over them.
+
+24:54.740 --> 24:59.260
+Of course if they're in the same cell, they're going to have the same cell key, so we can
+
+24:59.260 --> 25:03.420
+simply sort the list based on those keys to do that.
+
+25:03.420 --> 25:08.420
+And now we can easily see from this array that particles 2, 5 and 7 are all together
+
+25:08.420 --> 25:14.180
+in the same cell, particle 0 is in a cell all by itself, and so on.
+
+25:14.180 --> 25:19.620
+Anyway, let's call this array our spatial lookup, because that sounds nice and fancy,
+
+25:19.620 --> 25:24.420
+and then the final thing we need to do is create a second array of start indices, which
+
+25:24.420 --> 25:26.100
+looks like this.
+
+25:26.100 --> 25:29.500
+To understand this second array, let's just do a quick example.
+
+25:29.500 --> 25:33.580
+So say we want to know which points are in this cell over here.
+
+25:33.580 --> 25:38.460
+We would first calculate the cell's key like before, which is 9 in this case.
+
+25:38.460 --> 25:43.180
+And then we'd proceed to look up the 9th element in the array of start indices, which
+
+25:43.180 --> 25:46.500
+is this last one over here, the number 6.
+
+25:46.500 --> 25:50.700
+That lets us know that we need to head over to index 6 in the spatial lookup, in order
+
+25:50.700 --> 25:54.760
+to find the first entry with the cell key that we're interested in.
+
+25:54.760 --> 25:58.740
+We can then simply loop over all of those to get the indices of the particles that are
+
+25:58.740 --> 26:00.660
+in that cell.
+
+26:00.660 --> 26:05.580
+Unfortunately it is possible for different cells to end up mapping to the same key,
+
+26:05.580 --> 26:10.380
+which would mess with these results, but we're anyway going to need to do distance checks
+
+26:10.380 --> 26:15.180
+to see which points are actually inside the smoothing radius, and so that'll get rid
+
+26:15.180 --> 26:16.780
+of any mistakes.
+
+26:16.780 --> 26:21.300
+Obviously, having to check extra particles from some other random cell that just happens
+
+26:21.300 --> 26:25.820
+to have the same key does waste time, but that's what we get for trying to implement
+
+26:25.820 --> 26:30.340
+an infinite grid with a sadly non-infinite amount of memory.
+
+26:30.340 --> 26:36.180
+Anyway, turning this concept into code didn't go as smoothly as it possibly could have,
+
+26:36.180 --> 26:39.860
+but after a bit of frustration, here's what I finally ended up with.
+
+26:39.860 --> 26:44.480
+We have a function for updating the lookup whenever the points have moved, and this just
+
+26:44.480 --> 26:50.820
+calculates the cell key for every particle, and records that along with the particle index.
+
+26:50.820 --> 26:56.180
+The array is then sorted based on those keys, and lastly the start indices are calculated,
+
+26:56.180 --> 27:00.740
+simply by testing if each key is the same as the key that came before it, because if
+
+27:00.740 --> 27:05.780
+not then it must be the first occurrence of that key, and we can record its index as the
+
+27:05.780 --> 27:06.780
+start index.
+
+27:06.780 --> 27:11.980
+Here are the little helper functions, by the way, for calculating the cell coordinate,
+
+27:11.980 --> 27:14.900
+hash, and key.
+
+27:14.900 --> 27:18.740
+Then finally there's the function that allows us to actually find all of the points within
+
+27:18.740 --> 27:21.980
+the radius of some given sample point.
+
+27:21.980 --> 27:26.300
+This works as we've seen by just looping over the 3x3 block of cells around that sample
+
+27:26.300 --> 27:29.820
+point, and calculating each of their keys.
+
+27:29.820 --> 27:33.980
+Each key is then used to look up the start index for that cell, so we can loop over all
+
+27:33.980 --> 27:38.460
+the points in the cell, and of course once we reach a point that has a different key,
+
+27:38.460 --> 27:40.500
+we just exit out of the loop.
+
+27:40.500 --> 27:44.700
+All that remains then is to do a quick distance check to make sure the point is actually inside
+
+27:44.700 --> 27:49.220
+the circle, and then we can do whatever we want with it.
+
+27:49.220 --> 27:54.540
+Trying this out now, we've gone from barely 5 frames per second up to 120, so there was
+
+27:54.540 --> 27:59.780
+a reasonable success, but I'd be a lot happier about it if our simulation wasn't in total
+
+27:59.780 --> 28:03.980
+chaos over here.
+
+28:03.980 --> 28:08.580
+One clunky way I found to improve this is to simply start off with a really low pressure
+
+28:08.580 --> 28:09.980
+multiplier.
+
+28:09.980 --> 28:14.220
+This way the particles don't have such a huge initial burst of acceleration, and they
+
+28:14.220 --> 28:18.820
+can spread out a little, and then we just gradually increase the multiplier, and it
+
+28:18.820 --> 28:21.900
+seems to work a bit better at least.
+
+28:21.900 --> 28:26.220
+That's not really a usable solution though, so I've just been implementing an IGRI
+
+28:26.220 --> 28:30.460
+read about where we basically predict what the next position of each particle is going
+
+28:30.460 --> 28:36.260
+to be, simply based on the current velocity, and use those predicted positions when calculating
+
+28:36.260 --> 28:39.060
+the densities and pressure forces.
+
+28:39.060 --> 28:44.900
+I guess this could help the particles to better react to upcoming situations, and maybe compensate
+
+28:44.900 --> 28:49.780
+a bit for the fact that time is obviously not continuous in a computer simulation, but
+
+28:49.780 --> 28:52.580
+rather broken up into discrete steps.
+
+28:52.580 --> 28:54.580
+Okay, let's try it out.
+
+28:54.580 --> 29:00.980
+I honestly don't see it making a big difference though.
+
+29:00.980 --> 29:04.300
+Never mind, it's actually making a pretty massive difference I'd say.
+
+29:04.300 --> 29:07.340
+Well, that's a nice surprise.
+
+29:07.420 --> 29:11.620
+Also fun, I've quickly gone into the particle rendering code I have here, and just set it
+
+29:11.620 --> 29:16.260
+up so that we can visualise the speed of the particles with a colour.
+
+29:16.260 --> 29:20.100
+Then here's a little gradient I made for that, so the slowest particles will appear
+
+29:20.100 --> 29:25.700
+blue, fading to red for the fastest particles.
+
+29:25.700 --> 29:30.300
+I also added in some simple controls for things like pausing the simulation, stepping through
+
+29:30.300 --> 29:34.460
+frame by frame, and resetting it.
+
+29:41.100 --> 29:44.460
+Alright, I've been playing around with this some more, and one thing I've noticed
+
+29:44.460 --> 29:49.060
+is that it behaves very inconsistently at different simulation frame rates.
+
+29:49.060 --> 29:53.860
+Here's a little grid of simulations I set up to observe this problem, so we're going
+
+29:53.860 --> 29:59.580
+from 60 simulation steps per second on the top left, to almost 1000 steps per second
+
+29:59.580 --> 30:01.140
+on the bottom right.
+
+30:01.140 --> 30:06.700
+And as we can see here, if the number of steps is higher, meaning the time step is smaller,
+
+30:06.700 --> 30:11.220
+and so we're predicting less fine to the future, the particles take longer to settle
+
+30:11.220 --> 30:12.700
+down.
+
+30:12.700 --> 30:16.700
+So even though this feels a bit wrong to me, I'm going to try just removing the delta
+
+30:16.700 --> 30:21.100
+time here, and use a constant look ahead factor instead.
+
+30:21.100 --> 30:26.460
+Let's then run the same comparison again, and interestingly it is actually behaving
+
+30:26.460 --> 30:28.300
+a lot more consistently now.
+
+30:28.780 --> 30:32.100
+Well okay, I guess we'll go with that then.
+
+30:32.100 --> 30:36.380
+Now I think it'd be fun if we could interact with the particles in some way, so I've written
+
+30:36.380 --> 30:41.100
+this little function that basically just pulls nearby particles in towards the mouse, or
+
+30:41.100 --> 30:45.940
+pushes them away if the input strength is negative, which is controlled by left or right
+
+30:45.940 --> 30:47.700
+clicking.
+
+30:47.700 --> 30:54.180
+So let's give it a shot, I'm going to start by pushing these particles outwards,
+
+30:54.180 --> 30:57.180
+and then let's try slicing through the fluid.
+
+31:00.180 --> 31:04.220
+Alright, I feel like this is slowly starting to get somewhere.
+
+31:04.220 --> 31:09.300
+Clearly, we haven't really succeeded in our goal of making this fluid incompressible,
+
+31:09.300 --> 31:13.860
+it's certainly compressing and expanding all over the place, but the density does even
+
+31:13.860 --> 31:18.740
+out over time, so that's something at least, and we can look into fancier methods to try
+
+31:18.740 --> 31:21.060
+and solve this better in the future.
+
+31:21.540 --> 31:26.140
+Anyway, now that this seems to be somewhat working at any rate, I think it's time we
+
+31:26.140 --> 31:29.620
+brought gravity back into the mix.
+
+31:29.620 --> 31:33.900
+So I'll reset this quickly, and let's bring in our settings window.
+
+31:33.900 --> 31:38.340
+I feel like the density could maybe be set a bit higher, so I'll turn that up, and then
+
+31:38.340 --> 31:41.060
+let's get the simulation going again.
+
+31:41.060 --> 31:45.460
+Okay, I guess that's a little too high now.
+
+31:45.460 --> 31:52.460
+So, I'll dial that setting back down a bit.
+
+31:52.460 --> 31:56.300
+Then, let's turn on the gravity.
+
+31:56.300 --> 32:00.660
+Wait, that's upside down, let me make it go the other way instead.
+
+32:00.660 --> 32:04.980
+The particles are quite wild at the moment, so I'll also increase the pressure multiplier
+
+32:04.980 --> 32:08.580
+to try and drain them in a little.
+
+32:09.580 --> 32:19.220
+Okay, let's try picking up a ball of water.
+
+32:19.220 --> 32:21.340
+And dropping it back in.
+
+32:21.340 --> 32:23.340
+Splash.
+
+32:23.340 --> 32:27.420
+This is actually working surprisingly well I'd say, I mean I realise I've been droning
+
+32:27.420 --> 32:31.620
+on for over half an hour already, but all that we've really done is made a bunch of
+
+32:31.620 --> 32:36.700
+points that don't like to be too close together, but not too far apart either.
+
+32:36.700 --> 32:40.980
+And while this is obviously far from being super realistic or anything, I think it's
+
+32:40.980 --> 32:45.660
+still quite fascinating that this fluid-like behaviour has already arisen from just the
+
+32:45.660 --> 32:55.180
+few little things we've implemented.
+
+32:55.180 --> 32:59.460
+Anyway, let's see if we can still improve this at least a little bit more today, and
+
+32:59.460 --> 33:02.860
+perhaps even venture into the third dimension.
+
+33:02.860 --> 33:05.580
+So a few issues are jumping out to me at the moment.
+
+33:05.580 --> 33:09.740
+For example, there's the fact that the particles are really tightly squeezed together along
+
+33:09.740 --> 33:14.900
+the edges here, and that's causing a gap between the rest of the particles since they're
+
+33:14.900 --> 33:17.900
+trying to get away from that overly dense region.
+
+33:17.900 --> 33:22.820
+And a similar effect seems to be happening along the surface of the fluid as well.
+
+33:22.820 --> 33:27.420
+Another thing is that when we have fast-moving particles, such as when starting up the simulation
+
+33:27.420 --> 33:31.820
+for instance, the fluid seems to be overly chaotic.
+
+33:31.820 --> 33:36.260
+For example, if we zoom in on a single frame here, we can see from these colours how the
+
+33:36.260 --> 33:41.100
+velocities are all over the place, even between nearby regions.
+
+33:41.100 --> 33:45.300
+For this last problem at least, I think it'd be a good idea to try and add a bit of friction
+
+33:45.300 --> 33:50.620
+between the particles in the fluid, more commonly known as viscosity.
+
+33:50.620 --> 33:55.500
+So let's actually take a moment to look at the famous Navier-Stokes equations for incompressible
+
+33:55.500 --> 33:59.780
+fluid flow, which underpin everything that we've been doing.
+
+33:59.780 --> 34:03.540
+First of all, this equation here just says that the density of the fluid must remain
+
+34:03.540 --> 34:07.820
+the same everywhere, and I mean, we're trying.
+
+34:07.820 --> 34:12.420
+Then the other equation tells us that each tiny little volume of fluid is accelerated
+
+34:12.420 --> 34:18.260
+down the pressure gradient, and that it responds to external forces such as gravity and mice
+
+34:18.260 --> 34:22.100
+in our case, so we've done both of those terms.
+
+34:22.100 --> 34:26.620
+But then this slightly scary looking term here is the viscosity, and essentially what
+
+34:26.620 --> 34:32.460
+it does is cause the velocities of nearby regions of fluid to become blurred together.
+
+34:32.460 --> 34:36.660
+Now we could implement it this way, but for today at least, I actually want to go with
+
+34:36.660 --> 34:40.780
+a different approach I've seen that seems much simpler, but still achieves the same
+
+34:40.780 --> 34:42.220
+sort of thing.
+
+34:42.220 --> 34:46.700
+So I've added this little function here, which just takes in the index of a particle,
+
+34:46.700 --> 34:50.780
+and loops over all the other particles within the smoothing radius.
+
+34:50.780 --> 34:54.300
+For each of those, it then calculates the difference between the velocities of the two
+
+34:54.300 --> 35:00.380
+particles, and adds that on to the viscosity force, meaning that over time, each particle's
+
+35:00.380 --> 35:05.100
+velocity will become more like its neighbors, and nearby neighbors have more influence as
+
+35:05.100 --> 35:10.060
+usual, which is done using this viscosity kernel, for which I've just repurposed that
+
+35:10.060 --> 35:13.580
+function that we were originally using for the pressure force.
+
+35:13.580 --> 35:16.060
+Okay, let's try it out.
+
+35:16.060 --> 35:20.980
+Oh, my settings have been reset, so we're back to no gravity at the moment, but let's
+
+35:20.980 --> 35:22.660
+see what that looks like.
+
+35:22.860 --> 35:27.500
+Currently, our viscosity is at zero, so let's turn it up, I'm not sure what a good value
+
+35:27.500 --> 35:30.860
+would be, let's just try 5 maybe.
+
+35:30.860 --> 35:34.340
+Nope, definitely not, that looks very strange.
+
+35:34.340 --> 35:38.420
+My guess is that the viscosity is just way too high at the moment, and so some of these
+
+35:38.420 --> 35:42.740
+particles are almost exactly matching one another in velocity, and that's causing
+
+35:42.740 --> 35:45.100
+them to clump together weirdly.
+
+35:45.100 --> 35:50.140
+So let's reduce it to maybe 0.5 instead, and see how that goes.
+
+35:51.140 --> 35:54.420
+Okay, this is looking pretty good actually.
+
+35:54.420 --> 35:58.500
+We can see how the particle velocities are more smoothed out, and so we no longer have
+
+35:58.500 --> 36:02.900
+those few particles with super high velocities shooting off on their own.
+
+36:02.900 --> 36:07.700
+I want to see how this looks with gravity enabled again, so I've set up a quick comparison
+
+36:07.700 --> 36:14.220
+here with a range of different viscosity values, and let's see how it goes.
+
+36:14.220 --> 36:21.660
+I think the one on the top right looked best to me, but let's see that again quickly.
+
+36:25.660 --> 36:29.500
+And I'll freeze it here actually, because this gives us a nice view of the increasingly
+
+36:29.500 --> 36:33.660
+smoothed out results we get with this new artificial viscosity term.
+
+36:33.660 --> 36:37.220
+Obviously, we don't want to smooth out too much detail though, so I'm going to keep
+
+36:37.220 --> 36:39.100
+that value pretty low.
+
+36:39.100 --> 36:43.980
+Okay, now I'm not quite sure yet how to tackle that boundary problem I mentioned earlier,
+
+36:43.980 --> 36:47.860
+so I'm going to just ignore that for now, and instead work on something else that's
+
+36:47.860 --> 36:49.260
+bothering me.
+
+36:49.260 --> 36:54.780
+If we lift up a bunch of water, and then let it go, we can see how it quickly splits up
+
+36:54.780 --> 37:01.660
+into these little droplets of just a few particles each, which looks a little strange.
+
+37:01.660 --> 37:05.340
+We could get rid of this behaviour by simply clamping the pressure values that they can't
+
+37:05.340 --> 37:11.060
+go below zero, meaning that the particles won't pull each other together anymore.
+
+37:11.060 --> 37:14.740
+So let's try that out.
+
+37:14.740 --> 37:19.900
+But now the particles are just raining down individually, which doesn't look right either.
+
+37:19.900 --> 37:24.380
+I guess allowing that negative pressure was giving us a very crude kind of surface tension
+
+37:24.380 --> 37:29.260
+effect, and so I think until we implement a more accurate version of that in a future
+
+37:29.260 --> 37:33.020
+video perhaps, we should probably hang on to it.
+
+37:33.020 --> 37:37.380
+So I'm going to undo that change, and instead I want to try an interesting workaround one
+
+37:37.380 --> 37:42.900
+of the papers suggested, which is to simply have a second pressure force, purely for pushing
+
+37:42.900 --> 37:46.680
+apart particles that get too close together.
+
+37:46.680 --> 37:50.660
+So this is the shape of the smoothing function we're using for our density calculation at
+
+37:50.660 --> 37:55.820
+the moment, and what the paper recommends is to use another, even spikier version, to
+
+37:55.820 --> 37:59.700
+calculate what they call the near density.
+
+37:59.700 --> 38:04.020
+From this near density, we calculate the near pressure, simply by multiplying it by some
+
+38:04.020 --> 38:08.900
+constant, meaning that this will be a purely repulsive force.
+
+38:08.900 --> 38:12.700
+So let's try it out quickly, and just for fun, I'm going to see what happens if we
+
+38:12.700 --> 38:15.860
+make the near pressure multiplier negative.
+
+38:15.860 --> 38:21.860
+Okay, they just collapse in on one another, which makes sense, so let's then try a positive
+
+38:21.860 --> 38:23.660
+value.
+
+38:23.660 --> 38:31.420
+And now I want to try picking up a ball of fluid again, and dropping it.
+
+38:31.420 --> 38:36.620
+And as we can see, this time it's able to hold its shape a lot better, since the particles
+
+38:36.620 --> 38:41.380
+are no longer getting pulled into those tiny clusters we saw before.
+
+38:41.380 --> 38:45.900
+So I think we've succeeded in improving the fluid a bit with these last two changes,
+
+38:45.900 --> 38:49.900
+although I'm certainly not entirely happy with how it's behaving yet.
+
+38:49.900 --> 38:54.340
+For example, something that bothers me quite a lot is how it often appears to sort of bounce
+
+38:54.340 --> 38:57.020
+more like a jelly than a liquid.
+
+38:57.020 --> 39:01.340
+This is happening pretty much all the time, but we can see a dramatic example if I just
+
+39:01.340 --> 39:07.700
+let the fluid come to a rest, and then change the target density for example.
+
+39:07.700 --> 39:12.380
+Now we could get less jiggly results simply by increasing the pressure multiplier, which
+
+39:12.380 --> 39:16.100
+is often called the stiffness constant by the way.
+
+39:16.100 --> 39:21.380
+So here I've set up a little test where it has a value of 1000, and if I change the
+
+39:21.380 --> 39:26.820
+density now, we can see that it does settle down a lot more quickly.
+
+39:26.820 --> 39:30.780
+But that doesn't come for free though, because the greater the forces in our fluid are, the
+
+39:30.780 --> 39:36.340
+more simulation steps we need to run per frame to avoid things devolving into chaos.
+
+39:36.340 --> 39:40.600
+For example, if I just lower the number of steps here slightly, we can see that already
+
+39:40.600 --> 39:44.220
+we're on the brink of pandemonium.
+
+39:44.220 --> 39:50.340
+Anyway, I'm sure we'll learn about ways to overcome, or at least improve this problem
+
+39:50.340 --> 39:55.140
+in the future, but for right now what I'd like to do is finally convert the whole simulation
+
+39:55.140 --> 40:00.060
+to a computer shader, so that we can run it on the GPU, which excels at doing loads
+
+40:00.060 --> 40:06.260
+of tiny tasks in parallel, which should be a perfect fit for our particle calculations.
+
+40:06.260 --> 40:09.180
+I doubt that'll take very long, so I'll see you in a minute.
+
+40:25.140 --> 40:53.100
+Ok, I kept finding new and creative ways to mess everything up, but this finally seems
+
+40:53.100 --> 40:56.220
+to be running properly in a computer shader.
+
+40:56.220 --> 40:59.940
+I'll still need to test the performance with more particles of course, but just glancing
+
+40:59.940 --> 41:06.180
+at the FPS counter looks promising so far, hovering at around 500 frames per second.
+
+41:06.180 --> 41:11.500
+By far the trickiest part was translating just one line of code, the array.sort from our
+
+41:11.500 --> 41:13.140
+neighbourhood search.
+
+41:13.140 --> 41:17.380
+I ended up spending quite a while trying to figure out how to implement a parallel sorting
+
+41:17.380 --> 41:21.420
+algorithm called bitonic merge sort to replace it.
+
+41:21.420 --> 41:26.140
+In particular, I was trying to generate this pattern of lines, and generalize it for any
+
+41:26.140 --> 41:27.860
+number of inputs.
+
+41:27.860 --> 41:33.500
+The inputs here are represented by the horizontal lines, and we have 16 of them in this case,
+
+41:33.500 --> 41:36.460
+meaning that this network can sort 16 values.
+
+41:36.460 --> 41:42.100
+Let's actually assign a random value to each input, so we can see how this goes.
+
+41:42.100 --> 41:47.380
+Then each of these little vertical lines represents a pair of inputs that we're going to compare,
+
+41:47.380 --> 41:49.820
+and potentially swap around.
+
+41:49.820 --> 41:54.140
+So to start with, we're going to look at each of the 8 pairs that we have over here,
+
+41:54.140 --> 41:58.940
+and let's say we want to sort from high to low, so in the first pair we have 5 on top
+
+41:58.940 --> 42:03.860
+and 3 on the bottom, which we're happy with, so that can stay unchanged.
+
+42:03.860 --> 42:08.860
+In the next pair though, we can see 7 on top and 8 on the bottom, so the bottom is a higher
+
+42:08.860 --> 42:13.140
+number which is not ok, and we'll need to swap them around.
+
+42:13.140 --> 42:17.380
+So we can look at all these pairs in parallel, figure out which need to be swapped, and then
+
+42:17.380 --> 42:18.880
+swap them.
+
+42:18.880 --> 42:22.960
+Of course this alone is unlikely to sort the list, so once that's done we'll need
+
+42:22.960 --> 42:25.480
+to continue to the next stage.
+
+42:25.480 --> 42:30.600
+Here the pairs are arranged a little differently, but the operation is still exactly the same.
+
+42:30.600 --> 42:35.520
+We can see this first pair has 5 on top, 7 on the bottom, so it will need to swap, as
+
+42:35.520 --> 42:46.180
+will this pair with 3 on top and 8 on the bottom, and so on.
+
+42:46.180 --> 42:50.340
+This pattern has been carefully devised by some clever person, such that following it
+
+42:50.340 --> 42:57.100
+will do all the comparisons required to guarantee that the result is fully sorted by the end.
+
+42:57.100 --> 43:00.860
+For anyone interested, I'll quickly show the implementation I came up with, so this
+
+43:00.860 --> 43:06.020
+part runs on the CPU and is responsible for simply looping through each of those patterns,
+
+43:06.020 --> 43:09.280
+and telling the GPU to sort the pairs.
+
+43:09.280 --> 43:13.220
+And then here's the code that actually does that pairwise sorting, so it starts by just
+
+43:13.220 --> 43:16.700
+figuring out which pair of numbers it's actually looking at, and then it compares
+
+43:16.700 --> 43:21.300
+them to see if they need to be swapped, and if they do, it of course swaps them.
+
+43:21.300 --> 43:26.260
+Alright, I've been doing some testing with different amounts of particles, so here is
+
+43:26.260 --> 43:30.940
+100 particles for example, and I think it's kind of cute watching these little droplets
+
+43:30.940 --> 43:32.620
+wobble about.
+
+43:32.620 --> 43:38.260
+Then after that I tried 100,000 particles, but my computer was not happy about that,
+
+43:38.260 --> 43:41.860
+so there's definitely a lot of room left for optimization.
+
+43:42.860 --> 43:47.420
+Here's a test with about 40,000 particles though, which seems to be running okay, although
+
+43:47.420 --> 43:50.940
+I'll have to fine tune the settings of course, because at the moment there are some weird
+
+43:50.940 --> 43:54.700
+tendrils shooting out of the liquid, and I really don't know why.
+
+43:54.700 --> 43:59.420
+Or perhaps we could call this a speculative simulation of how liquids might behave on an
+
+43:59.420 --> 44:01.260
+alien planet.
+
+44:01.260 --> 44:04.620
+The settings are definitely quite finicky at the moment though, so that's something
+
+44:04.620 --> 44:08.060
+else I want to improve.
+
+44:08.060 --> 44:11.780
+Here's another little test I've set up by the way, and this one has an obstacle over
+
+44:11.780 --> 44:16.220
+here with a gap beneath it, because I just want to see if this simulation is able to
+
+44:16.220 --> 44:22.180
+keep the height of the liquid the same on both sides.
+
+44:22.180 --> 44:26.700
+So I'm just going to start bucketing some of this liquid over to the other end here,
+
+44:26.700 --> 44:31.940
+and then let's grab another blob, and another, and then let's just wait a bit for this to
+
+44:31.940 --> 44:36.140
+settle down, but already we can see the height gradually leveling out.
+
+44:36.140 --> 44:40.380
+So even though our simulation is far from being super realistic, it's nice to say at
+
+44:40.380 --> 44:43.500
+least that it's not entirely unrealistic either.
+
+44:43.500 --> 44:48.340
+Okay, now as always there's so much more I still want to do, but to end with for today,
+
+44:48.340 --> 44:52.300
+let's see if we can get this working in the third dimension.
+
+44:52.300 --> 44:57.780
+This basically just means replacing a bunch of float 2s with float 3s in the compute shader,
+
+44:57.780 --> 45:02.460
+as well as updating the scaling factors of the various smoothing functions and their
+
+45:03.220 --> 45:07.420
+and making sure our neighborhood search is aware of this brand new dimension as well,
+
+45:07.420 --> 45:08.420
+of course.
+
+45:08.420 --> 45:13.820
+I've also updated the collision function to work in 3D, and I tweaked it to account
+
+45:13.820 --> 45:18.940
+for the bounding box being moved or rotated as well as scaled, simply by transforming
+
+45:18.940 --> 45:24.740
+the points and velocities to its local coordinate system, then resolving those the same as before,
+
+45:24.740 --> 45:30.220
+and then finally transforming them back into world coordinates.
+
+45:30.220 --> 45:34.580
+My first attempt at running this did not go particularly well, but after some trial
+
+45:34.580 --> 45:39.100
+and error with the settings I managed to get this rather goopy looking result, and with
+
+45:39.100 --> 45:42.740
+a few more tweaks from there I was finally able to get something that I was reasonably
+
+45:42.740 --> 45:48.340
+happy with.
+
+45:48.340 --> 45:52.580
+So let's just play around with this a bit, I'm going to try squeezing it together,
+
+45:52.580 --> 45:56.180
+and what's nice about how we implemented the neighborhood search stuff, is that we
+
+45:56.180 --> 46:00.380
+aren't constrained to any predetermined bounds, so we can stretch this out however much we
+
+46:00.380 --> 46:09.260
+want as well, and it should still work.
+
+46:09.260 --> 46:12.980
+Those little waves were looking quite nice I think, so let's actually smush this together
+
+46:12.980 --> 46:27.140
+again, and then try that out once more.
+
+46:27.140 --> 46:31.180
+Now another thing to add to my list of a million things I want to improve is how the
+
+46:31.180 --> 46:34.100
+fluid is actually rendered.
+
+46:34.100 --> 46:38.060
+These little balls are good for seeing what's going on of course, but it would be nice to
+
+46:38.060 --> 46:42.620
+make it actually look more fluid like, and I guess some sort of ray matching is probably
+
+46:42.620 --> 46:49.660
+a good way to approach that, but we'll have to see.
+
+46:49.660 --> 46:54.740
+So let me actually make a quick note here of my sort of wish list for this project.
+
+46:54.740 --> 46:59.940
+I want the simulation to be more stable and performant so that we can have many more particles,
+
+46:59.940 --> 47:04.180
+and I'd like the parameters to be less finicky so it's easier to get good results, and also
+
+47:04.180 --> 47:08.100
+for the particles to behave better along the boundaries, because it looks really odd at
+
+47:08.100 --> 47:09.860
+the moment.
+
+47:09.860 --> 47:13.220
+Another thing that'll be really nice is to be able to do stuff like put little boats
+
+47:13.220 --> 47:18.020
+or rubber ducks in the water, and just watch them bob about.
+
+47:18.020 --> 47:23.300
+Then finally of course there's the rendering stuff I just mentioned as well.
+
+47:23.300 --> 47:27.260
+So plenty of work for the future, but until then I hope you've enjoyed following along
+
+47:27.260 --> 47:29.220
+with the process so far.
+
+47:29.220 --> 47:33.620
+Okay, that's all for today, let me know if you have any suggestions for this project
+
+47:33.620 --> 47:35.700
+or for anything else you'd like to see.
+
+47:35.700 --> 47:38.220
+Alright, thanks for watching and goodbye.
+

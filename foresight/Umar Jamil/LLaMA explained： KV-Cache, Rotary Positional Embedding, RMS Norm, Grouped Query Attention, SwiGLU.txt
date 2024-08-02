@@ -1,0 +1,739 @@
+Hello guys! Welcome to my new video about Lama. In this video we will be seeing what is Lama,
+how it is made, how it is structurally different from the transformer and we will be building
+each block that makes up Lama. So I will not only explain you concept-wise what is each block
+doing but we will also explore it from the mathematical point of view and also from the
+coding point of view so that we can unify theory with practice. I can guarantee that if you watch
+this video you will have a deep understanding of what makes Lama the model it is. So you will not
+only understand how the blocks interact with each other but how they function and why we needed
+these blocks in the first place. In this video we will be reviewing a lot of topics so we will
+start from the architectural differences between the vanilla transformer and the Lama model.
+We will be watching what is the new normalization, the RMS normalization, rotary positional embedding,
+KV cache, multi-query attention, grouped multi-query attention, the Zwiglu activation
+function for the feed forward layer but of course I take for granted that you have some
+background knowledge. First of all I highly recommend that you watch my previous video about
+the transformer because you need to know how the transformer works and in my previous video I also
+explored the concept of training and inferencing a transformer model. It's about 45 minutes and I
+think it's worth a watch because it will really give you a deep understanding of the transformer
+after you have that knowledge you can watch this video. Anyway for those who have already watched
+the video but forgot some of some of some things I will review most of the concepts as we proceed
+through the topics. I also take for granted that you have some basic linear algebra knowledge so
+matrix multiplication dot product basic stuff anyway and also because we will be using the
+rotary positional embeddings some knowledge about the complex numbers even if it's not fundamental so
+if you don't have the if you don't remember the complex numbers or how they work or the
+error's formula it doesn't matter you will understand the concept not the math it's it's
+not really fundamental. Sometimes I will be reviewing topics that maybe you are already
+familiar with so feel free to skip those parts. Let's start our journey by reviewing the architectural
+differences between the vanilla transformer and llama. This picture was built by me on the right
+side because I couldn't find the architecture picture from on the paper so let's review the
+differences. As you remember in the vanilla transformer we have an encoder part and the
+decoder part and the let me highlight it so this is the encoder and the right side here is the decoder
+while in llama we only have an encoder. First of all because the llama is a large language model
+so it has been trained on the next prediction prediction token task so basically we only need
+the self-attention to predict the next token and we will see all these concepts so we will see
+what is the next prediction task how it works and how this new self-attention works. The second
+difference that we can see from these pictures is that we have here at the beginning we have the
+embedding and also we had the embedding here on the original transformer but right after the embedding
+we don't have the positional encoding but we have this rms norm and actually all the norms have been
+moved before the blocks so before we had the multi-head attention and then we had the other
+end norm which is this plus sign here so it's a concatenation of a skip connection and the output
+of the multi-head attention and the normalization and we also have this normalization here here here
+so after every block but here in llama we have it before every block and we will review what is
+the normalization and why it works like the way it is right after the normalization we have this
+query key and values input for the self-attention one thing we can notice is that the positional
+encodings are not anymore the positional encodings of the transformer but they have become the
+rotary positional encodings and they are only applied to the query and the keys but not the
+values and we will see also why another thing is the self-attention is now the self-attention
+with kv cache we will see what is the kv cache and how it works and also we have this grouped
+multi-query attention another thing that changed is this feed forward layer in the original feed
+forward layer of the vanilla transformer we had the relu activation function for the feed forward
+block but in llama we are using the zwiglu function and we will see why this nx means that
+this block here in the dashed lines is repeated n times one after another such that the output of
+the last layer is then fed to this rms norm then to the linear layer and then to the softmax
+and we will build each of these blocks from the bottom so i will show you exactly what these
+blocks do how they work how they interact with each other what is the met behind what is the
+problem they were trying to solve so we will have a deep knowledge of this model let's start our
+journey with reviewing the the models introduced by llama so llama one came out in february 2023
+and they had four dimensions for this model one model was with 6.7 billion parameters 13 32 65
+and then we have these numbers what do they mean the dimension here indicates the size of the
+embedding vector so as you can see here we have this input embeddings that we will review later
+this is basically they convert each token into a vector of size indicated by this dimension
+then we have the number of heads so how many heads the attention has the number of layers
+if you remember from the original transformer the dimension was 512 the number of heads was
+eight the number of layers i think was six and then we have the number of tokens each model
+was trained upon so 1 trillion and 1.4 trillion with llama 2 most of the numbers have doubled so
+the context length is basically the sequence length so how much how how what is the longest
+sequence the model can be fed and then the number of tokens upon which the model have been trained
+is also doubled so from one to two trillion for each size of the model while the parameters more
+or less remain the same then we have this column here gka that indicates that these two sizes of
+the model so the 34 billion and 70 billion they use the grouped query attention and we will see
+how it works let's start by reviewing what is the embeddings layer here and for that i will
+use the slides from my previous video if you remember my previous video we introduced the
+embedding like this so we have a sentence that is made of six words what we do is we tokenize
+the sentence so it convert into tokens the tokenization usually is done not by space but by
+the bpe tokenizer so actually each word will be split into sub words also but for clarity for
+simplicity we just tokenize our sentence by using the white space as a separator so each
+token is separated by white space from other tokens and each token is then mapped into its
+position into the vocabulary so the vocabulary is how many words our the vocabulary is the list of
+the words that our model recognizes they don't have to be words of course they could be anything
+they are just tokens so each each token occupies a position in this vocabulary and the input IDs
+indicate the number occupied by this by each token in the vocabulary then we map each input ID into
+a vector of size 512 in the original transformer but in lamate it becomes 4096 and these embeddings
+are vectors that are learnable so they are parameters for the model and while the model
+will be trained this embedding will change in such a way that they will capture the meaning of the
+word they are mapping so we hope that for example the word cat and dog will have similar embedding
+because kind of the map similar they at least they are in the same semantic group
+and also the word house and building they will be very close to each other if we check the the
+two vectors and this is the idea behind the embedding now let's check what is normalization
+because this is the the layer right after the embeddings and for that let's introduce
+some review of the neural networks and how they work so suppose we have a feed forward
+neural network with an input a hidden layer made of neurons another hidden layer made of another
+another five layer neurons which then maps to an output we usually have a target and comparing
+the output with the target we produce a loss the loss is then propagated back to the two
+hidden layers by means of back propagation so what we do is we calculate the gradient of the loss
+with respect to each weight of these two hidden layers and we modify these two these weights of
+the hidden layer accordingly also according to the learning rate that we have set to check why
+we need to normalize and what is the need of normalization i will make a simple a simplification
+of the neural network so let's suppose our neural network is actually a factory a factory that makes
+phones so to make a phone we start with some raw material that are given to an hardware team
+that will take the raw material and produce some hardware for example they may select the bluetooth
+device they may select the display they may select the microphone the camera etc etc and
+they make up the hardware of this phone the hardware team then gives this prototype to the
+software team which then creates the software for this hardware and then the output of the
+software team is the complete phone with hardware and software and is given as the output the output
+is then compared with what was the original design of the phone and then we compute a loss so what is
+the difference between the target we had for our phone and what we actually produced so suppose the
+loss is our ceo and the loss is quite big suppose so our ceo will talk with the hardware team and
+with the software team and will tell them to adjust their strategy so as to go closer to
+the target next time so suppose that the hardware was too expensive so the ceo will tell the hardware
+team to use maybe a smaller display to use a cheaper camera to change the bluetooth to a low
+range one or to change the wi-fi to a low energy one to change the battery etc etc and we'll also
+talk with the software team to adjust their strategy and maybe tell the software team to
+concentrate less on refactoring to concentrate less on training to hire more interns and not
+care too much about the employees because the costs are too high blah blah and he will adjust
+the strategy of the software and the hardware team so the next time we start with the raw material
+again so let's go back we start with the raw material again and the hardware team according to
+to the new strategy set by the ceo will produce a new hardware now the problem arises the software
+team now will receive a hardware that the software team has never seen before because the display has
+been changed the bluetooth has been changed the wi-fi has been changed everything has been changed
+so the software team needs to redo a lot of work and especially they need to adjust their strategy
+a lot because they are dealing with something they have never seen before so the output of the
+software team will be much different compared to what they previously output and maybe it will be
+even further from the target because the software team was not ready to make all these adjustments so
+maybe they wasted a lot of time so they maybe wasted a lot of resources so they maybe could not even
+reach the target even get closer to the target so this time maybe the loss is even higher so as
+you can see the problem arises by the fact that the loss function modifies the weights of the
+hardware team and the software team but then the software team at the next at the next iteration
+receives an input that it has never seen before and this input makes it produce an output that is
+much divergent compared to the one it used to produce before this will make the model
+oscillate kind of in the loss and will make the training very slower now let's look what happens
+at the mat level to understand how the normalization works so let's review some mats
+suppose that we have a linear layer defined as an end-of-linear with three input features and five
+output features with bias this is the linear layer as defined in PyTorch the linear layer
+which creates two matrices one called w the weight and one called b the bias suppose we have an input
+of shape 10 rows by three columns the output of this linear layer with this input x will be 10 rows
+by five columns but how does this happen mathematically let's review it so imagine we have our input
+which is 10 by 3 which means that we have 10 items and each item has 10 features the w matrix
+created by the linear layer will be 5 by 3 so the output features by the three input features
+and we can think of each of this row as one neuron each of them having three weights one weight
+for each of the input features of the x input then we have the bias vector and the bias vector is
+one weight for each neuron because the bias is one for every neuron and this will produce an output
+which is 10 by 5 which means we have 10 items with five features let's try to understand what is the
+flow of information in these matrices the flow of information is governed by this
+expression so the output is equal to the x multiplied by the transpose of the w matrix plus b
+so let's suppose we have this input x and we have one item and the item one has three
+features a1 a2 and a3 the transposed of wt is this matrix here so in which we swap the row
+with the columns because according to the formula we need to make the transpose of that matrix
+so we have neuron one with the three weights w1 w2 w3 we multiply the two and we obtain this
+matrix so x multiplied by the transpose of w produces this matrix here in which this row one
+is the dot product of this row vector with this column vector then we add the b row vector as you
+can see to add two matrices they need to have the same dimension but in PyTorch because of
+broadcasting this row will be added to this row here and then to independently to this row and
+to this row etc etc because of the broadcasting and then we will have this output and the first
+item here will be z1 what is z1 well z1 is equal to r1 plus b1 but what is r1 r1 is the dot product
+of this column with this row or this row with this column so it's this expression here so the
+output of the neuron one for the item one only depends on the features of the item one usually
+after this output we also apply a non-linearity like the relu function which and the the argument
+of the relu function is referred to as the activation of the neuron one now as as we can see the
+output of the neuron one only depends on the input features of each item so the output of an
+error for a data item depends on the features of the input data item and the neurons parameter
+we can think of the input to an error as the output of a previous layer so for example that input
+that we saw before the x it may as well be the output of the previous layer if the previous layer
+after its weight are updated because of the gradient descent changes drastically the output
+like we did before for example because the ceo realigned the strategy of the hardware team
+so the previous layer the hardware team will produce an output that is drastically different
+compared to what it's used to produce the next layer will have its output changed also drastically
+so because it will be forced to readjust its weight drastically at the next step of the gradient
+descent so what we don't like is the fact that the weight the output of the previous
+layer changes much too much so that the next layer also has to change its output a lot because it's
+to adhere to the strategy defined by the loss function so this phenomenon by which the distribution
+of the internal nodes of a neuron change is referred to as internal covariate shift and we
+want to avoid it because it makes training the network slower as the neurons are forced to
+readjust drastically their weights in one direction or another because of drastic changes in the output
+of the previous layers so what do we do we do layer normalization at least in the vanilla
+transformer so let's review how the layer normalization works imagine we still have our input
+x defined with 10 rows by three columns and for each of these items independently we calculate
+two statistics one is the moon so the mean and one is the sigma so the variance
+and then we normalize the values in this matrix according to this formula so we take basically
+x minus its moon so each item minus the moon divided by the square root of the variance
+plus epsilon where epsilon is a very small number so that we never divide by zero in this way even
+if the variance is very small and each of these numbers is then multiplied with two parameters
+one is gamma and one is beta they are both learnable by the model and they are useful because
+the model can adjust this gamma and beta to amplify the values that it needs
+so before we had layer normalization we we used to normalize with batch normalization and with
+batch normalization the only difference is that instead of calculating the statistics by rows we
+calculated them by columns so the feature one feature two and feature three with layer normalization
+we do it by row and so each row will have its own moon and sigma so by using the layer normalization
+basically we transform the initial distribution of features no matter what they are into a
+normalized numbers that are distributed with zero mean and one variance so this formula actually
+comes from probability statistics and if you remember if you remember let me use the pen okay
+if you remember basically if we have a variable x which is distributed like a normal variable
+with a mean let's say five and a variance of 36 if we do x minus its mean so five divided by the
+square root of the variance so 36 this one this variable here let's call it z will be distributed
+like n zero one so it will become a standard gaussian and this is exactly what we are doing here
+so we are transforming them into standard gaussians so that this value most of the times will be
+a core close to zero i mean will be distributed around zero now let's talk about root mean
+square normalization the one used by lama that the the root mean square normalization was introduced
+in this paper root mean square layer normalization from these two researchers and let's read the
+paper together a well-known explanation of the success of layer norm is its recentering and
+rescaling invariance property so what do they mean what is the recentering and the rescaling
+invariance the fact that the features no matter what they are they will be recentered around the
+zero mean and rescaled to have a variance of one the former enables the model to be insensitive
+to shift noises on both both input and weights and the letter keeps the output representations
+intact when both input and weight are randomly scaled okay in this paper we hypothesize that the
+rescaling variance is the reason for success of layer norm rather than the recentering invariance
+so what they claim in this paper is that basically the success of layer norm is not because of the
+recentering and the rescaling but mostly because of the rescaling so this division by the variance
+basically so to have a variance of one and what they do is basically they said okay cool can we
+find another statistic that doesn't depend on the mean because we believe that it's not necessary
+well yes they use this root mean square statistic so this statistic defined here
+oops the statistic defined here and as you can see from the expression of this statistic
+we don't use the mean to calculate it anymore because the previous statistics here so the variance
+to be calculated you need the mean because if you remember the variance to be calculated
+needs the mean so the variance is equal to the the summation of x minus mu to the power of 2
+divided by n so we need the the the mean to calculate the variance so what the authors
+wanted to do in this paper they said okay because we don't need to recenter because we believe we
+hypothesize that the recentering is not needed to obtain the effect of the layer normalization
+we want to find a statistic that doesn't depend on the mean and the rms statistic
+doesn't depend on the mean so they do exactly the same thing that they they did in the layer
+normalization so they find calculate the rms statistic by rows so one for each row and then
+they normalize according to this formula here so they just divide by the statistic rms statistic
+and then multiply by this gamma parameter which is learnable now why why root mean square
+normalization well it requires less computation compared to layer normalization because we are
+not computing two statistics so we are not computing the mean and the sigma we are only
+computing one so it gives you an computational advantage and it works well in practice so actually
+what the authors of the paper hypothesized is actually true we only need the invariance to obtain
+the effect made by the layer normalization we don't need the recentering at least this is what
+happens with lama the next topic we will be talking about is the positional encodings but before
+we introduce the rotary positional encodings let's review the positional encodings in the
+vanilla transformer as you remember after we transform our tokens into embeddings so vectors
+of size 512 in the vanilla transformer then we sum another vector to these embeddings
+that indicate the position of each token inside the sentence and these positional embeddings
+are fixed so they are not learned by the model they are computed once and then they are reused
+for every sentence during training and inference and each word gets his own vector of size 512
+we have a new kind of positional encoding called rotary positional encoding so absolute
+positional encodings are fixed vector that are added to the embedding of a token to represent
+its absolute position in the sentence so the token number one gets its own vector the token
+number two gets its own vector the token number three gets its own vector so the absolute positional
+encoding deal with one token at a time you can think of it as the pair latitude and longitude
+on a map each point on the earth will have its own unique latitude and longitude so that's an
+absolute indication of the position of each point on the earth and this is the same what happens with
+absolute positional encoding in the vanilla transformer we have one vector that represents
+exactly that position which is added to that particular token in that position with relative
+positional encodings on the other hand it deals with two tokens at a time and it is involved
+when we calculate the attention since the attention mechanism captures the intensity of how much
+two words are related to each other relative positional encodings tell the attention mechanism
+the distance between the two words involved in this attention mechanism so given two tokens we
+create a vector that represents their distance this is why it's called relative because it's
+relative to the distance between two tokens relative positional encodings were first introduced
+in the following paper from google and you can notice that the vasvani i think is the same
+author of the the transformer model now with absolute positional encoding so from the attention
+is all you need when we calculate the dot product in the attention mechanism so if you remember the
+attention mechanism the formula let me write it the attention is is equal to the query multiplied
+by the transpose of the key divided by the square root of d model d model all of this then we do the
+softmax and then we multiply it by v etc etc but we only concentrate on the q multiplied by the
+k transposed in this case and this is what we see here so when we calculate this dot product
+the attention mechanism is calculating the dot product between two tokens that already
+have the absolute position encoded into them because we already added the absolute positional
+encoding to each token so in this attention mechanism from the vanilla transformer we have
+two tokens and the attention mechanism while in relative positional encodings we have three
+vectors we have the token one the token two and then we have this vector here
+we have this vector here that represents the distance between the these two tokens and
+so we have three vectors involved in this attention mechanism and we want the attention
+mechanism to actually match this token differently based on this vector here so this vector will
+indicate to the attention mechanism so to the dot product how to relate these two words that are at
+this particular distance with rotary positional embeddings we do a similar job and they were
+introduced with this paper so reformer and they are from a chinese company so the dot product
+used in the attention mechanism is a type of inner product so if you remember from linear algebra
+the dot product is a is a kind of operation that has some properties and these properties
+are the kind of properties that every inner product must have so the inner product can be
+thought of as a generalization of the dot product what the authors of the paper wanted to do is
+can we find an inner product over the two vector query and key used in the attention mechanism
+that only depends on the two vectors themselves and the relative distance of the token they
+represent that is given two vectors a query and key that only contain the embedding of the word
+they represent and their position inside of the sentence so this m is actually an absolute number
+so it's a scalar it's represented the position of the word inside of the sentence and this n
+represents the position of the second word inside of the sentence what they wanted to say is
+can we find an inner product so this this particular parenthesis we see here is an
+inner product between these two vectors that behaves like this function g that only depends
+on the embedding of xm so the first token of xn the second token and the relative distance between
+them and no other information so this function will be given only the embedding of the first
+token the embedding of the second token and a number that represents the relative position
+of these two tokens relative distance of these two tokens yes we can find such a function and
+the function is the one defined here so we can define a function g like the following that only
+needs only depends on the two embedding vector q and k and the relative distance and this function
+is defined in the complex number space and it can be converted by using the Euler formula
+into this form and another thing to notice is that this function here the one we are watching is
+defined for vectors of dimension two of course later we will see what happens when the dimension
+is bigger and when we convert this expression here which is in the complex number space into
+it through its matrix form through the Euler's formula we can recognize this matrix here as the
+rotation matrix so this matrix here basically represents the rotation of a vector for example
+this one here so this product here will be a vector and this rotation matrix will rotate
+this vector into the space by the amount described by m theta so the angle m theta
+let's see an example so imagine we have a vector v zero and we want to rotate it by theta by an
+angle theta here to arrive to the vector v prime so what we do is we multiply the vector v zero
+with this matrix exactly this one in which the values are calculated like this cosine of theta
+minus sine of theta sine of theta and cosine of theta and the resulting vector will be the same
+vector so the same length but rotated by this angle and this is why they are called rotary
+positional embeddings because this vector represents a rotation now when the vector is not
+two-dimensional but we have n dimension for example in the original transformer model our
+embedding size is 512 and in Lama it's 4096 we need to use this form now I want you to notice not
+what are the numbers in this in this matrix but the fact that this matrix is sparse so it is not
+convenient to use it to compute the positional embeddings because if we multiply by this embedding
+our transfer flow our gpu our computer will do a lot of operations that are useless because we
+already know that most of the products will be zero so is there a better way more computationally
+efficient way to do this computation well there is this form here so given a token with the
+embedding vector x and the position m of the token inside the sentence this is how we compute the
+position embedding for the token we take his the dimensions of the token we multiply by this
+matrix here computed like the following where the theta are fixed m is the position of the token
+x1 x2 x3 are the dimension of the embedding so the first dimension of the embedding the second
+dimension of the embedding etc plus minus the second embedding this this vector computed like
+with the following positions so minus x2 which is the the negative value of the second dimension
+of the embedding of the vector x multiplied by this matrix here so there is nothing we have
+to learn in this matrix everything is fixed because if we watch the previous slide we can see that
+this theta actually is computed like this for one for each dimension and so there is nothing to learn
+basically they are just like the absolute positional encoding so we compute them once and then we
+can reuse them for all the sentences that we will train the model upon another interesting
+property of the rotary positional embeddings is the long-term decay so what the authors did they
+calculated an upper bound for the inner product that we saw before so the g function by varying the
+distance between the two tokens and then they proved that no matter what are the two tokens
+there is an upper bound that decreases as the distance between the two tokens grow and if you
+remember that the inner product or the dot product that we are computing is for the calculation of
+the attention this dot product represents the intensity of relationship between the two tokens
+for which we are computing the attention and what these rotary positional embeddings do
+they will basically decay this relationship this the strength of this relationship between the two
+tokens if the two tokens that we are matching are distant distance distant from them from each other
+and this is actually what we want so we want two words that are very far from each other to have
+less strong relationship and two words that are close to each other to have a stronger
+relationship and this is a desired property that we want from this rotary positional embeddings
+now the rotary positional embeddings are only applied to the query and the keys but not the
+values let's see why well the first consideration is that they they basically they come into play
+when we are calculating the attention so when we calculated the attention it's the attention mechanism
+that will change the score so as you remember the attention mechanism is kind of a score
+that tells how much strong is the relationship between two tokens so this relationship will
+be stronger or less stronger or will change according to also the position of these two
+tokens inside of the centers and the relative distance between these two tokens another thing
+is that the rotation rotary position embeddings are applied after the vector q and k have been
+multiplied by the w matrix in the attention mechanism while in the vanilla transformer
+they are applied before so in the vanilla transformer the position embeddings are applied
+right after we transform the tokens into embeddings but in the rotary positional embeddings so in
+lama we we don't do this we basically before right after we multiply by the w matrix in the
+attention mechanism so the w matrix if you remember is the matrix of parameters that each
+head has each attention head has and so in the in the in the in the lama basically we
+apply the rotary position encoding after we multiply the vectors q and k by the w matrix
+now comes the interesting part in which we will watch how the self-attention works in lama
+but before we can talk about the self-attention as used in lama we need to review at least briefly
+the self-attention in the vanilla transformer so if you remember the self-attention in the
+vanilla transformer we start with the matrix q which is a matrix of sequence by the model which
+means that we have on the rows the tokens and on the columns the dimensions of the embedding vector
+so we can think of it like the following let me okay so we can think of it like having six rows
+one and each of these rows is a vector of dimension 512 that represents the embedding of that token
+and now let me delete
+and then we multiply according to this formula so q multiplied by the transpose of the k so
+transpose of the k divided by the square root of 512 which is the dimension of the embedding vector
+where the k is equal to q and v is also equal to q because this is a self-attention so the
+three matrices are actually the same sequence then we apply the softmax and we obtain this
+matrix so we have the matrix that was 6 by 512 multiplied by another word that is 512 by 6
+we will obtain a matrix that is 6 by 6 where each item in this matrix represents the dot
+product of the first token with itself then the first token with the second token the first
+token with the third token the first token with the fourth token etc etc etc so this matrix captures
+the intensity of relationship between two tokens then this the output of this softmax
+is multiplied by the v matrix to obtain the attention sequence so the output of the self-attention
+is another matrix that has the same dimensions as the initial matrix so it will produce a sequence
+where the embeddings now not only capture the meaning of each token not only they capture
+the position of each token but they also capture kind of the relationship between that token and
+every other token if you didn't understand this concept please go back watch my previous video
+about the transformer where i explained it very carefully and in much more detail now let's have
+a look at the multi head attention very briefly so the multi head attention basically means that we
+have an input sequence we take it we copy it into qk and v so they are the same matrix we multiply
+by parameter matrices and then we split into multiple smaller matrices one for each head
+and we calculate the attention between these heads so head one head two head three head four
+then we concatenate the output of these heads we multiply by the output matrix w o and finally
+we have the output of the multi head attention let's look at what is the first kv cache so before we
+introduce the kv cache we need to understand how lama was trained and we need to understand what is
+the next token prediction task so lama just like most of the language large language models have been
+trained on the next token prediction task which means that given a sequence it will try to predict
+what is the next token the most likely next token to continue the prompt so for example if we tell him
+a poem for example without the last word probably it will come up with the the last word that is
+missing from that poem in this case i will be using one very famous passage from Dante Alighieri's
+and i will not use the italian translation but we will use the english translation here so i will
+only deal with the first line you can see here love that can quickly seize the gentle heart
+so let's train lama on this sentence how does the training work well we give the input to the
+model the input is built in such a way that we first prepend the start of sentence token
+and then the target is built such that we append an end of sentence token why because the the model
+the transformer model is a sequence-to-sequence model which maps each position in the input
+sequence into another position into the in the output sequence so basically the first
+token of the input sequence will be mapped to the first token of the output sequence and the
+second token of the input sequence will be mapped to the second token of the output sequence etc etc
+etc this also means that if we give our model the the input s or s it will produce the first
+token as output so love then if we give the second the first two tokens it will
+produce the second token as output so love that and if we give the first three
+tokens it will produce the output the third token as output of course the
+model will also produce the output for the previous two tokens but we let's see
+it with an example so if you remember from my previous video also in which I do
+the inferencing when we train the model we only do it in one step so we give the
+input we give the target we calculate the loss and we don't have any for loop to
+train the model for the one single sentence but for the inference we need
+to do it token by token so in the in the in this inferencing we start with a
+time step time stamp time step one in which we only give the input SOS so
+start of sentence and the output is love then we take the output token here love
+and we append it to the input and we give it again to the model and the
+model will produce the next token love that then we take the last token output
+by the model that we append it again to the input and the model will produce the
+next token then we again take the next token so can we append it to the
+input and we feed it again to the model and the model will
+output the next token quickly and we do it for all the steps that are necessary until we reach the end of sentence token
+Then that's when we know that the model has finished outputting its output. Now, this is not how Lama was trained actually
+But this is a good example to show you how the next token prediction task works
+Now, this is there is a there is a problem with this approach. Let's see why
+At every step of the inference
+We are only interested in the last token output by the model because we already have the previous ones
+However, the model needs to access to all the previous tokens to decide on which token to output since they constitute its context or the prompt
+So what I mean by this is that to output for example the word D
+The model has to see all the input here
+We cannot just give the C's the model needs to see all the input to output this last token D
+But the point is that this is a sequence-to-sequence model
+So it will produce this sequence as output even if we only care about the last token
+So there is a lot of unnecessary
+Computation we are doing to calculate these tokens again that we already actually have from the previous time steps
+So let's find a way to not to do this and use less computation
+And this is what we do with the KV cache
+So the KV cache is a way to do less computation on the tokens that we have already seen during
+inferencing so it's only applied during inferencing in a transformer model and
+It's not only applies to the transformer of
+Like the one in lava but to all transformer models because all transformer models work in this way
+This is a description
+It's a picture of how the self-attention works during the next token prediction task
+So as you saw in also in my previous slides
+We have a query matrix here with the end tokens then we have the transposed of the keys so the query can be thought as
+Rows of vectors where the first vector represents the first token the second token, etc
+Then the transposed of the keys is the same tokens but transpose so the rows become columns
+This produces a matrix that is n by n. So if the initial input matrix is 9
+The output maximum will be 9 by 9
+Then we multiply it by the V matrix and this will produce the attention
+The attention is then fed to the linear layer of the transformer
+Then the linear layer will produce the logits and the logits are fed to the softmax and the softmax
+Allow us to decide which is the token from our vocabulary
+Again, if you are not familiar with this, please watch my previous video on the of the transformer about the inferencing of the transformer
+And you will see this clearly
+so this is a
+Description of what happens at a general level in the self-attention now. Let's watch it step by step
+So imagine at the inference step one
+We only have the first token if you remember before we are we're only using the start of sentence token
+So we take the start of sentence token. We multiply it by itself
+So the transposed it will produce a matrix that is one by one. So this matrix is one by
+4096 multiplied by another matrix that is 4096 by one it will produce a one by one matrix
+Why 4096 because the embedding vector in Lama is 4096 then the output
+So this one by one is multiplied by the V and it will produce the output token here
+and this is will be our first token of the output and
+Then we take the output token this one and we append it to the input at the next step
+So now we have two tokens as input
+They are multiplied by itself
+But but with the transposed version of itself and it will produce a two by two matrix
+Which is then multiplied by the V matrix and it will produce two output tokens
+But we are only interested in the last tokens output by the model. So this one attention to which is then appended
+To the input matrix at the time steps three. So now we have three
+Tokens in the time step three, which are multiplied by the transposed version of itself
+And it will produce a three by three matrix
+Which is then multiplied by the V matrix and we have this three matrix
+tokens as output
+But we are only interested in the last token output by the model
+So we append it again as input to the Q matrix, which is now four tokens
+Which is multiplied by the transposed version of itself and it will produce a four by four matrix as output
+Which is then multiplied by this matrix here and it will produce this attention matrix here
+But we are only interested in the last
+Attention, which will be then added again to the input of the next step. But we notice already something
+First of all, we are ready here in this matrix where we compute the dot product between this token and this
+This token and this this token and this so this matrix is the all the dot products between these two matrices
+We can see something
+The first thing is that we already computed these dot products in the previous step. Can we catch them?
+So let's go back as you can see this matrix is growing two three four
+See there is a lot of
+Attention because we are every time we are inferencing the transformer
+We are giving him giving the transformer some input
+So it's recomputing all these dot products, which is inconvenient because we actually already computed them in the previous time step
+So is there a way to not compute them again? Can we kind of catch them? Yes, we can
+And then since the model is causal
+We don't care about the attention of a token with its predecessors, but only with the token before it
+So as you remember in the self-attention we apply a mask, right?
+So the mask is basically we don't want the dot product of one word with the word that come after it
+But only the one that come before it. So basically we don't want all the numbers above the principal principal diagonal
+Diagonal of this matrix
+And that's why we applied the mask in the self-attention
+But okay
+The point is we don't need to compute all these
+Dot products the only dot products that we are interested in
+Is this last row so because we added the token for as input compared to the last time step
+So we only have this new token token for and we want this token for how it is
+Interacting with all the other tokens. So basically we are only interested in this last row here
+and also
+As we only care about the attention of the last token because we want to select the word from the vocabulary
+So we only care about the last row. We don't care about producing these two these three attention score here
+In the output sequence of the self-attention. We only care about the last one
+So is there a way to remove all these redundant calculations?
+Yes, we can do it with the kv cache. Let's see how
+So with the kv cache basically what we do is we cache the
+The query so sorry the the keys and the values and every time we have a new token
+We appended to the key and the values while the query is only the output of the previous step
+So at the beginning we don't have any output from the previous step. So we only use the first token
+So the first uh, the time step one of the inference is the same as the without the cache
+So we have the token one with itself will produce a matrix one by one
+Multiply with one token and if you produce one, uh, attention
+However at the time step two
+We don't append it to the previous
+Query we just replace the previous token with the new token we have here
+However, we keep the cache of the keys
+So we keep the previous token in the keys and we append the last output
+To the keys here and also to the values and if you and if you do this multiplication
+It will produce a matrix that is one by two
+Where the first item is the dot product of the token two with the token one and the token two with the token two
+This is actually what we want
+And if we then multiply with the v matrix, it will only produce one attention score
+Which is exactly the one we want and we do again. So we take this attention two and this will become the input of the next
+Inference step. So this token three
+We append it to the previously cached k matrix and also to the previously cached v matrix
+This multiplication will produce an output matrix that we can see here
+The multiplication of this output matrix with this
+V matrix will produce one token in the output
+Which is this one and we know which token to select using this one
+Then we use it as an input for the next inferencing step by appending it to the cached keys and appending to the
+cached v matrix. We do this multiplication and we will get this
+matrix which is four one by four
+Which is the dot product of the token four with the token one
+The token four with the token two token four with the token three and the token four with itself
+We multiply by the v matrix and this will only produce one attention
+Which is exactly what we want to select the output token
+This is the reason why it's called the kv cache because we are keeping a cache of the keys and the values
+As you can see the kv cache allow us to save a lot of computation because we are not doing a lot of dot products
+that were used to that we used to do before
+And this makes the inferencing faster the next layer that we will be talking about is the grouped multiquary attention
+But before we talk about the grouped multiquary attention, we need to introduce its predecessor the multiquary attention. Let's see
+so
+Let's start with the problem. The problem is that the gpu's are too fast
+If you watch this datasheet, this is from the a1 gpu from nvidia
+We can see that the gpu is very fast at computing at performing calculations
+But not so much not so fast at transferring data from its memory. That means for example
+That the the a100 can do 19.5
+Thera floating point operations per second by using a 32-bit precision
+While it can only transfer 1.9
+Thousand gigabytes per second. It's nearly 10 times
+slow more slower to at transferring data than it is at
+performing calculations
+and
+This means that sometimes the bottleneck is not how many operations we perform
+But how much data transfer our operations need
+And that depends on the size and the quantity of the tensors involved in our calculations
+For example, if we compute the same operations on the same tensor n times
+It may be faster than computing the same operations on n different tokens
+Even if they have the same size, this is because the gpu may need to move these tensors around
+So this means that our goal should not only to be
+Be to optimize the number of operations we do with our algorithms
+But also minimize the memory access and the memory transfers that our algorithms perform
+because the memory access and memory transfer are more
+expensive in terms of time compared to the computations
+And this also happens with software when we do IO for example, if we
+copy for example, we do some
+Multiplications in the cpu or we read some data from the hard disk
+Reading from the hard disk is much more slower than doing a lot of computations on the cpu. And this is a problem
+Now in this paper, we introduce the multi-query attention
+This paper is from noam shazir who is also one of the authors of the attention paper
+So attention is all you need
+And in this paper, he introduced the problem. He said
+Well, let's look at the multi multi head attention. So the batched multi head attention
+This is the multi head attention as presented in the original paper attention is all you need
+Let's look at the algorithm and let's calculate the number of
+Arithmetic per for operations performed and also the total memory involved in these operations
+So he calculated that the number of arithmetic operations is performed in o one o of b and d squared
+Where b is the batch size n is the sequence length and d is the size of the embedding vector
+While the total memory
+involved in the operations given by the sum of all the tensors involved in the calculations including the derived ones is equal to
+o of b and d
+Plus b h n squared where h is the number of heads in this multi head attention plus d squared
+Now if we compute the ratio between the total memory and the number of operation arithmetic operations
+We get we get this expression here one over k plus one over b
+In this case the ratio is much smaller than one
+Which means that the number of memory axes that we perform is much less than the number of arithmetic operations
+So the memory access in this case is not the bottleneck
+So what I mean to say is that we are doing the number of the bottleneck of this algorithm is not the memory access
+It is actually the number of computations
+And as you saw before when we introduced the kv cache
+The problem we were trying to solve is the number of computations
+But by introducing the kv cache we created new problem. I mean not a new problem, but we
+We actually
+We we have a new bottleneck and it's not the computation anymore. So
+This algorithm here is the multi head self attention, but using the kv cache
+And this reduces the number of operations performed
+So if we to look at the number of arithmetic operations performed, it's b and d squared
+The total memory involved in the operation is b and squared d plus n d d squared
+And the ratio between the two is this o of n divide by d plus
+One divide by b. So the ratio between the total memory and the number of arithmetic operations
+This means that when n is very similar to d this ratio will become one or when b is very similar to one
+Or in the limit of one so the batch size is one
+This ratio will become one and this is a problem because now
+When this condition is verified is true
+Then the memory access becomes the bottleneck of the algorithm
+and
+this also means that
+Either we keep the dimension of the embedding vector much bigger than the
+sequence length
+But if we increase the sequence length without making the dimension of the embedding vector much bigger
+The memory access will become the bottleneck
+So what we can do is
+We can need we need to find a better way
+To solve the problem of the previous algorithm in which the memory became the bottleneck
+We introduced the multi-query attention
+So what the author did was to remove the h dimension from the k and the v while keeping it for the q. So
+It's still
+A multi-head attention, but only with respect to q. That's why it's called multi-query attention
+So we will have multiple heads only for the q, but the k and v will be shared by all the heads
+And if we use this algorithm
+The ratio becomes this one over d plus n divided by d h plus one over b
+So the we compared it to the previous one in which was n divided by d now. It's n divided by d h
+So we reduced the n divided by d factor
+The the ratio n divided by d by a factor of h because we remove the h number of heads
+For the k and v so the gains the performance gains are important actually because now
+It happens less. It is less likely that this ratio will become one
+But of course by removing the heads from the k and v our model will also
+Have less parameters. It will also have less
+Degrees of freedom and complexity which may degrade the quality of the model
+And it actually does degrade the quality of the model, but only slightly and we will see
+So if we compare for example the blue score on a translation task from english to german
+We can see that the multi head attention. So the attention that was in the original attention paper
+Has a blue score of 26.7 while the multi-query
+Has a blue score of 26.5
+the author also
+Compare it with the multi head local and multi-query local where local means that
+They restrict the attention calculation
+Only to the previous 31 positions of each token and we can see it here
+But the performance gains by reducing the heads of the k and the v is
+Great because you can see the inference time for example on the original multi head attention and the multi-query attention
+The inference time went from
+1.7 microseconds plus
+46 microseconds for the decoder to
+1.5 microsecond plus 3.8 microsecond for the decoder
+So in total here more or less we took 48 seconds 48 microsecond
+While here we more or less take
+Six microsecond for the multi-query. So it's a great benefit from a
+From inferencing from a performance point of view during the inferencing. Let's talk about grouped multi-query attention
+Because now we just introduced the kv cache and the multi-query attention
+But the next step of the multi-query attention is the grouped multi-query attention
+Which is the one that is used in lama. So let's have a look at it
+With multi-query we only have multiple heads for the queries
+But only one head for the key and the values with grouped multi-query attention. Basically we divide
+The queries into groups. So for example, this is the group one
+This is the group two group three and group four and for each group
+We have one different head of k and v
+This is a good compromise between the multi-head in which there is one to one correspondence
+And the multi-query where there is n to one correspondence
+So in this case we have still multiple heads for the keys and values
+But they are less numerically compared to the number of heads of the queries
+And this is a good compromise between the quality
+Of the model and the speed of the model because anyway here we benefit from the
+the computational benefit
+of the
+Reduction in the number of heads of key and values
+But we don't sacrifice too much on the quality side
+And now the last part of the model as you can see here the feed forward in the lama model has been converted into
+Has its activation function changed with the zwiglu function. Let's have a look at how it works
+So the zwiglu function was analyzed in this famous paper from nom Shazir
+Who is also one of the author of the attention model who is also one of the
+Outer of the multi-query attention that we saw before. So let's have a look at
+This paper
+So the author compared the performance of the transformer model by using different activation functions in the feed forward layer of the transformer architecture
+And the one we are interested in is this zwiglu here
+Which is basically the switch function with beta equal to one calculated
+In the x multiplied by a w matrix, which is a parameter matrix
+Which is then multiplied with x multiplied by v v is also another parameter matrix
+And w2 which is another parameter matrix. So compare this with the original
+Feed forward network and here we have three parameter matrices while in the original feed forward network. We only had
+Two so to make the comparison fair the author reduced the number of the size of these matrices to
+Have to such that the model
+Models total number of parameters remains the same with the vanilla transformer in the vanilla transformer
+We had this feed forward network, which was the relu function. So this max zero
+Etc is the relu function
+And we only had two parameter matrices. Actually some
+Successor version of the transformer didn't have the bias. So this is I took this formula from the paper
+But there are many implementations without the bias actually
+And while in lama we use this
+computation for the
+Feed forward network
+And this is the code I took from the repository from lama and as you can see it's just
+What the model says it's the silo function
+Why the silo function because it's the switch function with beta equal to one and when the swiss function
+That has this expression we give beta equal to one. It's called sigmoid linear unit that has this
+Graph and it's called silo. So it's the silo function
+Um evaluated in the w one of x then multiplied by w three, which is then
+Apply we then we apply it to w two. So we have three matrices
+And these three matrices are basically linear layers now. They use the parallelized version of this linear layer, but it's a linear layer
+And if we look at the graph of this silo function, we can see that it's kind of like
+um
+Relu but in this
+Here before the zero, we don't cancel out immediately the activation
+We keep a little tail here so that even values that are very close to zero from the
+Negative side are not automatically canceled out by the function. So let's see. How does it perform?
+So this is we glue function actually performs very well
+Here they evaluate the complete log complexity
+perplexity of the
+The model when we use this particular function and we can see that the the perplexity here is the lowest
+The perplexity basically means how unsure is the model about its choices?
+And the as we glue function is is performing well, then they also run the same um the comparison on many
+Benchmarks and we see that this we glue function is performing quite well on a lot of them
+so
+Why is this we glue?
+Activation function working so well if we look at the conclusion of this paper
+We see that we offer no explanation as to why this architecture seems to work
+We attribute to their success as all else to divine benevolence
+Actually, this is okay kind of funny, but it's also kind of true because
+In most of the deep learning
+Research, we do not know why things work in the way they do because imagine you have a model of 70 billion parameters
+How can you prove what is happening to each one of them?
+After you modify one activation function, it's not easy to come up with a model that
+Can explain why the model is reacting in particular way. What usually we do we have some
+um
+We can either simplify the model so we can work with this very small model and then make some assumptions
+On why things work the way they do
+Or we can just do it on a practical level
+So we take a model we modify it a little bit
+We do some ablation study and we check which one is performing better
+And this is also happens in a lot of areas of machine learning
+For example, we do a lot of grid search to find the right parameters for a model because we cannot know beforehand
+Which one will work well or which one to increase or which one to decrease because it depends on a lot of factors
+Not only on the algorithm used but also on the data also on the particular computations used also on the normalization used
+So there is a lot of factors. There is no formula for everything
+To explain everything. So this is why the research
+Needs to do a lot of study on the lot on the variance of models to come up with something that works
+Maybe in one domain and doesn't work well in other domains. So in this case
+We use this we glue mostly because in practice it works well with this kind of models
+Thank you guys for watching this long video. I hope that you learned
+In the deeper level what happens in lama and why it is different from a standard transformer model
+I know that the video has been quite long and I know that it has been hard on some parts to follow
+So I actually kind of suggest to rewatch it multiple times
+Especially the parts that you are less familiar with and to integrate this video with my previous video about the transformer
+So you can I will put the chapter so you can easily find the part that you want
+but
+This is what you need to do
+You need to watch multiple times the same concept to actually master it
+And I hope to make another video in which we code the lama model from zero so we can
+Put all this theory into practice
+But as you know, I am doing this as
+On my free time and my free time is not so much. So thank you guys for watching my video and please subscribe to my channel because this is the best
+Motivation for me to keep posting amazing content on AI and machine learning. Thank you for watching and have an amazing rest of the day
