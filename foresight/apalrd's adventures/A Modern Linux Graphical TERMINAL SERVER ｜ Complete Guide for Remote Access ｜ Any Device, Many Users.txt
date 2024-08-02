@@ -1,0 +1,257 @@
+I've got here a variety of computers running all kinds of different operating systems from
+Raspberry Pi, an iPhone, an Intel MacBook, an iPad, a Windows Surface, an M1 Mac, and a cheap
+thin client. And all of these are connected to a virtual session on a terminal server. So how am
+I able to share one computer amongst all of these users running on all of these different platforms
+without using virtualization? Come along and find out.
+The concept we're implementing today is called a terminal server. Long ago,
+mainframes using time-sharing systems allowed users to share computer resources. Back then,
+they used teletype equipment as terminals. Incidentally, this is why Unix and Linux named
+their terminals TTY, short for teletype. As technology progressed, MIT wanted to develop
+a unified computing environment that encouraged the sharing of ideas, code, and data across all of
+MIT. They called this initiative Project Athena, and they developed many of the ideas surrounding
+modern thin clients. This project also included the X-Windows system, a protocol to allow graphical
+applications to access graphical terminals separated by a network. Fast-forwarding to the
+modern era, Microsoft has supported graphical terminal servers since NT4, and continues to
+offer a terminal server product to this day. So apparently, it's useful enough to some company.
+We are going to build a Linux equivalent to the Microsoft terminal server,
+supporting many user sessions at the same time without virtualization. While I won't be expanding
+a network login today, you could combine this setup with system-wide network authentications
+such as Kerberos, which incidentally was also developed by Project Athena.
+Welcome to the server room. This is the hardware we're using today. We got an AMD Ryzen 5 3400G
+with 32GB of RAM, and we just got our Exubon 2 installer, keyboard and mouse,
+Gigabit Ethernet, PGA. Once we're all done, the only thing we're going to need plugged in
+is going to be the Ethernet power. I've chosen to install Exubon 2 desktop version 21.10,
+although you can choose any Ubuntu flavor you'd like. I chose Exubon 2 since it's a
+lightweight desktop that I feel is very easy to use. Even though this is a server, I'm starting
+with a desktop OS, so the entire graphical environment and graphical applications come
+installed. Depending on your use case, you might want to change the file system here. If you choose
+none, it'll install on EXT4, which is a pretty good install if you're just using it normally.
+I'm going to choose ZFS instead. So with ZFS, each user will get their home directory on a
+separate dataset, and it'll also create snapshots of the root file system every time it does a
+software update, and it'll let you roll back to them through the boot menu. So this is a nice
+feature if you're managing users and want to be able to back up their datasets to TrueNAS or
+something like that. So now we let this run, and we'll come back when it's all done.
+So now because we installed the desktop Ubuntu, we have a graphical user interface instead of a
+command line. So it's going to pop up with some graphical things we need to take care of. The
+first one is this language support dialog, and we're going to let it go.
+The software updater also wants to run, and we're going to tell it to install updates now.
+Hey, it wants to restart. We're going to restart later, because we're going to have to restart
+pretty soon anyway. So now we're going to open a terminal, and because it's a server, we probably
+want to administer this over SSH, so we're going to install open SSH.
+And also XRDP, which is the first remote desktop utility we're going to install, and it's actually
+installs almost everything through this package. The last thing we need is audio support for XRDP,
+and currently there's a bug in the installer for XRDP's audio that doesn't work correctly with ZFS
+file systems or NFS home directories. So as a result, I'm not going to put this in the video,
+but the instructions are my blog posts, and I'm keeping them up to date as I work with the developer
+on solving this. Now at this point, we can reboot the system, and then we're done using the physical
+console. We can do everything else remotely. So to understand what's happening here, let's dive
+into how a Linux graphical program gets its output onto the screen. So any graphical program has a
+canvas. That's the region within the Windows borders. Windows draw things onto their canvas,
+such as shapes, or text, or graphics, or whatever the window wants to draw. The output of all of
+these windows is sent to the window manager, which composites all of them into a single canvas.
+This composite is then sent to the display server. The display server takes the canvas and interfaces
+with the appropriate hardware drivers, dealing with multiple monitors, resizing monitors, etc.
+The video output for each monitor is finally sent to the video hardware,
+which generates a physical signal to send to the monitors. Now we can inject ourselves at different
+points in this process to get different types of remote graphical access. To view the contents of a
+single window, we can redirect it over SSH using x11 forwarding. In this case, a single program is
+running on the remote system, but the display for that one program is sent to the client. With a
+terminal server such as XRDP or X2GO, we act as the display server. In this case, we create a full
+desktop environment in window manager bound to our remote session, cutting out the display hardware
+entirely. Alternatively, we could insert ourselves into the display server and display hardware
+pipeline and capture the output being sent to the monitor. This is normally how VNC operates,
+taking over the same session that would normally be displayed on the display hardware.
+And finally, if we're operating in a virtual machine, then the display hardware is emulated
+anyways, so we can capture the output of the virtual graphics card and send that over the
+network. I've done other videos on this topic using SPICE for thin clients.
+So now that we have the system up and running, we should be able to connect to it through remote
+desktop. This is the Microsoft remote desktop client available from Microsoft Store. It's also
+available on Android, on iOS, on macOS. Pretty much every platform has a software available,
+and it looks pretty similar. So we're going to walk through it on Windows, but it should be the
+same whatever platform you're using. So we have to add a PC. We need the IP address of our terminal
+server. And we could either tell it to ask every time or we could add a user account here. I'm
+going to tell it to ask every time for now. So let's see what that looks like. So now if we double
+click on it, it tells us it has a self signed certificate. So because we're not running in a
+Windows domain, we don't have a public certificate for the server. It is a little bit concerned,
+but we can click through that. So now we get the login to VDI system, and this is done by XRDP.
+So we can use our username and password. And we're logged in. I have a terminal open from
+when I installed the audio support. So this is our exubuntu desktop and we're logged in via Windows.
+We have access to all of our programs, including web browser. Go to my website.
+It's very functional. I mean, this is running just fine.
+The web video is not a good experience. So don't try web video, but most applications will work pretty
+well. So now let's add more users to the system. So we could either from the terminal if we wanted.
+So we do sudo add user, make him a name, alpha. And we need our sudo password.
+And the full name is what gets displayed on the login prompt sometimes.
+You could set it, you could not set it, it doesn't matter to you.
+So now we have the username VDI alpha that can log in really. How about adding a user from the GUI?
+Can we do that too?
+So I got my admin user.
+And change my name. So let's add a new user.
+Another thing to note. So Linux does not allow you to start with a number.
+And XRDP seems to have trouble if you're using an ends with a number.
+Numbers seem to be fine in the middle, but don't put a number on the end.
+So now we need to set him a password.
+And the user can change their own password later.
+There we go. So we got some remote users.
+Now let's see what it looks like when one of them logs in.
+So we could log out of our session here and click log out.
+Or we could go up here and just close the session.
+So now it happens next time we connect to that server.
+So we get the login screening and we'll try VDI Bravo.
+And there we go. They have a session too. So unless we do some more restricting,
+a lot of these programs here exist for every user, but every user might not be able to use them.
+So here if I try to create a new user, it asks me for the password for admin, not for my own user.
+And that's because VDI Bravo doesn't have pseudo permission, so they're not allowed to make changes.
+So if you try to make changes, it requires the password for the admin account that does have
+pseudo privileges. So remote users on the system see all of these programs, but can't necessarily
+use them. So we'll restrict that in a little bit later.
+So how about if we log in again as the admin?
+So right back to our session we were up before. So when a user closes the session by closing
+remote desktop, it leaves all their programs open and running. And next time you connect,
+it reattaches to them. So you can leave Firefox or terminal or whatever open and come back to it
+later, and it won't close anything when you log off. What about copying and pasting things?
+So I got an excerpt from Wikipedia. I just copied on my off screen. If I go in here,
+I got a new text document.
+Paste it in there. So this got copied and pasted across my session.
+So the clipboard does work between your remote session. How about copying images? You go over
+here on my desktop and copy an image. Can I paste it in here? Oh, must give remote desktop access.
+Yeah, sure. Let's do that. So remote desktop asks for permission and then closed.
+So I gave it permission and let's see if we can copy the clipboard.
+There we go. We copied an image. How about files? Can we access any files on my remote system?
+So I'm going to file on my Windows desktop here, and I'm going to copy it into the
+remote session. It doesn't let me drag and drop, but I can copy and paste. And there you see my
+file got copied to the remote session. So now you're all going to ask, what is web browsing like?
+Let's try YouTube. Looks great. I get a display that resizes itself. I get a keyboard and I get
+a mouse. What I don't get is the ability to take a flash drive or another USB device, plug it into
+the Pi, and have it show up on the virtual machine. And that's what I'm going to expect.
+So audio works as well. Sometimes it stutters if the video stutters, but it's functional.
+So what about touch screens? Here we have an iPad. You can see that everything works correctly.
+One quirk about the iPad is that the mouse does not move to the location of your finger.
+So if you click your finger onto the touchscreen, it clicks wherever the mouse currently is.
+So mouse movement is relative. As you drag your mouse across the screen,
+I'm not necessarily touching where the pointer is. I'm touching somewhere else on the screen and
+moving at the same distance, which can feel a little bit disorienting, but you get used to it
+pretty quickly. So here we have a Microsoft Surface tablet. And in this case, the touchscreen does
+work as expected. Wherever I click my finger is exactly where it clicks the mouse on the screen.
+So I can click in the corner to close the window. I can drag. You can see the
+click and drag box shows up. So a slight difference in functionality between clients.
+Digital security has advanced a lot since the mainframe time sharing days,
+and keeping users isolated from each other and from the system as a whole is very important.
+Running a terminal server like this securely is perfectly within the capabilities of Linux.
+However, with our current configuration, it's like giving everyone their own account on the same
+desktop. Each user cannot see other users' documents, but they can all see system files,
+and it's not hard for them to share files with each other. Whether that's a problem or a feature
+is up to you. More importantly, RDP is a very commonly targeted protocol. While the protocol
+with modern security settings is secure for the users and does keep user data safe, you will be
+targeted by attacks and bots trying to guess random passwords. You'll probably also show up on an
+index of all RDP servers publicly facing on the internet. You should plan on isolating the server
+to your internal network and using a secure remote access VPN to connect back home. Also,
+without additional configuration, we haven't limited how much system resources each user could
+produce. So it's theoretically possible that some rogue user could start crypto mining with all the
+extra CPU time. We also haven't limited who can log into the system, so anyone that has an
+account on the computer can log in remotely. Most of these issues can be resolved by locking down
+things on the server, and I'm going to go into how to configure them now. To configure session
+management, we need to go to etsy xxdrp, and then the file is sessman.ini.
+So this configures the xdrp session manager, and a lot of the options that we probably want to
+add are in this file instead of the xdrp.ini file. The first few options that you might want to
+consider changing are in the security section here. So by default, allow root login is true,
+and we're going to set that to false. And that means that the user root can never log in.
+There's also a line here that says terminal server users equals ts users, and that's the name of a
+group. So once xdrp is installed, it does not create this group ts users. And so since the group
+does not exist, any user on the system can log in. But if we create the group ts users and add
+users to it, then we can restrict who can log in. So let's try that.
+So we'll add the admin to the list, and who else do you want to add to the list?
+Let's echo and foxtrot. So if you want to add someone later, you can go back to manage groups,
+find the ts users group, and click properties, and click the checkbox for group members here.
+If you want to do this from the command line, you would use group add.
+This case, it already exists, but that would create the group if it didn't already exist.
+And to add a user to the group, we use gpassword.
+So this should have added our alpha user to group ts users.
+You can see now the alpha is checked in this box, so it shows up in both places.
+So what happens when an unauthorized user tries to log in?
+I rebooted the server and let's see if VDI Charlie is allowed to access it.
+So we get an error here that says login failed for display zero.
+And so this is what a user will see if they try to log in, but they don't have permissions to
+log in in this system. It takes them back to login screen. We get cancel to disconnect the session.
+Now that we understand about ts users, there's a few other things we can look at in this file.
+So restrict outbound clipboard. This sets if you're allowed to copy things from the server
+to the client on the clipboard. If you're trying to prevent data from leaving the server,
+this might be a good option to use. Max sessions. This is the maximum number of
+sessions it'll allow. This doesn't mean your system is capable of this many sessions,
+and your system might stop allocating more sessions long before then if it runs out of memory.
+So by default, when you close a remote desktop session, the session will stay open.
+So the next time a user logs in with that same account, we'll get connected to the already
+existing session with all of the already running programs. If you set this to true,
+it will eventually kill all the programs and log the user out. You can set a time
+to wait before killing sessions. And you can also set a time to kill to disconnect idle sessions.
+If someone's not using the system, but it's still connected, it can kick them off. If you'd
+like the user to be able to log in more than once with the same account, you can set a session
+allocation policy. The default is to have one session per user. If you try to log into a remote
+session with the user account of another user who's already in a remote session, it'll kick out the
+first user and transfer that session to the new user. If you'd like to intentionally create more
+than one session, you could set this to one of these options here. The most common would be UBI
+to filter by IP address or UBC to filter by connection. So by IP address, that means each IP
+address connecting to the server can have one session at a time. Multiple connections from the
+same IP address will get handed off to the same session, but multiple connections from different
+IP addresses will go to different sessions. And by connection means that a new session is created
+every single time remote desktop connects. If you're going to use UBI mode or especially UBC mode,
+you really need to use kill disconnected sessions. With UBC mode, every time you make a connection
+to the server, it'll create a new session. So there's no way for you to kill that session or
+reconnect to it other than killing the process on the server. So something's going on with our
+system. Someone's trying to use a lot of resources here. And the system has a lot of memory, but
+someone is still using quite a bit of it. Let's see what's going on. So if we filter by CPU,
+someone is clearly trying to stress the system here. And it looks like it's VDI echo. So we could
+nicely ask them not to or we could try to restrict how much CPU time they can use. How about memory?
+So our window manager is using a decent amount, which we kind of expect. But VDI echo again here
+is using two gigs just for no good reason. So maybe we want to limit them to two gigs per user
+or three gigs per user so they can't monopolize the whole system. The better way to visualize this
+is by using control groups. There's a tool called system D CG talk, which shows us the usage per
+control group instead of per process. So right now it looks like user 105.slice is using 200%
+of the CPU and 2.2 gigs of memory. XRDP service is not using a ton at around 2.8%. But if I move
+my window around a lot, you'll see that XRDP starts bubbling up to the top. So how do we tell
+who user 105 is? Well, we use the command ID. So if we ask ID, it tells us that user is 1001.
+But how do we go from a number to a user? Well,
+so VDI echo. So VDI echo is the one that's using all of our CPU right now. So in order to bring
+some sanity to the system, we're going to limit each user to use 200% of the CPU, which is two
+threads and use two gigs of RAM. So the folder Etsy system D system is where we create both files
+and folders to limit control groups. System D has a folder structure where we can put configurations
+of control groups per user. Normally, this would be something like Etsy system D system user dash
+number dot slice dot D. So for example, for user 1000, we might create a file in Etsy system D
+system user 1000 that slice dot D and any dot comp files in that folder would be applied to slice
+of user 1000. However, there's a little trick we can do if we eliminate the number and just do user
+dash dot slice dot D, then this folder applies to all users by default if they don't have their own
+configuration. So we're going to create this folder and create a configuration file in it to limit
+the default VDI user.
+So in this file, we're going to put a little bit of configuration that turns on CPU and memory
+accounting and sets a quota for each one. So here's an example configuration I've linked in
+the description below my blog post, which goes into some more detail and links to some resources
+on system D control groups. So we're going to save this and let's see if this applies.
+I rebooted the system so the changes take effect. We can see here that VDI echo is trying to run a
+stress test again. But if we go back to CGTOP, we can see that they're being limited to roughly
+200% CPU and suddenly under two gigs of RAM, just like we asked for.
+Remember that color manager error we got earlier?
+We get this error about the color manage device and we'll deal with that later.
+It'll pop up from time to time, but here's how we fix that. So we need to create a configuration
+file for policy kit. First, we need to see what version of policy kit we're using. In this case,
+it's 0.105. In newer versions of policy kit, we need to create a .cont file which contains
+JavaScript code for processing the rules. In older versions, we need to use a .pecla file.
+This version 0.105 uses the pecla file method. So we need to create a file in the folder etsy
+pull kit one local authority 50 local dot D.
+And we can name it anything we'd like, but we need to make sure it doesn't conflict with anything else.
+So now we have a pecla file. We need to copy and paste the code down for my website into this file.
+So here's the configuration. It gives any user access to certain color manager permissions,
+and that should get rid of the color manager errors.
+So now we have a functional terminal server which can be accessed by clients of all different
+operating systems. Ignoring internet video, this is a pretty good user experience for each client,
+and uses a lot less resources than creating a virtual machine for each session.
+Thanks to Microsoft's wide support for the RDP protocol, we can have access to high quality
+clients on pretty much every operating system in existence. Microsoft publishes their client to
+the Apple Store, the Android Store for Android TV even, and Samsung even supports RDP access on
+their Tizen Smart TVs. So by using this protocol, instead of X forwarding or VNC, we get better
+client access. This wide client support makes it a great solution for bring your own device type
+solutions, where you're relying on potentially arbitrary user supplied devices that could be
+running any operating system. While not specifically an advantage of the thin client architecture,
+keeping all of your computing and data centralized in a server keeps important data off of the end
+user's devices, which can be a great feature for remote access or for when you're traveling.
+Be sure to let me know if you liked this video, and if you have any other topics on terminal
+servers you'd like me to cover in the future.

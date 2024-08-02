@@ -1,0 +1,1653 @@
+So I'm going to be talking about this interesting little system,
+Erbit, that I and some friends have built.
+Erbit is a clean slate full stack system.
+So let me explain sort of briefly the problem that we're
+solving here first, because this is a little different
+from the problem that a usual language is solving.
+So we have basically a coupling of kind of two interesting
+problems here.
+We have a very different kind of technical problem that we're
+solving, and we also have a different human market need
+that we're solving.
+So let me go through both of those super quickly.
+So the technical problem we're trying to solve here is
+something I call a high level deterministic computer.
+So that would be basically a computer whose entire life
+cycle is defined by a single frozen function.
+So it's really very functional.
+Of course, a hardware VM, a CPU, is defined by a single
+frozen function, which is the CPU function, which is very
+frozen because it's on the chip.
+But we'd actually like to define that at a layer at the same
+level at which the programmer conceives the system.
+So if we look at some kind of approximations to this that
+exist in reality today, JavaScript and the Java VM, of
+course, are high level definitions, but they're
+defined only sort of for a transient system.
+So here we're defining the whole life cycle of the
+computer.
+This is not just a memory image.
+This is the whole machine, which is a single level store.
+Lisp and small talk have these image-based systems that
+come a little closer to this kind of approach.
+I don't think people in practice usually use Lisp and
+small talk actually as databases.
+And they're not defined functionally in the same way.
+But it's definitely in the image-based system tradition.
+When you're using this thing, it basically feels like an
+integrated interpreter OS and database, which is a very
+kind of unusual feeling for a programming environment.
+You might also ask what happens when a determinist to
+computer hits an undecidable problem.
+We'll get into that in a little bit.
+One way of sort of defining this problem that I like to use
+is an unusual versioning system that we use, which I
+call Kelvin versioning.
+So Kelvin versioning, you count down to absolute zero and
+you count by integers.
+So if you run out of numbers, you've made a mistake,
+basically.
+So absolute zero is absolutely frozen.
+So Erbit, or at least the sort of the formal definition of
+Erbit, which does fit on a t-shirt, is at five Kelvin,
+which is like liquid helium, basically at the moment.
+And we'll see that spec in a little bit.
+Let's switch gears totally and talk about the human need that
+this system is supposed to be solving.
+We have this little problem in the computer world, which is
+that the internet actually failed.
+It succeeded very well as a digital modem.
+It's a great digital modem.
+It's entirely a client-server environment.
+It is not a peer-to-peer network.
+It's never going to be a peer-to-peer network.
+And if you look at sort of the dream of the internet from
+the 80s and 90s, it was a dream in which everyone on this
+network would have their own server.
+And things like what we do on Facebook today would be done
+by protocols like SMTP.
+Well, you can't introduce a new wide area protocol on the
+internet today.
+You can barely keep SMTP alive.
+These systems were designed in the 70s.
+The same thing for basically Linux, which is, in a sense,
+I would say, layer seven of the internet.
+It's the application layer.
+If you're on the internet, you're either a Unix box or
+you're pretending to be a Unix box.
+You can't really say to my mother, hey, you should go out
+and get an AWS box and put all your data on that and app
+get installed, something.
+That's just never basically going to fly.
+And so we've kind of reconciled ourselves to those
+sort of loss of this dream where people actually control
+their own individual computing.
+And instead, we've basically gone back and recreated the
+Hayes modem protocol with HTTP.
+And we've recreated AOL with Facebook.
+And we're kind of stuck in this space.
+So we have a big problem here.
+And these systems aren't basically not fixable.
+Well, there's a way to get out of a problem that isn't
+fixable, which is to layer over it.
+So the browser already did this on the client side.
+Basically, you had these OS APIs.
+And they're like, OK, we're going to build a new
+application layer.
+I guess browser people didn't realize that this is what
+they were doing.
+But it's certainly what they were doing.
+We're going to build a new programming layer that is
+isolated from the substrate under it that cannot call out
+in any way, shape, or form.
+And we're just going to program to that layer and not care
+about the underlying OS.
+And that actually kind of worked great.
+So on the server side, basically, this
+hasn't been done yet.
+And I would say, basically, we don't know that people don't
+want personal servers.
+People ask them, you tell them what a personal server is.
+And they say, yes, I want that.
+We do know that they don't want Linux and internet
+personal servers.
+We do know that my mother is never going to run an open
+Linux server on the internet.
+So there's basically a real case to be made for saying, OK,
+we need a new layer here.
+If we sort of drill down a little bit and define the need,
+the need is basically caused by the, essentially, the
+obstacle to the universal personal server is just
+administrative cost.
+My mother is not a Linux is that thing.
+So when you're looking at a problem and your problem is
+administrative cost, it makes sense that a solution to this
+problem is going to be technical simplicity.
+Because basically, the difficulty of administering
+the system tends to be roughly proportional to the number of
+lines of code in it.
+And if you haven't noticed, there's a lot of lines of
+code in Ubuntu.
+And so basically, the idea of building the browser for the
+server side is sort of a problem that kind of makes sense
+next to this problem of let's build a high-level
+deterministic computer.
+So OK, let's build it.
+How do you define a one-function computer?
+Well, you need, remember, we're defining both the network
+and the OS here.
+We're really defining a computing environment as if we
+just stumbled on a planet that had chips and wires and no
+software whatsoever, which is kind of fun.
+And if you're going to define the way this works, you're
+defining networking from scratch.
+I find the simplest way to think about networking is to
+imagine just basically a global party line.
+So a packet is just a big integer blob that people put
+out.
+Everybody hears everyone else's packets.
+And if you have the keys to decrypt those packets and make
+them make sense, then you use them.
+Then you can basically say to this global party line, hey,
+we would like to actually optimize this.
+And you get back to routing.
+But routing is basically an optimization in Van Jacobsen
+has this great term, a content-centric network, where
+you're basically ignoring who sent you the packet doesn't
+matter.
+What matters is what's in the packet.
+So that's sort of the network perspective on this.
+From the sort of functional perspective, there's basically
+two ways to define a one-function computer.
+You can define it as a life cycle function, which is
+where the state is a pure function of input history.
+And remember, this is a frozen function.
+This never changes.
+You cannot upgrade this function.
+Or you can define it as a transition function, where
+basically you have an input event in an old state,
+outcomes, a bunch of output actions in a new state.
+These are really, in practice, basically turned into the
+same thing.
+In practice, essentially any life cycle function is going
+to wind up spending most of its time as a transition
+function, because you're certainly not going to
+recompute the whole log every time you get a packet.
+And one of the advantages of doing it the life cycle
+function way is when you're basically building a system
+where you have one frozen function which defines the
+semantics of every computer in the world, you need to
+basically break symmetry.
+And you need to basically, when you're starting that up, you
+need some startup packets.
+You need some startup.
+You need the load and operating system into your
+function, essentially.
+And so a life cycle function makes slightly more sense as a
+way to define this.
+Let me skip down for a second and talk about how you
+implement these things.
+Actually, implementing a sort of one function computer like
+this is kind of very easy with the kind of substrates that
+you have at the moment.
+Event sourcing is basically this pattern.
+It's usually not used for a general purpose computer, but
+it's the same pattern.
+You have low latency reliable logs are uniformly available.
+Kafka isn't the greatest thing in the world, but it works fine.
+Normal databases are defined in terms of the pend only
+transaction log and an image snapshot.
+So you're basically building this the same way a normal
+database is built.
+You're saying every packet is a transaction.
+And it basically works great.
+You can also do non-packet I.O. I mean, I like to think of an
+abstract computer as just packets in, packets out.
+But as you'll see, we want to serve web pages and so forth.
+So basically, you can model even ordinary HDDB requests
+as here's an event that's like you got a request.
+Here's my action respond to this request.
+So there's a great library LibUV, which is used by Node.js
+that implements these patterns very nicely.
+So it's super easy to do.
+I mentioned decidability earlier.
+That's kind of an interesting problem for a deterministic
+computer or any kind of non-preemptive OS.
+When you're building a non-preemptive system, basically
+the decision of when to terminate a computation is
+essentially a heuristic choice.
+If that event is caused by a console, that heuristic choice
+is very easy.
+Just go until they hit Control C.
+If it's a packet, that's a little harder.
+You need to decide when to time that out.
+There's a kind of nice duality between unreliable packet
+networking and turn completeness.
+And when you drop a packet because it's
+spending too long, you're essentially detecting congestion
+in the CPU.
+And so that kind of makes a certain amount of sense.
+Node.js has shown that you can actually do very useful
+things with non-preemptive systems.
+One of the most interesting problems in building a system
+like this is you're going to have certain kinds of
+non-determinism that you can't avoid.
+Let's say I write an infinite loop.
+I made a mistake.
+I wrote an infinite loop.
+I pressed Control C. One thing I really want there is a
+stack trace.
+So that stack trace is completely
+non-deterministic information.
+You can't get that into a deterministic way.
+But all is not lost because basically the underlying C
+code that actually implements this system sees that stack
+trace, has that stack trace.
+All it needs to do is basically inject that back in as a
+deterministic event.
+And so basically, you get an event that says, hey, I was
+trying to do this packet, but it crashed.
+And here's where it crashed.
+And then you can write that to the user in the appropriate
+way, and that actually works.
+So if you replay that log, we've replayed 30 gigabyte logs
+and wound up for the same bit for bit state.
+If you replay that log, it will replay the error.
+Essentially, it won't even bother with their
+original transaction.
+So this is not pieing the sky.
+This is a working system.
+This is clearly doable.
+So probably a lot of Lisp fans in the audience, let's try
+doing this in Lisp.
+So it's actually easy to define a life cycle function in
+Lisp.
+You simply say, OK, the first event in the log is my
+operating system.
+And all the rest of the log, the cutter of the log, is the
+rest of the event.
+So run the operating system on the rest of the events.
+You still have to write the function.
+But OK, you've made progress.
+And now, all we need is the one true Lisp.
+So I think all Lisp needs is the one true Lisp.
+There have been a lot of attempts to create the one
+true Lisp.
+I haven't really worked out.
+In my view, that's basically a problem that goes back to
+really the root of how we came up with this idea of
+computing.
+Because the Lambda Calculus is OK.
+We're at LambdaConf.
+I can't say bad things about Lambda Calculus.
+But it was originally designed not as a means of
+programming.
+It was originally designed as basically a
+metamathematical tool.
+And people picked this up, and they found, hey, wow, this
+thing that Church came up with actually works really well
+for programming.
+So you take that in one direction, and it becomes Lisp.
+You take that in another direction, much more
+mathematical, and it becomes Haskell.
+And it's not like Lisp and Haskell are compatible in
+any ways.
+You're always basically taking Lambda, and you're growing
+hair on it to make it a practical system.
+And I would say that that comes from basically a very
+deep conflict in the heart of Lambda, which is that it has
+these features that are like symbols and variables and
+scope that are features of a higher level language.
+But if you want to use that as an axiomatic system, and we
+just saw a talk on Shen which compiles to Lisp, if you want
+to use that as an axiomatic system, basically, and put
+the higher level language as something that is actually
+loaded onto that axiomatic interpreter, then those things
+are in the wrong place.
+They're in the wrong layer.
+And if you're going to build an axiomatic system like this,
+you have just the demands on the precision of your
+interpreter are just extremely high.
+You want that to be just tiny and diamond perfect.
+And you can't grow hair on it.
+So in a way, basically, you sort of have no choice but to
+invent a kind of different computational model at the
+bottom end.
+So this gives me a motivation to actually invent all this
+crap.
+We know that you should never invent anything, but
+sometimes you have no choice.
+So the bottom of the stack is this thing called knock.
+It's a typeless, frozen, accommodator, interpreter,
+non-LAMDA.
+It's defined in 200 words.
+It fits on a t-shirt.
+Not wearing a t-shirt today, but I'll wear it tomorrow.
+And I know, I know, it's bad choice.
+On top of that is a hoon, which is a pure, strict type
+functional language.
+It compiles itself to knock.
+This is type functional programming without category
+theory.
+We've heard from some people that they hate category
+theory.
+I've heard that somewhere, not sure.
+Probably not in this room.
+So you can see how if you have a compiler that compiles
+itself to knock, then you can kind of bootstrap off of
+this basic, essentially, bootloader.
+On top of that, we have ARVO, which is a non-preemptive OS.
+And yeah, we'll see.
+So basically, what I've got to do here is just a really
+lightning tour through these three systems.
+Don't worry if there's, there might be a little bit of
+stuff you don't understand, but just kind of sit back and
+get an impression of the system.
+All right, let's go into knock for a second.
+So I sometimes call knock a functional assembly language.
+You can program in knock, but there are no symbols or
+anything, so you're typing numbers and doing tree
+geometry by hand.
+Very much like writing assembly language.
+You could, but you wouldn't want to.
+It's basically, it is a list, in a sense.
+It's a list without any of these high level tools.
+How do you get symbols out of a lisp?
+Well, maybe it's not a lisp.
+A key point, no cyclic data structures, no laziness, so
+no infinite data structures.
+You cannot knock as an interpreter, which cannot
+create cycles.
+I think that is basically very much the right choice in the
+modern world.
+No tracing garbage collectors.
+Kind of nice.
+Also, remember, this is a persistent system.
+And if you look at persistent systems, any kind of
+database, whether it's no SQL or a SQL, basically you'll see
+acyclic data structures everywhere there.
+You will not see very many successful databases that
+use cyclic data structures.
+And it's also, if you're sending data over the network, how
+do you send a lazy list over the network?
+How do you send a cycle over the network?
+I mean, you can.
+It's a little bit harder.
+And so this is definitely very much designed for the
+network edge, obviously.
+It should be extremely efficient.
+We'll get to how that works in a bit.
+It should fit on a t-shirt.
+It should be obviously perfect.
+I believe that actually I've hit these points.
+So concepts of knock.
+Quick.
+So a value in knock is a noun.
+A noun is basically our version of S expressions.
+It's S expressions without the S, because basically all that
+stuff has been stripped off.
+List, essentially, I would say has almost kind of a dynamic
+type system for atoms, which you need if you don't have
+another type system on top of it, because how do you print
+an atom?
+Well, if you have a type system, the type system will
+tell you how to print the atom.
+But if you don't have it, so basically an atom is just an
+unsigned integer of any size.
+We use this.
+An atom will be a number.
+It could be a string.
+It could be a network packet.
+It could be a giant file.
+It's a blob.
+But a blob as a number, not as a blob as a number.
+And this is how long the number is.
+A cell is an ordered pair of any two nouns.
+We don't do pointer comparison.
+This abstraction is completely semantically opaque.
+Knock itself is a function from two nouns, or a cell of
+nouns, a subject and a formula to a product.
+Subject is the data.
+Formula is the function.
+A product is the result.
+And the way we define knock, we define errors as
+non-termination.
+So errors are basically anything that produces bottom.
+Obviously, we don't do that in practice.
+But that's how we define the function.
+So let's go over the spec.
+We'll see the knock spec in two slides.
+These are reduction rules.
+You see four basic operators here.
+The first one is question mark, or as I would say, what?
+This is a deep operator.
+So is this a cell, or is it an atom?
+If it's a cell, it's zero, meaning true.
+And if it's an atom, it's one, meaning false.
+Zero for true, one for false.
+Probably a decision I might do differently next time.
+But it's morally right, and it works.
+We can also increment an atom.
+That's our only arithmetic operator is increment.
+If you try to increment a cell, it reduces to itself,
+which means an infinite loop, which means an error.
+You can test for equality, same thing.
+You can't test for an atom for equality.
+And the only interesting operator here is this slash,
+which is a slot, which is a tree addressing scheme.
+So in this tree addressing scheme, basically, one
+is the root of the tree, two n is the left child of any node,
+two n plus one is the right child.
+So basically, having this kind of simple tree addressing
+built into the fundamental interpreter
+is what lets us not have to deal with scopes and environments
+and basically all that jazz that we know and love from Wisp.
+So that's all higher level stuff.
+All right, so this is the rest of the knock spec.
+This is a complete spec here.
+So the first reduction rule here is kind of interesting.
+This is something I call autocons.
+So basically, if you have a knock formula,
+either the head of that formula, the formula is always a cell.
+It's always a pair.
+The head of that formula is either a cell or an atom.
+If it's a cell, then what we have here
+is a pair of two formulas.
+And the semantics of that is cons in those formulas.
+So basically, you can build up, you
+know, cons is essentially an implicit operator in a way here.
+You can build up and just glom formulas together
+and you get this kind of automatically cons thing.
+Otherwise, so if you see A here is always the subject
+and then we're pattern matching in the formula.
+This, by the way, is not the syntax or anything.
+It's just pseudocode.
+Obviously, if you're writing axioms at a certain level,
+they're written in English.
+So if the head of a formula is a number, then if it's well
+formed, otherwise, you see down at the bottom,
+anything that's not well formed resolves to itself.
+Again, an error.
+If it's well formed, we have instruction 0,
+which is just the slot operator.
+So that lets us basically pick out
+a subtree of the subject.
+And then, you know, one, constant.
+Two is eval.
+So basically, B and C here are formulas
+against the current subject for a new subject in formula
+that we're going to evaluate.
+Again, pretty straightforward.
+3, 4, and 5 are the deep bump in same operators
+that we've seen before.
+Depth test, increment, and equals.
+Those are actually all the operators
+that we need for not to be as expressive as it wants to be.
+So we could actually throw away 6 through 10 completely
+and have a much shorter, cleaner spec.
+There are simpler Turing-complete interpreters
+in this, certainly.
+So this is intended to be a practical Turing-complete
+interpreter.
+And it is actually practical, believe it or not.
+And you probably don't believe it.
+But so 6 is, I'll leave you with an exercise to the reader
+if you can figure out how these macros work,
+but 6 through 10 are all macros.
+6 is if and else.
+7 composes two formulas.
+8 composes a formula with the cell
+of the product of a formula.
+It's basically declaring a variable, essentially.
+You're putting a new value onto that subject
+and then using it for the next formula.
+9 is essentially implementing what
+whom we use as a function call to simplify it enormously.
+And 10 is a hint.
+So you see two 10s there because you
+can have a dynamic hint or a static hint.
+What a hint is in this environment
+is an instruction that throws away data.
+So if you discard data, basically,
+you're saying to the interpreter,
+do whatever you want with this data.
+Do something with it.
+So hints or anything like a debugging printf is a hint.
+You're like, yeah, I don't know that a debugging printf happened.
+But if you want to make it happen, make it happen.
+Memoization.
+There's a memoization hint.
+That's another good example.
+So the hint basically doesn't change
+the formal result of the computation,
+but it helps the interpreter do something interesting with it.
+So that's all of NOC.
+And now let's see.
+Here's a little example.
+So NOC, of course, the only integer operation is increment.
+So if you want to decrement, well,
+that's a little bit of a problem.
+You actually have to write some code.
+You're going to actually have to count up to n minus 1
+to decrement.
+Not a big deal.
+Very simple algorithm.
+So here, we're jumping ahead.
+And on the right side of your screen, basically,
+you're seeing some poon.
+Those are two, basically, kind of alternate syntaxes for poon.
+One of them is a keyword syntax, which you can probably read
+just by looking at it.
+The other one is a rune syntax, which you probably can't read,
+but that's what we actually use in practice.
+It's kind of training wheels, no training wheels.
+And on the left is the actual NOC formula
+that we generate from this.
+If I had a couple more hours, I would actually
+go through this formula.
+But as it is, it'll just have to serve as an example.
+All we're doing is we're basically saying, OK,
+we're going to call the subject a, because that's the number
+we're decrementing.
+We're going to add a counter, which is 0.
+We're going to loop.
+And we're going to count up until the increment of b is a.
+If that is true, our product is b.
+Otherwise, we're going to loop again
+with b changed to the increment of b.
+Pretty straightforward decrement, not super hard.
+But that kind of brings up a problem
+that you might think of, which is g, o of n decrement.
+Well, if you actually run, if you try to boot
+urbit with a completely naive interpreter,
+it will immediately start decrementing
+and keep decrementing until pretty much the end of time.
+So that's clearly basically a non-starter.
+There's a well-known solution to optimization problems
+of this kind.
+It's called a sufficiently smart interpreter.
+All your interpreter has to do is simply
+recognize that it needs to analyze the algorithm that
+it's interpreting, recognize that it's decrement algorithm,
+and implement it efficiently accordingly.
+We also need to recognize add, multiply,
+and all of their interesting functions.
+So if you know anything about compiler theory,
+you know that this is a very hard problem.
+Fortunately, there's a much easier problem
+which is related to it.
+We don't have to recognize every decrement.
+We just have to recognize the one that we actually call,
+which is the one in the standard library.
+And so basically, the way we optimize in the system,
+and this should be sort of compared to,
+let's say you're building, you're using Java or using Python.
+What you do is you say, OK, I wrote some pure code.
+It's beautiful.
+Oh, it's not fast enough.
+And I guess I need a native method.
+So then you call it to C. You rewrite your interloop
+or whatever in C. You throw away their original pure code.
+There's another great advantage, which
+is that your interloop in C can make system calls.
+So it can modify the file system or something.
+And that is not necessarily a very functional way
+of proceeding.
+The way we optimize knock and hoon is a little different.
+So we basically say, when you write, say, decrement,
+you say, OK, I'm going to declare this in a namespace.
+I'm going to say to the interpreter,
+I believe this to be decrement.
+It's just a conventional name.
+This is decrement.
+The interpreter is like, oh, he says this is decrement.
+Is this true?
+Well, gee, I'm built to recognize, literally,
+with the hash of the formula, I'm
+built to run this specific formula efficiently.
+So I'm going to match this, which is a slightly hard problem,
+but I don't know how to super hard problem.
+I'm going to match this at runtime,
+and then I'm going to do the efficient decrement.
+So the advantage of this approach,
+and there's a number of advantages of this approach.
+First of all, you have both those routines,
+the fast decrement in C, which is totally
+an implementation detail.
+And you're separating mechanism and policy there,
+essentially.
+So you have your fast decrement in C,
+and then you're essentially executable specification
+of decrement.
+And you're basically binding the two together.
+So obviously, you can test these against each other
+at runtime, if you choose.
+There's certainly, you can sandbox your jet,
+so it has no reason to make system calls.
+You can also extend this up the stack quite a ways.
+So for example, we have one of the,
+we serve our own website using Herbit.
+And one of the, we serve it from Markdown.
+So we have a Markdown parser written in Hoon.
+Well, it's a decent Markdown parser.
+Maybe not the world's fastest.
+Fortunately, Markdown is a standard for some values
+of the word standard.
+And we basically jet that Markdown parser
+with an efficient common mark implementation in C.
+Our, for another example is, Google
+has this lovely library called TensorFlow.
+They recently announced that basically they built an ASIC
+for TensorFlow.
+I don't know how exactly the programmer talks to that ASIC,
+but I'm sure it's a mess.
+What you actually want to do is basically
+say, OK, I as a programmer, I'm using TensorFlow of this version.
+I run TensorFlow, I declare that this is TensorFlow
+of a certain version.
+And then my interpreter is like, aha,
+I have a chip that can speed up TensorFlow of this version.
+I'll just use that.
+And so that scales kind of in more interesting ways
+than the, let's call it, to see model scale.
+So we also use it, by the way, to virtualize knock.
+So there's actually a virtual knock written in knock
+if you thought knock was slow.
+But basically, you can get unlimited levels of virtualization
+pyramid by basically just recognizing
+that you're running your own virtualizer and just saying,
+hey, we're at six levels deep.
+So that's an improvement as well.
+All right, we're done with knock.
+That's knock.
+Pretty cool.
+Let's build Hoon.
+Hoon obviously needs to compile itself to knock.
+It needs to be a pure strict higher order type functional
+language, because that's the hotness.
+It needs to have a, I believe it needs
+to have a simple transformation to knock.
+So I'm really a Unix and Seaguy.
+I'm not a functional programming guy at all,
+and actually don't know any of their functional languages.
+And so that sort of simplicity, that feeling
+that basically the compiler is doing something
+very simple for you, is really like a wonderful feeling
+when you're working inside C. You're
+seeing the system basically at two levels.
+We definitely want a system that doesn't require
+people to have a math degree.
+And that's a subject to complaint.
+I think more generally, one of the things
+that languages like Haskell do is they encourage
+their functional programming languages,
+and they encourage you to use these powerful tools
+as much as possible.
+Hoon is kind of opposite.
+It encourages you to not use these tools.
+It's basically like, OK, the power is there if you need it.
+But bear in mind, when you're using this kind of functional
+power, you're imposing cognitive overhead
+on the ordinary programmer.
+Because we really want this to be something
+that a Python programmer can pick up and program in.
+And I think the ability to basically teach people
+these higher order constructs is really debatable.
+I don't think it's proven at all.
+There's another thing that often happens, both with macros
+and with kind of advanced functional languages,
+where you get into this kind of DSL pattern,
+where basically you're so higher order, you're so meta,
+that every file is written in its own language, which
+basically gets you to write only code.
+And that's like a kind of serious downside
+of functional programming.
+And the thing is Hoon is still basically almost as
+expressive as Haskell.
+It has the equivalent of type classes.
+It has generosity.
+It's like, it's not Haskell.
+Haskell people will be a little disappointed in it,
+but it's definitely not a lisp.
+OK, so let's go a little more into detail on Hoon.
+So basically, the back end of Hoon is extremely simple.
+So type inference and code generation together,
+1,500 lines of code.
+Shouldn't be super hard to learn.
+So where basically Nock is doing subject and formula
+to product, of course, in Hoon, we have an actual expression
+that is written in, for some values of the word,
+user level code, user level code.
+The experience of programming without an environment,
+or without a scope, or without a heap,
+or without the sort of extra piece of state,
+where you just have, the subject is just one noun,
+and everything that you need is in the subject,
+is sort of somewhat unique and different.
+You keep sort of reaching for that,
+oh, there must be something that has my variables,
+but no, there's really just one noun
+that you're defining a function against.
+So when we basically take a type system
+and layer it on top of Nock,
+we're basically computing a mapping from a type in an
+expression to a type in a formula.
+So we have input type, or subject type,
+and expression turns into product type,
+and the Nock formula that computes that expression.
+So again, a very, very simple straightforward kind of
+relationship to Nock here.
+The inference algorithm is extremely stupid.
+It infers only forward, it does not use unification at all.
+It can infer tail recursion, but not head recursion.
+So a general pattern is you need a few more sort of casts
+to help the type system out.
+It's still a strict type system,
+but you need to help it a little bit.
+My view is that basically having a stupider inference
+algorithm is, again, a UI win for a language,
+because basically when you program in a language,
+you kinda need to follow what the compiler is doing.
+The more powerful the algorithm you're following,
+basically the harder it's gonna be for people to follow.
+And so when I look at Haskell, I see basically two kinds
+of Haskell users in a way.
+I see people who treat Haskell as a black box,
+and they're like, it's sort of a learn you a Haskell
+kind of way, and they're like, oh, I made it work, cool.
+And then there are the people that actually understand
+the math, and both of those situations don't scale in a way.
+And so having a simpler system is definitely,
+I think a win.
+So a little more about Hoon.
+So this is brought us in for some criticism,
+but Hoon basically, since it sort of has its own way
+of doing things, we invent a lot of terms,
+because basically the ordinary terms tend to be confusing.
+So, and we also have a four letter name
+kind of convention going on.
+So an expression, or an AST, is a twig.
+A type is, well, there's actually three things
+that are basically correspond to a type.
+So a type, as in sort of a set of nouns
+and a semantics ascribed to them, is called a span.
+A type in terms of a constructor is called a mold.
+And then we also have basically, at the kind of OS level,
+I don't think I'll get into that today,
+basically the equivalent of mind types,
+which is something else also entirely.
+Looking at molds, basically,
+Hoon is a pure prototype language.
+There's no syntax for defining a span.
+The only thing you can define are twigs.
+So when you want to define basically a span,
+a range, a type in the usual sense,
+a set of nouns that you're interested in,
+what you define is actually a normalizing function
+that takes an arbitrary noun and produces a noun
+of that type that you're interested in.
+What's kind of nice about that is that basically,
+if this is the way you define types,
+anytime you define a type,
+you've defined a validator for untrusted network data.
+So we do a fair bit of validating untrusted network data
+in today's environment, so that's kind of a win.
+Basic concepts of the type system.
+This is almost a complete definition
+of the Hoon type system.
+It's missing a little bit of stuff.
+I'll see if I can fill that in,
+but we've got to move pretty fast here.
+So, and I'm not going to talk about twigs at all,
+because once you understand basically a data representation,
+it's pretty straightforward.
+So a span defines a set of nouns.
+What can the set be?
+It can be noun, which means it could be any noun,
+any remember S expression, basically.
+It could be void, which is an empty set.
+I'm going to skip over Adam and Core,
+because I have separate slides for those.
+A cell, obviously a cell.
+Here's a span of the head, span of the tail.
+A face, basically we're going to label this span.
+And so remember that there's no symbol table,
+there's no anything in here.
+So the labels actually live inside the type.
+So when you're searching for a label,
+you're actually doing a depth-first search
+of basically the type of the subject.
+Fortunately, computers have gotten a lot faster.
+You can cache this, we do cache it,
+but I mean, fine, it's a depth-first search.
+How big is your subject, right?
+You can have a fork, which is a union of spans.
+Pretty obvious.
+And the only really interesting one in this page is hold.
+So basically one thing we never do in the systems,
+we never calculate type signatures.
+So this is a strict system, we can't do laziness.
+What hold means is basically the span here
+is the result of if you take subject P
+and run expression Q against it.
+So this is very much manual laziness.
+Manual laziness has some nice benefits.
+Namely, you can use this as a,
+you can use a manually lazy span as a key
+in a key value data structure,
+which is pretty difficult with infinite data structures.
+So that's basically, those are the simple ones.
+Let me get to the non-boring spans, Adam and Core.
+So Adam is just an Adam, slightly non-boring
+in that you can say this could be any Adam
+or you could say this could be a constant.
+So the unit there is who's equivalent of maybe.
+And so if that's set, then we have,
+this is just a constant Adam.
+Then we have P there is something interesting.
+The term is a symbol essentially.
+And we have what I call an aura.
+This is a soft type.
+This is a basically non-enforced type
+or enforced gently type.
+And if you remember, Lisp of course has this dynamic type
+and it's Adams, which is just really awful
+in my personal opinion.
+And if you have a type system, basically the type system
+when it has an Adam needs to be able to describe
+how do you print this Adam?
+Gee, what happens if I try to use a furlong
+as if it was a Fortnite?
+What happens if I try to use an IP address
+as if it was a string?
+All those are Adams.
+And so you basically need to label those
+and describe them kind of informally.
+And there's a basically system of specialization
+simply by the length of the name.
+So you can basically text, ASCII text,
+ASCII text with a symbol constraint.
+None of the, all these are informal conventions.
+None of them are, there's no dependent types in the system.
+Sorry, get another no dependent types.
+And they're not enforced at all,
+except that basically if you wanna turn an IP address
+into a string basically and be so foolish,
+you have to manually tell it,
+you have to cast up to just a raw Adam
+and then down back to your string.
+So you have to work to basically screw up that way.
+That's an interesting design.
+You don't usually see a soft type in a functional language.
+I think it's worked pretty well.
+It's not perfect.
+I think the most interesting span,
+and remember a span is describing a set of nouns.
+The most interesting one is core,
+which is essentially an object.
+Or it's an object that's sort of
+in a very broad in general sense.
+It's actually the general case of objects and functions
+and a lot of other things,
+which you don't really have a name for.
+A core is a cell.
+The head of the cell is a battery,
+which is either one formula or a tree of formulas.
+Remembering a formula is just a knock function.
+The tail is a payload, which is basically any noun.
+And when we run the arms, which are the,
+basically they're not methods,
+they're computed attributes in the battery.
+We run that with the whole core as the subject.
+So we basically have this thing
+that has a bunch of code in it.
+It's like, you can think of,
+if you know C++ implementation,
+you can think of it as like a V-table, right?
+And so it's, here's a V-table with a bunch of formulas in it.
+And you say, I wanna run,
+I wanna get foo out of this core.
+It's like, oh, great, I have a foo.
+I'm gonna basically calculate,
+that's gonna resolve to this calculation.
+So there's no separate namespace
+for basically data and for code.
+So if you're looking for foo on a core,
+and the core doesn't have foo,
+there's no foo in the battery.
+Then it goes in and says,
+oh, well, let's look in the payload.
+Let's descend down the tree.
+Notice also again,
+that there is no attempt to create a type signature here.
+So this is just a map of a term to the twig.
+Twig is a source.
+That's a source expression.
+So basically, and that's in the type.
+So when I call foo on this core,
+I basically go in and I say,
+well, okay, that's gonna generate one of these whole things.
+So it says, okay, the result,
+the type of the span of the result of this foo
+is basically the core type and the twig.
+And so when we actually evaluate that,
+we have to basically manually work through the laziness
+and say, oh, well, what's in that type?
+Gee, I don't know, let me calculate it and find out.
+That actually, that works rather well.
+Let me, okay, here's some advanced theory.
+I'm gonna go over this super quickly.
+So hold again is manual laziness.
+One of the nice things about it is that basically,
+you can build a conservative work list algorithm.
+Let's say you're building a linked list.
+Let's say you wanna do a type comparison on two linked lists.
+Okay, now this is a basically,
+this is a structural comparison.
+So you're saying, these could be totally different definitions
+of linked list.
+Do they match?
+So if you basically traverse this span,
+what you're gonna see is that that traverse repeats itself.
+And because it repeats itself, you can say,
+oh, gee, I already checked that there were no violations
+on this arm, on this branch, so I'm gonna call that fine.
+And that's basically how you can do sort of type logic
+in this manually evaluated space.
+Again, very, very stupid if you ask,
+any smart undergraduate could come up with this scheme.
+A little more, at a little more depth,
+I'm gonna go over this super quickly.
+You may not understand it.
+Basically, in polymorphism, you have two,
+a lot of different kinds of languages.
+And I'm thinking of like Eiffel
+and like the Bertrand Meyer kind of world of languages
+have basically two kinds of polymorphism.
+You have variance and you have generosity.
+So basically, any polymorphism in any system like this
+is about basically, if I change a core,
+let's say, okay, I built this core,
+I stuck this battery on this payload.
+But now I changed the payload.
+Maybe I changed the payload
+to something of a different type.
+Can I run this core?
+So basically, can I run this arm
+or will it just be a total disaster?
+And that question is actually answered
+when you try to run the arm.
+So there's sort of simple question of variance, basically.
+Can I use this one payload as another payload?
+The way we do generosity is,
+I can sort of explain this intuitively
+at a very high level.
+When you're doing generosity,
+you're basically saying,
+when you're doing variance,
+you're basically saying, okay,
+does my mutated payload work like the original payload?
+When you're doing generosity,
+what you're saying is you're saying,
+okay, I've changed the type of this payload.
+I've changed something totally different.
+Now I'm gonna run this arm on it.
+I'm not gonna recompile this arm.
+I'm gonna run the original knock formula
+that was calculated
+for something of a totally different type.
+And the question you have to answer is,
+is that gonna work?
+And what span is it gonna produce?
+And you're basically treating the twig,
+you're treating the arm as a macro,
+and essentially working through it.
+So it's like the classic example,
+can you build a function
+to swap two things of an arbitrary type?
+So yeah, you basically do that with generosity in Hoon.
+So that works, that's how we do containers,
+all the usual jazz.
+And it's essentially kind of this ghetto,
+low rent way of doing type classes.
+Syntax design, let's go into the syntax.
+Hoon has a very unusual syntax you've seen already.
+A lot of people think it looks pretty gnarly.
+There is a reason for doing this gnarly thing.
+The reason is that basically there are kind of three problems
+that you see in a lot of functional languages
+that are syntactic problems.
+One problem is that basically expression
+is sloped downward into the right,
+and so they keep attacking your right margin
+if they get too complicated.
+In a procedural language,
+you've got this nice division between statements
+and expressions, and statements flow down,
+and expressions flow across,
+and it gives you this kind of nice tree-shaped structure
+which lets you work within an 80-column margin.
+In a functional language, you often don't have that,
+so you get this slanty thing,
+which is uncomfortable to work with.
+Another problem in syntax that a lot of these languages have
+is they have this unpleasant choice between,
+am I gonna have 17 parentheses in a row,
+or am I gonna do significant white space?
+Both of those have, they work, they work,
+they just have, they're just not super pretty.
+Another problem that I don't know if everyone has
+this problem, I certainly have this problem
+when I look at LISPs and a lot of similar things,
+is basically I can't distinguish special forms from symbols.
+I can't distinguish, is this part of the language,
+or is this something that somebody included
+from the library, or is it a macro?
+And basically making that, again,
+getting away from this sort of pervasive DSLization
+is definitely a goal of the system.
+Speeding up a little, so let me,
+before showing the syntax, basically a twig structure.
+Once again, the twig is a hoon AST.
+You can do, hoon has the same kind of auto cons feature
+that knock does, so basically cons is assumed.
+If you basically make a cell of two hoon twigs,
+that's a cons.
+In general, as opposed to LISP,
+hoon is kind of more pair-oriented and more tuple-oriented.
+We don't throw in terminators everywhere willy-nilly.
+That's kind of more appropriate for a typed system, I think.
+Most twigs are tagged unions, so they have a head,
+which is a stem, which is a symbol, and a bulb,
+which is the tail, which is totally dependent on the stem.
+It's usually a tuple or a list of twigs,
+and let's see how that works in practice.
+Basically, there's a regular form.
+Again, most bulbs are tuples.
+Some are in-area, and there we do need a terminator.
+But what we do is we separate,
+we basically have two regular forms of syntax.
+One, which sort of looks like an expression,
+and one which looks like a statement.
+Those two ifs there are the same code,
+but they look a little different.
+What you do is you basically build a structure
+whose backbone is basically tall twigs,
+and then a tall twig can contain a flat one,
+but not vice versa.
+Basically, you're mimicking the kind of structure
+of imperative code that has this kind of statement
+expression duality, but it's all an expression.
+There's no imperative anything.
+Another thing that you're doing basically
+to control the right margin here,
+what you really want, you'll notice that C
+is at the same indentation as the if there.
+So basically, you want to lose no space,
+basically for your largest,
+hopefully C is the biggest branch,
+C is not the biggest branch,
+you want unless instead of if.
+But basically, you really, as a programmer,
+there's sort of an art of arranging these things,
+and you arrange them so that they flow down and not across.
+And it becomes very easy to read once you know it,
+like any language.
+And here's the funnest and most fancy part
+of our crazy syntax.
+So first of all, you've got regular forms
+and irregular forms.
+So in a regular form, arbitrary syntax,
+at least it's always flat,
+but that's just something you have to learn.
+One of the things I feel, if you look at the implementation
+of the Hoon compiler, what you'll see is that basically,
+the front end is actually as big as the back end,
+which is really quite unusual.
+And that's because basically, as a human being,
+you've got this great hardware for basically parsing.
+You don't have hardware for type inference.
+And so what we've done is basically the keyword form
+that you saw, I remember you saw those two forms
+of Hoon, one using keywords and one using runes.
+I'm gonna step forward and show you.
+Here are two forms of fizzbuzz.
+On the right you see runes.
+On the left you see keywords.
+Stepping back for a second,
+to make these basically pronounceable,
+what we've done is taken every ASCII character
+and given it a single syllable name.
+So where, if you see like if here,
+so if is the colon prefixed f there.
+That's also the symbol that's actually
+in the physical twig.
+You can also, as a syntax, you can say question colon.
+I wouldn't say question colon though, I would say what?
+Which is a lot faster than the same question colon,
+not to mention ampersand.
+So basically everyone who's learned this is like,
+why doesn't everyone know this
+and why do I have to say till like my normal friends
+when I could say sick?
+So hopefully it'll catch on,
+if it doesn't catch on at least it's useful in Hoon.
+So if we go back to this and we look at the right,
+you would say gate infest atom or you would say
+park his infest atom for the start of that.
+Let me give you 20 seconds to just observe
+the fizz buzzes here.
+I think that the one on the left
+should be at least pretty readable.
+Okay, so that's Hoon.
+Let's move up on up to Arvo.
+Now we're at the operating system level.
+The kernel of Arvo is a Hoon core
+and this is basically where we get back
+to our transition function.
+So this core basically has a very fixed battery structure.
+You can think of it as basically like a V table
+with a fixed structure.
+And the Unix interpreter talks to this core
+basically at the knock level.
+In the life cycle function it's defined at the knock level.
+So you basically just hard code those formula offsets.
+You can just fix that
+because you have only a few functions there.
+So basically this is how you have a system
+that can completely upgrade itself
+because again the whole life cycle function
+is defined entirely in knock.
+And basically let's say you get an event
+and that event is actually a source code update
+in the revision control system
+that gives you new source code
+for Hoon the language itself.
+As long as your new language can build a core
+that is shaped like the ones that your old language built,
+you can turn Hoon into anything.
+So ARBO is actually a very, very simple system.
+It's only a few hundred lines of code.
+It probably should be less than 600 actually.
+What it does is it does sort of an internal event cascade.
+So you're all familiar with you know,
+like you get an event from the outside
+and then you're like this happened internally.
+Events systems that are very complicated
+and deep like this one very quickly
+turn into spaghetti event logic.
+There's a duality between events and procedure calls
+in which basically an event is a transfer of control
+essentially and if you take that duality simply,
+the dual of a simple event system is go to.
+So basically when you have, you're like,
+oh through these events and then it's like
+the system will go here and it will go there
+and it was like why are you doing this?
+So essentially we have what you might call
+the equivalent of a go sub for anyone
+no basic in this room, anyone?
+Wow, that's awesome.
+I don't feel so old now.
+So you have essentially the equivalent of subroutines
+in an event kind of model and you have basically
+this kind of causal model which I don't wanna get super into
+but definitely if you're building
+JavaScript event frameworks I think
+you could use something like this.
+It also has a global type referentially
+transparent namespace so basically use any data
+in the world as if it was a type constant.
+That's kind of nice.
+Most of the work of ARVO is done by what are called
+veins which are essentially kernel modules
+and they have essentially the same kind of core-like
+structure as the ARVO core itself.
+So these are loaded from source obviously at runtime.
+Let me just run through a few of the things we do.
+So encrypted packing networking,
+we'll talk about that in a sec.
+Timer is obviously clay which is like a typed git.
+Console obviously air.
+We'll see that hopefully driving a demo in a second.
+A function build system and I don't really know
+how to describe that and an application engine.
+And the applications again are cores within Gaul.
+So you have sort of these kind of multiple levels
+of virtualization.
+When you're running user level code
+you're actually running it in a virtual knock.
+And that virtual knock has an extra instruction.
+It has an instruction 11 that de-references
+the basically global namespace.
+So you're really like de-referencing the whole world
+as if it was a constant.
+Again that due to the way knock works
+you can basically virtualize at any depth
+of virtual interpreters without any real cost.
+Cause you're actually in implementation
+just setting a flag.
+All right that's a very, very broad overview of ARVO.
+Let's go back to the top and basically look
+at what Erbit is doing at the top level.
+So we're sort of back to the user level here.
+There's fortunately nothing else in the stack
+besides NACUN and ARVO and at the top level
+what users really see the most in Erbit
+is the public key infrastructure
+of kind of the identity model.
+Basically one Erbit is one event history.
+It's one state, it's one instance
+and it has one identity.
+And you know we basically establish that identity
+when we're booting the Erbit.
+What exactly is this identity?
+What does it mean?
+So basically again the kind of the great thing
+about doing things from a clean slate
+is you really get to think from scratch
+which is kind of neat.
+And one thing about networking
+that is done kind of in a conventional
+in the internet certainly is you have these two levels
+of well that could spit our audio.
+You have these two levels of addressing.
+So you have IP addressings and you have DNS.
+And the DNS is human meaningful
+and IP addresses are routable addresses.
+So in Erbit this is compressed into one layer.
+So you actually have one layer
+which is both a human memorable layer
+and it's both a routing address and a name.
+And it's actually your personal identity as well.
+It's also the base of a path
+in the global immutable namespace.
+So there's a problem called Zikos Triangle.
+Does anyone in the room know Zikos Triangle?
+We're definitely not in network land here.
+That's fine.
+Zikos Triangle basically says there are three things
+that you want out of an identity system.
+You want the names to be human meaningful.
+You want them to be secure
+and you want them to be decentralized.
+And you can get only two of those three things.
+So Facebook, Secure, I hope,
+human meaningful names definitely decentralized,
+not at all.
+BitTorrent, decentralized, yes, human meaningful names, no.
+And so there's basically a problem there
+that as an OS guy, what they teach us to do
+is find the trade off and almost solve the problem.
+So the trade off that we make here is basically,
+the trivial solution for an identity system of this scale
+is basically to say your identity
+is the hash of your initial public key.
+Very easy, IPFS uses this, very easy to do.
+How do you remember a 128-bit hash?
+You don't.
+And so what we're looking for is basically a way
+to make these names that are memorable,
+but not meaningful.
+So first trick we do is we basically come up
+with a new way of representing numbers.
+Many things like this have been done before,
+not super original, but we do a phonemic base 256.
+So if you look at my three numbers there,
+there's a hexadecimal number in urban syntax,
+there's an in-hune syntax, there's an IP address.
+We also have a syntax for that.
+And then there's 128, 42, 19, 109,
+versus patent of tarlott.
+Patent of tarlott is a lot easier to remember.
+It's kind of like a human name in a foreign language.
+People actually bond with these names
+very easily and very quickly.
+I'm a task-fine part of it, I think of myself.
+People say task-fine, I turn around.
+And so of course that's a 32-bit number,
+which is a lot shorter than a 128-bit number.
+So how you get from 128 bits to 32
+is tricky.
+So you can actually do the 128-bit hash
+of a public key thing, that's called a comment.
+Anyone can create their own urban identity.
+That is a completely non-scarce resource.
+And it's also, there's just no way
+of making a 128-bit number memorable.
+So what you notice is that basically
+the most valuable real estate in this
+is down at the bottom of this whole 128-bit space.
+And in fact, you can overlay a 128-bit hash
+will never be a 64-bit number.
+So you can overlay a completely different
+64-bit identity scheme on the bottom of this.
+So your 64-bit scheme is distributed hierarchically.
+It's basically, it's cryptographic property
+a little bit like Bitcoin, but it doesn't use a blockchain.
+So the way it works is that a 64-bit chip
+is the initial key is signed by its 32-bit parent,
+basically the half width prefix.
+The 32-bit chip is signed by a 16-bit parent.
+The 16-bit chip, which is a star,
+is signed by its 8-bit parent.
+And the fingerprints of 8-bit galaxies
+are hard-coded in the kernel source.
+This is what we call a pre-mind in the Bitcoin world.
+So basically again, this is a PKI
+in which revocation and renewal are the same thing.
+So basically when you wanna change a key,
+whether that's because you wanna give someone else
+this identity or you just feel like your key
+might be a little bit compromised,
+you basically sign the new key with the old key.
+Unless you're a moon,
+moon should not be floating around unaccompanied.
+You sign your own updates.
+So basically your parent signs the first key,
+but you sign the second.
+So you're genuinely independent here.
+The main sort of question in that is basically
+how these updates get distributed.
+Fortunately, there's a lot fewer of them
+than sort of the equivalent, which is like a Bitcoin spend.
+So there's a lot more room for basically
+just sort of handling it in a kind of less aggressive way
+than Bitcoin does.
+But it's the same basic principle.
+Your identity is definitely cryptographic property.
+You own it, you can sell it, et cetera.
+And there's the 32-bit point
+is clearly kind of the right point for human beings.
+One of the things about having these 32-bit names
+as your names is basically like in any situation
+in which people are actually using this system,
+some people are using it,
+but hopefully everyone will be using it.
+You have a scarcity there.
+You only have four billion.
+And so the price of the scarce resource cannot fault a zero.
+So one of the things about that situation
+is that the basic problem,
+one of the reasons why my mother
+can't run her own internet server
+is that the internet is basically, you know,
+a digital mazizly.
+I mean, it's just all kinds of scum and villainy are out there.
+And when you get a packet from someone,
+you have no way of ascertaining the reputation
+of this IP address.
+Yes, there are IP address reputation systems in practice.
+They basically turn off all residential things
+and don't let them send email.
+But the ownership of an IP address is not clear.
+And so you can't really use, an IP address is not property.
+You can't really use it as a mechanism in this way.
+When you basically have an address
+that's a scarce resource,
+let's say you paid 10 bucks for your planet.
+Okay, I paid 10 bucks so I wanna be able to compute.
+Then you're gonna send messages
+directly from that planet.
+You're definitely not gonna send them through
+like Google or some MTU, like, you know.
+And if you spam, like someone's like,
+hey, I got a spam from Taskline Partive.
+And you go on a blacklist like this.
+And basically your 10 bucks is now worthless
+because no one will accept anything
+from that planet anymore.
+So essentially in order, like your spam better
+have made you 10 bucks or like, you know,
+and that's a pretty high bar for spam.
+And so basically just by having this sort of limited
+supply of real estate that's treated as digital property,
+you basically have the basis for building
+a reputation system that works
+because the real killer of reputation systems
+is an infinite supply of identities.
+Because you have this problem where you're like,
+I've never seen this identity before.
+Maybe it's a new user.
+I really wanna say hi.
+Maybe it's that spammer I just banned.
+I really don't wanna say hi.
+That's kind of an unsolvable problem.
+And so basically I think this is one of the things like,
+you know, nobody, a tiny young network like Erbit,
+nobody abuses.
+But, you know, in the future, as you grow,
+basically you become a target.
+And so having a system like this
+helps you not be a target.
+Let's fall back on the point of all this.
+Inventing new system software is always a bad idea.
+It's a terrible, terrible thing to do.
+Never, never, never do this.
+So let's go back to basically the goal of this project,
+which is to build a personal server.
+So a personal server is gonna be a social server.
+So if you have a real personal server
+that's a real social server,
+when I socialize with you,
+in the one nearer case,
+barring like weird identity games,
+I shouldn't be sending packets directly to you.
+I shouldn't be sending packets to some Facebook thing
+over there that then sends them to you.
+I should be able to basically actually socialize
+in a distributed way using distributed protocols.
+And one of the things about the way we compute today,
+and the reason basically we don't do this,
+is that if you look at the difficulty
+of distributed programming,
+let's say you're building like a tic-tac-toe app,
+compare the difficulty of building distributed tic-tac-toe
+with the difficulty of building centralized tic-tac-toe.
+Centralized tic-tac-toe, my score,
+your score, they're variables.
+They're in the same data structure.
+It's easy.
+Then suddenly you're building distributed tic-tac-toe
+and you're like have to apply to the ITF for an RFC
+for your TTTTP, right?
+And it's just like six orders of magnitude different
+in difficulty.
+And if you wanna ask why we don't have
+a decentralized internet,
+basically the reason we don't have a decentralized internet
+is that decentralized programming is too damn hard.
+So basically you need to solve this problem
+if you're gonna build anything like a true personal server.
+So let me talk a little bit about
+the kind of programming or experience
+of where we're aiming to get with this.
+This is actually my next last slide.
+So let's see, first of all,
+you're programming in the system.
+You can dereference a global immutable namespace.
+So basically use any data in the world
+as if it was a typed constant.
+That's kinda nice.
+Your application state is permanent.
+You don't need a database to basically flush stuff out too
+when for your data actually exist.
+When you do an update,
+your updates basically come through reactively
+through the, you have basically a revision control system
+that's clay or I didn't talk much about that,
+but it's basically a revision control system with hooks.
+And so you're like, oh, I got a source code update
+for this thing I'm running.
+And then I'm like, oh, I need to change out the code.
+Oh, gee, the type of my data change.
+So I need to have a type adapter in there
+to make that work.
+That all works great.
+A very different experience from kind of updates
+or upgrades in a lot of systems.
+When you get to messaging patterns, basically,
+you've got a poke, which is a forward, basically,
+essentially an RTC without a return.
+And you've got a subscription model.
+Let's look at basically what we get with pokes
+for a moment.
+Number one, you get exactly once delivery.
+You've probably heard that exactly once delivery is impossible.
+It was a great blog post about that a few months ago.
+Exactly once delivery and message semantics
+actually is possible if all of your entities
+are single level stores.
+And if they can basically run permanent sessions.
+So you have a permanent session and you're like,
+oh, I expect message seven from you.
+Well, you're only gonna get message seven once.
+Where that breaks down in this kind of system
+where you have transient and permanent state
+is you reboot the computer and then you're like,
+do I expect message seven or message six?
+Or you have these idempotence problems.
+So every message is a transaction
+in this kind of distributed programming environment.
+If the transaction succeeds, there's no return data.
+So it's a one way transaction.
+Your messages are automatically type checked
+and validated on the receiving side.
+You can even do basically protocol type updates
+on the live network and not propagate errors to the user.
+The data that you get over the wire is passed to you typed.
+You basically just get it as an argument
+and it's a typed value.
+We do end-to-end acknowledgments,
+which basically means there's kind of a single error mode.
+So when you're doing acknowledgments,
+like think about you're doing a normal RPC or HTTP.
+Something goes wrong.
+Well, what could go wrong?
+Your socket could break.
+You could get an HTTP error.
+You could get an error at the RPC layer.
+What do you even do with half of these things?
+Like there are different kinds of error.
+And that basically is just very, very difficult to handle.
+So if you're basically doing acknowledgments
+at an end-to-end level,
+that means the packet level act that you send back
+is actually the transaction acknowledgement
+that you succeeded or failed.
+Messages are queued by the sender.
+Obviously, this is a P2P network.
+It traverses NAT and of course it's authenticated
+and encrypted.
+Your subscriptions are sending diffs.
+Those again are typed.
+So this is a very different distributed programming experience
+than your sort of normal, I'm writing this in node experience.
+And our experience is basically it's,
+you just do things and they pretty much just work.
+What is the status of this system?
+It's about 30,000 lines of Coon, including basic apps.
+It's totally open source.
+You can go to urban.org.
+And which is served by Arbit, although we cash it.
+And yeah, I mean, it essentially works.
+We were on occasional global flag days,
+so you might not want to move your business onto this system.
+But yeah, I mean, when creating a system like this,
+involves a lot of rewriting stuff over and over again
+until it actually works right.
+And we're basically getting to the end of that process
+and we're kind of close to being ready to sell
+some address space to the public.
+Let me do a quick demo of this system
+to see if it's actually working.
+I'm actually doing this over my,
+so here is, you're in Arbit.
+Live, yes, we're live.
+That bounced off the server and came back.
+So that's basically a simple console talk app.
+Hello from, a little bit slow on the typing there.
+Our console path is pretty complicated
+and we could use some serious optimization.
+Let me see if I can bring up the web UI of talk.
+Ah, yes, here is a web app.
+Let me get it fully up.
+Looks like it needs a reload,
+which it actually should not.
+Hate it when that happens.
+But here, basically, you're seeing a web UI.
+Do you want to say something?
+Anyone want to say something?
+I'll just be, hello from William the Comfort Inn.
+Boulder is beautiful.
+So, beautiful with an extra K.
+And this has to bounce off the server to get back.
+Actually, the Colorado's router
+seems to be blocking my transition directly.
+But, you know, I'm doing it via Verizon, so it works fine.
+TaskFind Partive is actually running on this laptop here.
+Yeah, so that was a very simple demo
+and now, any questions?
+Yes.
+So, does Richard Stallman know about this?
+I don't think so.
+Because I don't think this would really get
+to what Richard Stallman would like to see.
+Yeah, I think there's a lot of people
+who are tired of this sort of Facebook-ization
+of the internet.
+And this is definitely also, I mean, yeah,
+is this a list?
+Is this basically E-Max?
+At a certain level, it's basically E-Max.
+So, yeah, you know, all right,
+we're at a one-minute warning here.
+Time for maybe one or two more questions.
+Be over?
+Yes?
+So, I feel like maybe you're trying to
+talk to me confusing, like, do you use the word twig,
+but like, I'll be referred to as a nasty?
+Mm-hmm.
+Is there a particular reason for, like,
+these more or less travel elements?
+Yeah, I mean, the reason is basically you're,
+you want to use the word that the actual source code uses.
+Is the reason for that being the convention
+and the source code, is that a good reason?
+Maybe not necessarily.
+It certainly makes things kind of tire
+and more readable in a way.
+There's an aesthetic, which kind of,
+there's an aesthetic of short names,
+which works fairly well in kind of a functional environment,
+which wouldn't work in an imperative environment.
+But, yeah, I mean, you know, the criticism
+that this is a little more obfuscated
+than it has to be, is certainly one
+that I think holds a little bit of water.
+So, when you chat with the one message
+and so there's a browser,
+how do you go through the centralized events?
+So, that is basically, that, if you saw,
+if I turn on debugging, here,
+turn on debugging, and you'll see a lot of...
+Okay, so what's actually happening is that packet,
+so I'm logged into, I could log in via
+taskfinepartive.erb.org, here,
+let me turn this off, this is horrible.
+And I could log in via taskfinepartive.erb.org
+and be proxied by basically the star
+that is, taskfinepartive is a planet of.
+But, basically, I'm in a channel,
+that channel is hosted on DOSNEC,
+which is the star that I'm responsible to.
+And so, basically, that packet is going up to DOSNEC,
+coming back to me, and then it's going
+over localhost8080 to the browser.
+All right, any more questions?
+I think we're time.
+Thank you.
+Thank you.
+Thank you.
+Thank you.

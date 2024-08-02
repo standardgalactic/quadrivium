@@ -1,0 +1,6194 @@
+WEBVTT
+
+00:00.000 --> 00:05.800
+Hello, my name is Andrei and I've been training deep neural networks for a bit more than a decade and in this lecture
+
+00:05.800 --> 00:10.480
+I'd like to show you what neural network training looks like under the hood. So in particular
+
+00:10.480 --> 00:14.360
+we are going to start with a blank Jupyter notebook and by the end of this lecture
+
+00:14.360 --> 00:19.760
+we will define and train in neural net and you'll get to see everything that goes on under the hood and exactly
+
+00:20.080 --> 00:22.080
+sort of how that works on an intuitive level.
+
+00:22.480 --> 00:25.760
+Now specifically what I would like to do is I would like to take you through
+
+00:26.520 --> 00:31.840
+building of micrograd. Now micrograd is this library that I released on github about two years ago
+
+00:31.840 --> 00:36.400
+but at the time I only uploaded the source code and you'd have to go in by yourself and really
+
+00:37.200 --> 00:39.040
+figure out how it works.
+
+00:39.040 --> 00:43.720
+So in this lecture I will take you through it step by step and kind of comment on all the pieces of it.
+
+00:43.760 --> 00:46.240
+So what is micrograd and why is it interesting?
+
+00:47.240 --> 00:49.240
+Good.
+
+00:49.960 --> 00:54.320
+Micrograd is basically an autograd engine. Autograd is short for automatic gradient
+
+00:54.320 --> 01:02.040
+and really what it does is it implements back propagation. Now back propagation is this algorithm that allows you to efficiently evaluate the gradient of
+
+01:03.360 --> 01:07.640
+some kind of a loss function with respect to the weights of a neural network
+
+01:07.640 --> 01:14.800
+and what that allows us to do then is we can iteratively tune the weights of that neural network to minimize the loss function and therefore improve the
+
+01:14.880 --> 01:23.080
+accuracy of the network. So back propagation would be at the mathematical core of any modern deep neural network library like say PyTorch or JAX.
+
+01:23.760 --> 01:28.800
+So the functionality of micrograd is I think best illustrated by an example. So if we just scroll down here
+
+01:29.600 --> 01:33.760
+you'll see that micrograd basically allows you to build out mathematical expressions and
+
+01:35.120 --> 01:40.320
+here what we are doing is we have an expression that we're building out where you have two inputs A and B and
+
+01:41.280 --> 01:45.600
+you'll see that A and B are negative 4 and 2 but we are wrapping those
+
+01:46.120 --> 01:50.480
+values into this value object that we are going to build out as part of micrograd.
+
+01:50.880 --> 01:59.160
+So this value object will wrap the numbers themselves and then we are going to build out a mathematical expression here where A and B are
+
+01:59.760 --> 02:03.520
+transformed into C, D and eventually E, F and G and
+
+02:03.920 --> 02:10.720
+I'm showing some of the functionality of micrograd and the operations that it supports. So you can add two value objects
+
+02:10.720 --> 02:17.400
+you can multiply them, you can raise them to a constant power, you can offset by 1 negate, squash at 0
+
+02:18.400 --> 02:22.120
+square, divide by a constant, divide by it, etc.
+
+02:22.120 --> 02:29.760
+And so we're building out an expression graph with these two inputs A and B and we're creating an output value of G and
+
+02:30.840 --> 02:38.080
+micrograd will in the background build out this entire mathematical expression. So it will for example know that C is also a value,
+
+02:38.520 --> 02:41.120
+C was a result of an addition operation and
+
+02:41.680 --> 02:49.680
+the child nodes of C are A and B because they will maintain pointers to A and B value objects.
+
+02:49.720 --> 02:52.800
+So we'll basically know exactly how all of this is laid out and
+
+02:53.320 --> 02:58.360
+then not only can we do what we call the forward pass where we actually look at the value of G, of course,
+
+02:58.360 --> 03:05.240
+that's pretty straightforward. We will access that using the dot data attribute and so the output of the forward pass,
+
+03:05.360 --> 03:08.520
+the value of G is 24.7, it turns out,
+
+03:08.760 --> 03:14.560
+but the big deal is that we can also take this G value object and we can call dot backward and
+
+03:14.800 --> 03:18.600
+this will basically initialize back propagation at the node G.
+
+03:19.680 --> 03:25.960
+And what back propagation is going to do is it's going to start at G and it's going to go backwards through that expression graph
+
+03:25.960 --> 03:29.680
+and it's going to recursively apply the chain rule from calculus and
+
+03:30.320 --> 03:37.520
+what that allows us to do then is we're going to evaluate basically the derivative of G with respect to all the internal nodes
+
+03:37.920 --> 03:42.840
+like E, D and C, but also with respect to the inputs A and B and
+
+03:43.160 --> 03:48.400
+then we can actually query this derivative of G with respect to A, for example,
+
+03:48.400 --> 03:53.720
+that's a dot grad. In this case, it happens to be 138 and the derivative of G with respect to B,
+
+03:54.000 --> 04:00.280
+which also happens to be here, 645 and this derivative we'll see soon is very important information
+
+04:00.800 --> 04:06.040
+because it's telling us how A and B are affecting G through this mathematical expression.
+
+04:06.560 --> 04:11.160
+So in particular, A dot grad is 138. So if we slightly
+
+04:11.640 --> 04:14.000
+nudge A and make it slightly larger,
+
+04:14.960 --> 04:20.360
+138 is telling us that G will grow and the slope of that growth is going to be 138 and
+
+04:20.680 --> 04:23.960
+the slope of growth of B is going to be 645.
+
+04:24.200 --> 04:30.040
+So that's going to tell us about how G will respond if A and B get tweaked a tiny amount in a positive direction.
+
+04:30.960 --> 04:32.960
+Okay.
+
+04:33.120 --> 04:39.440
+Now, you might be confused about what this expression is that we built out here and this expression, by the way, is completely meaningless.
+
+04:39.440 --> 04:40.640
+I just made it up.
+
+04:40.640 --> 04:44.360
+I'm just flexing about the kinds of operations that are supported by micrograd.
+
+04:44.720 --> 04:50.340
+What we actually really care about are neural networks, but it turns out that neural networks are just mathematical expressions.
+
+04:50.440 --> 04:53.800
+Just like this one, but actually slightly a bit less crazy even.
+
+04:54.840 --> 04:56.840
+Neural networks are just a mathematical expression.
+
+04:56.840 --> 05:03.800
+They take the input data as an input and they take the weights of a neural network as an input and it's a mathematical expression and
+
+05:03.800 --> 05:08.400
+the output are your predictions of your neural net or the loss function. We'll see this in a bit.
+
+05:08.720 --> 05:13.280
+But basically neural networks just happen to be a certain class of mathematical expressions.
+
+05:13.640 --> 05:19.000
+But back propagation is actually significantly more general. It doesn't actually care about neural networks at all.
+
+05:19.000 --> 05:26.000
+It only cares about arbitrary mathematical expressions and then we happen to use that machinery for training of neural networks.
+
+05:26.120 --> 05:30.840
+Now, one more note I would like to make at this stage is that as you see here, micrograd is a scalar-valued
+
+05:31.160 --> 05:37.760
+autograd engine. So it's working on the, you know, level of individual scalars like negative 4 and 2 and we're taking neural nets
+
+05:37.760 --> 05:43.480
+and we're breaking them down all the way to these atoms of individual scalars and all the little pluses and times and it's just
+
+05:43.840 --> 05:47.680
+excessive. And so obviously you would never be doing any of this in production.
+
+05:47.680 --> 05:52.280
+It's really just for them for pedagogical reasons because it allows us to not have to deal with these
+
+05:52.640 --> 05:56.440
+end-dimensional tensors that you would use in modern deep neural network library.
+
+05:56.560 --> 06:04.600
+So this is really done so that you understand and refactor out back replication and chain rule and understanding of neural training and
+
+06:04.880 --> 06:10.320
+then if you actually want to train bigger networks, you have to be using these tensors, but none of the math changes.
+
+06:10.320 --> 06:15.240
+This is done purely for efficiency. We are basically taking scalar values, all the scalar values.
+
+06:15.240 --> 06:19.040
+We're packaging them up into tensors, which are just arrays of these scalars.
+
+06:19.040 --> 06:26.200
+And then because we have these large arrays, we're making operations on those large arrays that allows us to take advantage of the
+
+06:26.200 --> 06:31.960
+parallelism in a computer and all those operations can be done in parallel and then the whole thing runs faster.
+
+06:32.080 --> 06:35.120
+But really none of the math changes and they've done purely for efficiency.
+
+06:35.160 --> 06:39.000
+So I don't think that it's pedagogically useful to be dealing with tensors from scratch.
+
+06:39.240 --> 06:43.840
+And I think, and that's why I fundamentally wrote micrograd because you can understand how things work
+
+06:44.560 --> 06:47.400
+at the fundamental level and then you can speed it up later.
+
+06:48.160 --> 06:54.480
+OK, so here's the fun part. My claim is that micrograd is what you need to train neural networks and everything else is just efficiency.
+
+06:54.840 --> 07:00.560
+So you'd think that micrograd would be a very complex piece of code and that turns out to not be the case.
+
+07:01.080 --> 07:06.680
+So if we just go to micrograd and you'll see that there's only two files here in micrograd.
+
+07:07.040 --> 07:09.960
+This is the actual engine. It doesn't know anything about neural nets.
+
+07:10.240 --> 07:13.720
+And this is the entire neural nets library on top of micrograd.
+
+07:14.000 --> 07:16.720
+So engine and nn.py.
+
+07:17.320 --> 07:24.400
+So the actual back propagation autograd engine that gives you the power of neural networks is literally
+
+07:26.280 --> 07:31.600
+100 lines of code of like very simple Python, which we'll understand by the end of this lecture.
+
+07:32.240 --> 07:39.440
+And then nn.py, this neural network library built on top of the autograd engine is like a joke.
+
+07:39.560 --> 07:44.760
+It's like we have to define what is a neuron and then we have to define what is a layer of neurons.
+
+07:45.000 --> 07:49.440
+And then we define what is a multilateral perceptron, which is just a sequence of layers of neurons.
+
+07:49.920 --> 07:51.560
+And so it's just a total joke.
+
+07:52.120 --> 08:02.440
+So basically there's a lot of power that comes from only 150 lines of code and that's all you need to understand to understand your training and everything else is just efficiency.
+
+08:02.760 --> 08:07.560
+And of course there's a lot to efficiency, but fundamentally that's all that's happening.
+
+08:07.880 --> 08:11.160
+Okay, so now let's dive right in and implement micrograd step by step.
+
+08:11.520 --> 08:19.160
+The first thing I'd like to do is I'd like to make sure that you have a very good understanding intuitively of what a derivative is and exactly what information it gives you.
+
+08:19.720 --> 08:24.600
+So let's start with some basic imports that I copy paste in every Jupyter notebook always.
+
+08:25.360 --> 08:30.960
+And let's define the function scalar value function f of x as follows.
+
+08:31.520 --> 08:33.120
+So I just made this up randomly.
+
+08:33.160 --> 08:37.960
+I just wanted a scalar value function that takes a single scalar x and returns a single scalar y.
+
+08:38.680 --> 08:43.280
+And we can call this function of course, so we can pass in say 3.0 and get 20 back.
+
+08:44.000 --> 08:46.680
+Now we can also plot this function to get a sense of its shape.
+
+08:47.040 --> 08:51.400
+You can tell from the mathematical expression that this is probably a parabola, it's a quadratic.
+
+08:51.920 --> 09:03.360
+And so if we just create a set of scalar values that we can feed in using, for example, a range from negative 5 to 5 in steps of 0.25.
+
+09:04.080 --> 09:10.760
+So this is, so x is just from negative 5 to 5, not including 5, in steps of 0.25.
+
+09:11.560 --> 09:14.200
+And we can actually call this function on this NumPy array as well.
+
+09:14.240 --> 09:17.040
+So we get a set of y's if we call f on x's.
+
+09:17.760 --> 09:24.880
+And these y's are basically also applying the function on every one of these elements independently.
+
+09:25.520 --> 09:27.760
+And we can plot this using matplotlib.
+
+09:28.040 --> 09:31.960
+So plt.plot, x's and y's, and we get nice parabola.
+
+09:32.400 --> 09:38.680
+So previously here we fed in 3.0 somewhere here and we received 20 back, which is here, the y-coordinate.
+
+09:39.120 --> 09:45.040
+So now I'd like to think through what is the derivative of this function at any single input point x.
+
+09:45.680 --> 09:49.360
+Right, so what is the derivative at different points x of this function?
+
+09:49.880 --> 09:52.960
+Now, if you remember back to your calculus class, you've probably derived derivatives.
+
+09:53.240 --> 10:05.880
+So we take this mathematical expression, 3x squared minus 4x plus 5, and you would write out on a piece of paper and you would, you know, apply the product rule and all the other rules and derive the mathematical expression of the great derivative of the original function.
+
+10:06.120 --> 10:08.960
+And then you could plug in different x's and see what the derivative is.
+
+10:09.920 --> 10:15.920
+We're not going to actually do that because no one in neural networks actually writes out the expression for the neural net.
+
+10:15.960 --> 10:17.280
+It would be a massive expression.
+
+10:18.200 --> 10:20.520
+It would be, you know, thousands, tens of thousands of terms.
+
+10:20.520 --> 10:23.120
+No one actually derives the derivative, of course.
+
+10:23.560 --> 10:26.120
+And so we're not going to take this kind of like symbolic approach.
+
+10:26.400 --> 10:34.160
+Instead, what I'd like to do is I'd like to look at the definition of derivative and just make sure that we really understand what derivative is measuring, what it's telling you about the function.
+
+10:34.920 --> 10:36.720
+And so if we just look up derivative.
+
+10:39.960 --> 10:42.960
+We see that, okay, so this is not a very good definition of derivative.
+
+10:42.960 --> 10:45.960
+This is a definition of what it means to be differentiable.
+
+10:45.960 --> 10:52.960
+But if you remember from your calculus, it is the limit as h goes to zero of f of x plus h minus f of x over h.
+
+10:52.960 --> 11:04.960
+So basically what it's saying is if you slightly bump up, you're at some point x that you're interested in, or hey, and if you slightly bump up, you know, you slightly increase it by small number h.
+
+11:04.960 --> 11:06.960
+How does the function respond?
+
+11:06.960 --> 11:08.960
+With what sensitivity does it respond?
+
+11:08.960 --> 11:09.960
+What is the slope at that point?
+
+11:09.960 --> 11:12.960
+Does the function go up or does it go down and by how much?
+
+11:12.960 --> 11:18.960
+And that's the slope of that function, the slope of that response at that point.
+
+11:18.960 --> 11:24.960
+And so we can basically evaluate the derivative here numerically by taking a very small h.
+
+11:24.960 --> 11:27.960
+Of course, the definition would ask us to take h to zero.
+
+11:27.960 --> 11:30.960
+We're just going to pick a very small h, 0.001.
+
+11:30.960 --> 11:32.960
+And let's say we're interested in 0.3.0.
+
+11:32.960 --> 11:35.960
+So we can look at f of x, of course, as 20.
+
+11:35.960 --> 11:37.960
+And now f of x plus h.
+
+11:37.960 --> 11:42.960
+So if we slightly notch x in a positive direction, how is the function going to respond?
+
+11:42.960 --> 11:47.960
+And just looking at this, do you expect f of x plus h to be slightly greater than 20?
+
+11:47.960 --> 11:51.960
+Or do you expect it to be slightly lower than 20?
+
+11:51.960 --> 11:57.960
+And so since 3 is here and this is 20, if we slightly go positively, the function will respond positively.
+
+11:57.960 --> 12:00.960
+So you'd expect this to be slightly greater than 20.
+
+12:00.960 --> 12:05.960
+And by how much is telling you the sort of the strength of that slope, right?
+
+12:05.960 --> 12:07.960
+The size of the slope.
+
+12:07.960 --> 12:13.960
+So f of x plus h minus f of x, this is how much the function responded in the positive direction.
+
+12:13.960 --> 12:16.960
+And we have to normalize by the run.
+
+12:16.960 --> 12:19.960
+So we have the rise over run to get the slope.
+
+12:19.960 --> 12:23.960
+So this, of course, is just a numerical approximation of the slope
+
+12:23.960 --> 12:29.960
+because we have to make a very, very small to converge to the exact amount.
+
+12:29.960 --> 12:35.960
+Now if I'm doing too many zeros, at some point I'm going to get an incorrect answer
+
+12:35.960 --> 12:41.960
+because we're using floating point arithmetic and the representations of all these numbers in computer memory is finite
+
+12:41.960 --> 12:43.960
+and at some point we get into trouble.
+
+12:43.960 --> 12:47.960
+So we can converge towards the right answer with this approach.
+
+12:47.960 --> 12:51.960
+But basically at 3 the slope is 14.
+
+12:51.960 --> 12:57.960
+And you can see that by taking 3x squared minus 4x plus 5 and differentiating it in our head.
+
+12:57.960 --> 13:03.960
+So 3x squared would be 6x minus 4 and then we plug in x equals 3.
+
+13:03.960 --> 13:05.960
+So that's 18 minus 4 is 14.
+
+13:05.960 --> 13:07.960
+So this is correct.
+
+13:07.960 --> 13:09.960
+So that's at 3.
+
+13:09.960 --> 13:13.960
+Now how about the slope at, say, negative 3?
+
+13:13.960 --> 13:17.960
+What would you expect for the slope?
+
+13:17.960 --> 13:21.960
+Now telling the exact value is really hard, but what is the sign of that slope?
+
+13:21.960 --> 13:26.960
+So at negative 3 if we slightly go in the positive direction at x
+
+13:26.960 --> 13:28.960
+the function would actually go down.
+
+13:28.960 --> 13:30.960
+And so that tells you that the slope would be negative.
+
+13:30.960 --> 13:34.960
+So we'll get a slight number below 20.
+
+13:34.960 --> 13:38.960
+And so if we take the slope we expect something negative, negative 22.
+
+13:38.960 --> 13:43.960
+And at some point here of course the slope would be 0.
+
+13:43.960 --> 13:48.960
+Now for this specific function I looked it up previously and it's at point 2 over 3.
+
+13:48.960 --> 13:55.960
+So at roughly 2 over 3, that's somewhere here, this derivative would be 0.
+
+13:55.960 --> 14:03.960
+So basically at that precise point, if we nudge in a positive direction
+
+14:03.960 --> 14:04.960
+the function doesn't respond.
+
+14:04.960 --> 14:05.960
+This stays the same almost.
+
+14:05.960 --> 14:07.960
+And so that's why the slope is 0.
+
+14:07.960 --> 14:10.960
+Okay, now let's look at a bit more complex case.
+
+14:10.960 --> 14:13.960
+So we're going to start, you know, complexifying a bit.
+
+14:13.960 --> 14:18.960
+So now we have a function here with output variable d.
+
+14:18.960 --> 14:22.960
+That is a function of 3 scalar inputs, a, b, and c.
+
+14:22.960 --> 14:26.960
+So a, b, and c are some specific values, 3 inputs into our expression graph
+
+14:26.960 --> 14:28.960
+and a single output d.
+
+14:28.960 --> 14:31.960
+And so if we just print d, we do that.
+
+14:31.960 --> 14:35.960
+And so if we just print d, we get 4.
+
+14:35.960 --> 14:39.960
+And now what I'd like to do is I'd like to again look at the derivatives of d
+
+14:39.960 --> 14:41.960
+with respect to a, b, and c.
+
+14:41.960 --> 14:46.960
+And think through, again just the intuition of what this derivative is telling us.
+
+14:46.960 --> 14:51.960
+So in order to evaluate this derivative we're going to get a bit hacky here.
+
+14:51.960 --> 14:54.960
+We're going to again have a very small value of h.
+
+14:54.960 --> 14:59.960
+And then we're going to fix the inputs at some values that we're interested in.
+
+14:59.960 --> 15:05.960
+So this is the point a, b, c at which we're going to be evaluating the derivative of d
+
+15:05.960 --> 15:08.960
+with respect to all a, b, and c at that point.
+
+15:08.960 --> 15:12.960
+So there are the inputs and now we have d1 is that expression.
+
+15:12.960 --> 15:16.960
+And then we're going to, for example, look at the derivative of d with respect to a.
+
+15:16.960 --> 15:22.960
+So we'll take a and we'll bump it by h and then we'll get d2 to be the exact same function.
+
+15:23.960 --> 15:34.960
+And now we're going to print, you know, f1, d1 is d1, d2 is d2, and print slope.
+
+15:34.960 --> 15:43.960
+So the derivative or slope here will be, of course, d2 minus d1 divided by h.
+
+15:43.960 --> 15:50.960
+So d2 minus d1 is how much the function increased when we bumped the,
+
+15:50.960 --> 15:54.960
+the specific input that we're interested in by a tiny amount.
+
+15:54.960 --> 15:59.960
+And this is the normalized by h to get the slope.
+
+16:01.960 --> 16:10.960
+So, yeah, so this, so I just found this, we're going to print d1,
+
+16:11.960 --> 16:14.960
+which we know is 4.
+
+16:14.960 --> 16:19.960
+Now d2 will be bumped, a will be bumped by h.
+
+16:19.960 --> 16:26.960
+So let's just think through a little bit what d2 will be printed out here.
+
+16:26.960 --> 16:30.960
+In particular, d1 will be 4.
+
+16:30.960 --> 16:35.960
+Will d2 be a number slightly greater than 4 or slightly lower than 4?
+
+16:35.960 --> 16:39.960
+And it's going to tell us the sign of the derivative.
+
+16:39.960 --> 16:47.960
+So we're bumping a by h, b is minus 3, c is 10.
+
+16:47.960 --> 16:51.960
+So you can just intuitively think through this derivative and what it's doing.
+
+16:51.960 --> 16:56.960
+a will be slightly more positive and, but b is a negative number.
+
+16:56.960 --> 17:02.960
+So if a is slightly more positive, because b is negative 3,
+
+17:02.960 --> 17:07.960
+we're actually going to be adding less to d.
+
+17:07.960 --> 17:12.960
+So you'd actually expect that the value of the function will go down.
+
+17:12.960 --> 17:15.960
+So let's just see this.
+
+17:15.960 --> 17:19.960
+Yeah, and so we went from 4 to 3.9996.
+
+17:19.960 --> 17:25.960
+And that tells you that the slope will be negative and then will be a negative number
+
+17:25.960 --> 17:30.960
+because we went down and then the exact number of slope will be,
+
+17:30.960 --> 17:32.960
+exact amount of slope is negative 3.
+
+17:32.960 --> 17:37.960
+And you can also convince yourself that negative 3 is the right answer mathematically and analytically
+
+17:37.960 --> 17:42.960
+because if you have a times b plus c and you have calculus,
+
+17:42.960 --> 17:47.960
+then differentiating a times b plus c with respect to a gives you just b.
+
+17:47.960 --> 17:51.960
+And indeed, the value of b is negative 3, which is the derivative that we have.
+
+17:51.960 --> 17:54.960
+So you can tell that that's correct.
+
+17:54.960 --> 18:00.960
+So now if we do this with b, so if we bump b by a little bit in a positive direction,
+
+18:00.960 --> 18:02.960
+we'd get different slopes.
+
+18:02.960 --> 18:05.960
+So what is the influence of b on the output d?
+
+18:05.960 --> 18:08.960
+So if we bump b by a tiny amount in a positive direction,
+
+18:08.960 --> 18:14.960
+then because a is positive, we'll be adding more to d, right?
+
+18:14.960 --> 18:17.960
+So, and now what is the, what is the sensitivity?
+
+18:17.960 --> 18:19.960
+What is the slope of that addition?
+
+18:19.960 --> 18:23.960
+And it might not surprise you that this should be 2.
+
+18:23.960 --> 18:25.960
+And why is it 2?
+
+18:25.960 --> 18:32.960
+d of d by db, differentiating with respect to b would give us a and the value of a is 2.
+
+18:32.960 --> 18:34.960
+So that's also working well.
+
+18:34.960 --> 18:41.960
+And then if c gets bumped a tiny amount in h by h, then of course a times b is unaffected.
+
+18:41.960 --> 18:43.960
+And now c becomes slightly bit higher.
+
+18:43.960 --> 18:45.960
+What does that do to the function?
+
+18:45.960 --> 18:48.960
+It makes it slightly bit higher because we're simply adding c.
+
+18:48.960 --> 18:52.960
+And it makes it slightly bit higher by the exact same amount that we added to c.
+
+18:52.960 --> 18:55.960
+And so that tells you that the slope is 1.
+
+18:55.960 --> 19:04.960
+That will be the rate at which d will increase as we scale c.
+
+19:04.960 --> 19:08.960
+Okay, so we now have some intuitive sense of what this derivative is telling you about the function.
+
+19:08.960 --> 19:10.960
+And we'd like to move to neural networks.
+
+19:10.960 --> 19:14.960
+Now, as I mentioned, neural networks will be pretty massive expressions, mathematical expressions.
+
+19:14.960 --> 19:17.960
+So we need some data structures that maintain these expressions.
+
+19:17.960 --> 19:19.960
+And that's what we're going to start to build out now.
+
+19:19.960 --> 19:26.960
+So we're going to build out this value object that I showed you in the readme page of micrograd.
+
+19:26.960 --> 19:32.960
+So let me copy paste a skeleton of the first very simple value object.
+
+19:32.960 --> 19:38.960
+So class value takes a single scalar value that it wraps and keeps track of.
+
+19:38.960 --> 19:40.960
+And that's it.
+
+19:40.960 --> 19:47.960
+So we can, for example, do value of 2.0 and then we can get, we can look at its content.
+
+19:47.960 --> 19:56.960
+And Python will internally use the wrapper function to return this string.
+
+19:56.960 --> 19:58.960
+Like that.
+
+19:58.960 --> 20:02.960
+So this is a value object with data equals 2 that we're creating here.
+
+20:02.960 --> 20:09.960
+Now what we'd like to do is like, we'd like to be able to have not just like two values,
+
+20:09.960 --> 20:11.960
+but we'd like to do p plus b, right?
+
+20:11.960 --> 20:13.960
+We'd like to add them.
+
+20:13.960 --> 20:18.960
+So currently you would get an error because Python doesn't know how to add two value objects.
+
+20:18.960 --> 20:20.960
+So we have to tell it.
+
+20:20.960 --> 20:25.960
+So here's addition.
+
+20:25.960 --> 20:32.960
+So you have to basically use these special double underscore methods in Python to define these operators for these objects.
+
+20:32.960 --> 20:43.960
+So if we call the, if we use this plus operator, Python will internally call a dot pad of b.
+
+20:43.960 --> 20:45.960
+That's what will happen internally.
+
+20:45.960 --> 20:50.960
+And so b will be the other and self will be a.
+
+20:50.960 --> 20:53.960
+And so we see that what we're going to return is a new value object.
+
+20:53.960 --> 20:59.960
+And it's just going to be wrapping the plus of their data.
+
+20:59.960 --> 21:03.960
+But remember now because data is the actual like numbered Python number.
+
+21:03.960 --> 21:08.960
+So this operator here is just the typical floating point plus addition.
+
+21:08.960 --> 21:13.960
+Now it's not an addition of value objects and we'll return a new value.
+
+21:13.960 --> 21:19.960
+So now a plus b should work and it should print value of negative one because that's two plus minus three.
+
+21:19.960 --> 21:21.960
+There we go.
+
+21:21.960 --> 21:26.960
+Okay, let's now implement multiply just so we can recreate this expression here.
+
+21:26.960 --> 21:30.960
+So multiply, I think it won't surprise you will be fairly similar.
+
+21:30.960 --> 21:33.960
+So instead of add, we're going to be using mall.
+
+21:33.960 --> 21:36.960
+And then here, of course, we want to do times.
+
+21:36.960 --> 21:40.960
+And so now we can create a c value object, which will be 10.0.
+
+21:40.960 --> 21:43.960
+And now we should be able to do a times b.
+
+21:43.960 --> 21:47.960
+Well, let's just do a times b first.
+
+21:47.960 --> 21:50.960
+That's value of negative six now.
+
+21:50.960 --> 21:52.960
+And by the way, I skipped over this a little bit.
+
+21:52.960 --> 21:55.960
+I suppose that I didn't have the wrapper function here.
+
+21:55.960 --> 21:58.960
+Then it's just that you'll get some kind of an ugly expression.
+
+21:58.960 --> 22:04.960
+So what rapper is doing is it's providing us a way to print out like a nicer looking expression in Python.
+
+22:04.960 --> 22:07.960
+So we don't just have something cryptic.
+
+22:07.960 --> 22:11.960
+We actually are, you know, it's value of negative six.
+
+22:11.960 --> 22:13.960
+So this gives us a times.
+
+22:13.960 --> 22:20.960
+And then this we should now be able to add c to it because we've defined and told the Python how to do mall and add.
+
+22:20.960 --> 22:27.960
+So this will call this will basically be equivalent to a dot mall of B.
+
+22:27.960 --> 22:32.960
+And then this new value object will be dot add of C.
+
+22:32.960 --> 22:34.960
+And so let's see if that worked.
+
+22:34.960 --> 22:35.960
+Yep, so that worked well.
+
+22:35.960 --> 22:38.960
+That gave us four, which is what we expect from before.
+
+22:38.960 --> 22:41.960
+And I believe we can just call them manually as well.
+
+22:41.960 --> 22:42.960
+There we go.
+
+22:42.960 --> 22:44.960
+So, yeah.
+
+22:44.960 --> 22:48.960
+Okay, so now what we are missing is the connected tissue of this expression.
+
+22:48.960 --> 22:50.960
+As I mentioned, we want to keep these expression graphs.
+
+22:50.960 --> 22:56.960
+So we need to know and keep pointers about what values produce what other values.
+
+22:56.960 --> 23:00.960
+So here, for example, we are going to introduce a new variable, which will call children.
+
+23:00.960 --> 23:02.960
+And by default, it will be an empty tuple.
+
+23:02.960 --> 23:10.960
+And then we're actually going to keep a slightly different variable in the class, which will call underscore prime, which will be the set of children.
+
+23:10.960 --> 23:11.960
+This is how I done.
+
+23:11.960 --> 23:14.960
+I did it in the original micrograd looking at my code here.
+
+23:14.960 --> 23:20.960
+I can't remember exactly the reason I believe it was efficiency, but this underscore children will be a tuple for convenience.
+
+23:20.960 --> 23:24.960
+But then when we actually maintain it in the class, it will be just this set.
+
+23:24.960 --> 23:27.960
+I believe for efficiency.
+
+23:27.960 --> 23:34.960
+So now when we are creating a value like this with a constructor, children will be empty and prep will be the empty set.
+
+23:34.960 --> 23:43.960
+But when we're creating a value through addition or multiplication, we're going to feed in the children of this value, which in this case is self and other.
+
+23:44.960 --> 23:47.960
+So those are the children here.
+
+23:49.960 --> 23:51.960
+So now we can do the dot prep.
+
+23:51.960 --> 23:58.960
+And we'll see that the children of the we now know are this value of negative six and value of 10.
+
+23:58.960 --> 24:04.960
+And this, of course, is the value resulting from a times B and the C value, which is 10.
+
+24:04.960 --> 24:07.960
+Now, the last piece of information we don't know.
+
+24:08.960 --> 24:13.960
+So we know now the children of every single value, but we don't know what operation created this value.
+
+24:13.960 --> 24:15.960
+So we need one more element here.
+
+24:15.960 --> 24:17.960
+Let's call it underscore pop.
+
+24:17.960 --> 24:21.960
+And by default, this is the 50 set for leaves.
+
+24:21.960 --> 24:24.960
+And then we'll just maintain it here.
+
+24:24.960 --> 24:27.960
+And now the operation will be just a simple string.
+
+24:27.960 --> 24:29.960
+And in the case of addition, it's plus.
+
+24:29.960 --> 24:32.960
+In the case of multiplication, it's times.
+
+24:33.960 --> 24:37.960
+So now we not just have D dot prep, we also have a D dot up.
+
+24:37.960 --> 24:41.960
+And we know that D was produced by an addition of those two values.
+
+24:41.960 --> 24:46.960
+And so now we have the full mathematical expression and we're building out this data structure.
+
+24:46.960 --> 24:51.960
+And we know exactly how each value came to be by what expression and from what other values.
+
+24:53.960 --> 25:01.960
+Now, because these expressions are about to get quite a bit larger, we'd like a way to nicely visualize these expressions that we're building out.
+
+25:01.960 --> 25:08.960
+So for that, I'm going to copy paste a bunch of slightly scary code that's going to visualize these expression graphs for us.
+
+25:08.960 --> 25:11.960
+So here's the code and I'll explain it in a bit.
+
+25:11.960 --> 25:14.960
+But first, let me just show you what this code does.
+
+25:14.960 --> 25:19.960
+Basically, what it does is it creates a new function draw dot that we can call on some root node.
+
+25:19.960 --> 25:21.960
+And then it's going to visualize it.
+
+25:21.960 --> 25:30.960
+So if we call draw dot on D, which is this final value here, that is eight times B plus C, it creates something like this.
+
+25:30.960 --> 25:39.960
+So this is D, and you see that this is a times B, creating an interpretive value plus C gives us this output node D.
+
+25:39.960 --> 25:41.960
+So that's draw dot on D.
+
+25:41.960 --> 25:44.960
+And I'm not going to go through this in complete detail.
+
+25:44.960 --> 25:47.960
+You can take a look at Graphis and its API.
+
+25:47.960 --> 25:50.960
+Graphis is an open source graph visualization software.
+
+25:50.960 --> 25:54.960
+And what we're doing here is we're building out this graph in the Graphis API.
+
+25:55.960 --> 26:02.960
+And you can basically see that trace is this helper function that enumerates all of the nodes and edges in the graph.
+
+26:02.960 --> 26:04.960
+So that just builds a set of all the nodes and edges.
+
+26:04.960 --> 26:12.960
+And then we iterate for all the nodes and we create special node objects for them in using dot node.
+
+26:12.960 --> 26:16.960
+And then we also create edges using dot dot edge.
+
+26:16.960 --> 26:23.960
+And the only thing that's like slightly tricky here is you'll notice that I basically add these fake nodes, which are these operation nodes.
+
+26:23.960 --> 26:27.960
+So for example, this node here is just like a plus node.
+
+26:27.960 --> 26:36.960
+And I create these special op nodes here and I connect them accordingly.
+
+26:36.960 --> 26:41.960
+So these nodes, of course, are not actual nodes in the original graph.
+
+26:41.960 --> 26:43.960
+They're not actually a value object.
+
+26:43.960 --> 26:46.960
+The only value objects here are the things in squares.
+
+26:46.960 --> 26:49.960
+Those are actual value objects or representations thereof.
+
+26:49.960 --> 26:54.960
+And these op nodes are just created in this draw dot routine so that it looks nice.
+
+26:54.960 --> 26:59.960
+Let's also add labels to these graphs just so we know what variables are where.
+
+26:59.960 --> 27:10.960
+So let's create a special underscore label or let's just do label equals empty by default and save it in each node.
+
+27:10.960 --> 27:21.960
+And then here we're going to do label is a label is the label is C.
+
+27:21.960 --> 27:29.960
+And then let's create a special equals a times B.
+
+27:30.960 --> 27:33.960
+And label will be E.
+
+27:33.960 --> 27:41.960
+It's kind of naughty and E will be E plus C and D dot label will be B.
+
+27:41.960 --> 27:43.960
+Okay, so nothing really changes.
+
+27:43.960 --> 27:47.960
+I just added this new E function, new E variable.
+
+27:47.960 --> 27:53.960
+And then here when we are printing this, I'm going to print the label here.
+
+27:53.960 --> 27:58.960
+So this will be a percent s bar and this will be end up label.
+
+28:00.960 --> 28:04.960
+And so now we have the label on the lot here.
+
+28:04.960 --> 28:10.960
+So this is a B creating me and then E plus C creates D just like we have it here.
+
+28:10.960 --> 28:13.960
+And finally, let's make this expression just one layer deeper.
+
+28:13.960 --> 28:16.960
+So D will not be the final output node.
+
+28:16.960 --> 28:22.960
+Instead, after D, we are going to create a new value object called F.
+
+28:22.960 --> 28:24.960
+We're going to start running out of variables soon.
+
+28:24.960 --> 28:29.960
+F will be negative 2.0 and its label will of course just be F.
+
+28:29.960 --> 28:36.960
+And then L capital L will be the output of our graph and L will be P times F.
+
+28:36.960 --> 28:40.960
+So L will be negative 8 is the output.
+
+28:40.960 --> 28:47.960
+So now we don't just draw a D, we draw L.
+
+28:48.960 --> 28:51.960
+Okay.
+
+28:51.960 --> 28:54.960
+And somehow the label of L was undefined.
+
+28:54.960 --> 28:55.960
+Oops.
+
+28:55.960 --> 28:58.960
+All that label has to be explicitly sort of given to it.
+
+28:58.960 --> 28:59.960
+There we go.
+
+28:59.960 --> 29:01.960
+So L is the output.
+
+29:01.960 --> 29:03.960
+So let's quickly recap what we've done so far.
+
+29:03.960 --> 29:08.960
+We are able to build out mathematical expressions using only plus and times so far.
+
+29:08.960 --> 29:10.960
+They are scalar valued along the way.
+
+29:10.960 --> 29:15.960
+And we can do this forward pass and build out a mathematical expression.
+
+29:15.960 --> 29:18.960
+So we have multiple inputs here, A, B, C, and F,
+
+29:18.960 --> 29:23.960
+going into a mathematical expression that produces a single output L.
+
+29:23.960 --> 29:26.960
+And this here is visualizing the forward pass.
+
+29:26.960 --> 29:29.960
+So the output of the forward pass is negative 8.
+
+29:29.960 --> 29:30.960
+That's the value.
+
+29:30.960 --> 29:34.960
+Now what we'd like to do next is we'd like to run back propagation.
+
+29:34.960 --> 29:37.960
+And in back propagation, we are going to start here at the end
+
+29:37.960 --> 29:44.960
+and we're going to reverse and calculate the gradient along all these intermediate values.
+
+29:44.960 --> 29:48.960
+And really what we're computing for every single value here,
+
+29:48.960 --> 29:54.960
+we're going to compute the derivative of that node with respect to L.
+
+29:54.960 --> 29:59.960
+So the derivative of L with respect to L is just 1.
+
+29:59.960 --> 30:03.960
+And then we're going to derive what is the derivative of L with respect to F
+
+30:03.960 --> 30:06.960
+with respect to D with respect to C with respect to E
+
+30:06.960 --> 30:09.960
+with respect to B and with respect to A.
+
+30:09.960 --> 30:13.960
+And in a neural network setting, you'd be very interested in the derivative
+
+30:13.960 --> 30:18.960
+of basically this loss function L with respect to the weights of a neural network.
+
+30:18.960 --> 30:21.960
+And here, of course, we have just these variables A, B, C, and F,
+
+30:21.960 --> 30:25.960
+but some of these will eventually represent the weights of a neural net.
+
+30:25.960 --> 30:29.960
+And so we'll need to know how those weights are impacting the loss function.
+
+30:29.960 --> 30:32.960
+So we'll be interested basically in the derivative of the output
+
+30:32.960 --> 30:34.960
+with respect to some of its leaf nodes.
+
+30:34.960 --> 30:37.960
+And those leaf nodes will be the weights of the neural net.
+
+30:37.960 --> 30:40.960
+And the other leaf nodes, of course, will be the data itself.
+
+30:40.960 --> 30:44.960
+But usually we will not want or use the derivative of the loss function
+
+30:44.960 --> 30:46.960
+with respect to data because the data is fixed,
+
+30:46.960 --> 30:51.960
+but the weights will be iterated on using the gradient information.
+
+30:51.960 --> 30:54.960
+So next we are going to create a variable inside the value class
+
+30:54.960 --> 31:00.960
+that maintains the derivative of L with respect to that value.
+
+31:00.960 --> 31:03.960
+And we will call this variable grad.
+
+31:03.960 --> 31:08.960
+So there's a dot data, and there's a self grad, and initially it will be zero.
+
+31:08.960 --> 31:12.960
+And remember that zero is basically means no effect.
+
+31:12.960 --> 31:16.960
+So at initialization, we're assuming that every value does not impact,
+
+31:16.960 --> 31:19.960
+does not affect the output, right?
+
+31:19.960 --> 31:22.960
+Because if the gradient is zero, that means that changing this variable
+
+31:22.960 --> 31:24.960
+is not changing the loss function.
+
+31:24.960 --> 31:28.960
+So by default, we assume that the gradient is zero.
+
+31:28.960 --> 31:36.960
+And then now that we have grad, and it's 0.0,
+
+31:36.960 --> 31:39.960
+we are going to be able to visualize it here after data.
+
+31:39.960 --> 31:45.960
+So here grad is 0.4f, and this will be in dot grad.
+
+31:45.960 --> 31:53.960
+And now we are going to be showing both the data and the grad initialized at zero.
+
+31:53.960 --> 31:57.960
+And we are just about getting ready to calculate the back propagation.
+
+31:57.960 --> 32:01.960
+So first this grad, again, as I mentioned, is representing the derivative of the output,
+
+32:01.960 --> 32:05.960
+in this case L, with respect to this value.
+
+32:05.960 --> 32:10.960
+So this is the derivative of L with respect to F, with respect to D, and so on.
+
+32:10.960 --> 32:14.960
+So let's now fill in those gradients and actually do the back propagation manually.
+
+32:14.960 --> 32:18.960
+So let's start filling in these gradients and start all the way at the end, as I mentioned here.
+
+32:18.960 --> 32:21.960
+First, we are interested to fill in this gradient here.
+
+32:21.960 --> 32:25.960
+So what is the derivative of L with respect to L?
+
+32:25.960 --> 32:31.960
+If I change L by a tiny amount of h, how much does L change?
+
+32:31.960 --> 32:33.960
+It changes by h.
+
+32:33.960 --> 32:36.960
+So it's proportional and therefore the derivative will be 1.
+
+32:36.960 --> 32:41.960
+We can of course measure these or estimate these numerical gradients numerically,
+
+32:41.960 --> 32:43.960
+just like we've seen before.
+
+32:43.960 --> 32:50.960
+So if I take this expression and I create a def lol function here and put this here.
+
+32:50.960 --> 32:54.960
+Now the reason I'm creating a gating function lol here is because I don't want to pollute
+
+32:54.960 --> 32:56.960
+or mess up the global scope here.
+
+32:56.960 --> 32:58.960
+This is just kind of like a little staging area.
+
+32:58.960 --> 33:02.960
+And as you know in Python, all of these will be local variables to this function.
+
+33:02.960 --> 33:05.960
+So I'm not changing any of the global scope here.
+
+33:05.960 --> 33:12.960
+So here L1 will be L and then copy-pasting this expression,
+
+33:12.960 --> 33:20.960
+we're going to add a small amount h in, for example, A.
+
+33:20.960 --> 33:24.960
+And this will be measuring the derivative of L with respect to A.
+
+33:24.960 --> 33:29.960
+So here this will be L2 and then we want to print that derivative.
+
+33:29.960 --> 33:36.960
+So print L2 minus L1, which is how much L changed and then normalize it by h.
+
+33:36.960 --> 33:38.960
+So this is the rise over run.
+
+33:38.960 --> 33:41.960
+And we have to be careful because L is a value node.
+
+33:41.960 --> 33:48.960
+So we actually want its data so that these are floats dividing by h.
+
+33:48.960 --> 33:51.960
+And this should print the derivative of L with respect to A,
+
+33:51.960 --> 33:54.960
+because A is the one that we bumped a little bit by h.
+
+33:54.960 --> 33:58.960
+So what is the derivative of L with respect to A?
+
+33:58.960 --> 34:00.960
+It's 6.
+
+34:00.960 --> 34:01.960
+Okay.
+
+34:01.960 --> 34:11.960
+And obviously if we change L by h, then that would be here effectively.
+
+34:11.960 --> 34:15.960
+This looks really awkward, but changing L by h,
+
+34:15.960 --> 34:20.960
+you see the derivative here is 1.
+
+34:20.960 --> 34:24.960
+That's kind of like the base case of what we are doing here.
+
+34:24.960 --> 34:29.960
+So basically we come up here and we can manually set L.grad to 1.
+
+34:29.960 --> 34:31.960
+This is our manual back propagation.
+
+34:31.960 --> 34:38.960
+L.grad is 1 and let's redraw and we'll see that we filled in grad is 1 for L.
+
+34:38.960 --> 34:40.960
+We're now going to continue the back propagation.
+
+34:40.960 --> 34:44.960
+So let's here look at the derivatives of L with respect to D and F.
+
+34:44.960 --> 34:47.960
+Let's do D first.
+
+34:47.960 --> 34:50.960
+So what we are interested in, if I create a markdown on here,
+
+34:50.960 --> 34:53.960
+is we'd like to know, basically we have that L is D times F,
+
+34:53.960 --> 34:59.960
+and we'd like to know what is DL by DD.
+
+34:59.960 --> 35:01.960
+What is that?
+
+35:01.960 --> 35:05.960
+And if you know you're a calculus, L is D times F, so what is DL by DD?
+
+35:05.960 --> 35:07.960
+It would be F.
+
+35:07.960 --> 35:10.960
+And if you don't believe me, we can also just derive it
+
+35:10.960 --> 35:12.960
+because the proof would be fairly straightforward.
+
+35:12.960 --> 35:17.960
+We go to the definition of the derivative,
+
+35:17.960 --> 35:21.960
+which is F of X plus H minus F of X divide H
+
+35:21.960 --> 35:25.960
+as a limit of H goes to 0 of this kind of expression.
+
+35:25.960 --> 35:31.960
+So when we have L as D times F, then increasing D by H
+
+35:31.960 --> 35:35.960
+would give us the output of D plus H times F.
+
+35:35.960 --> 35:38.960
+That's basically F of X plus H, right?
+
+35:38.960 --> 35:43.960
+Minus D times F, and then divide H.
+
+35:43.960 --> 35:46.960
+And symbolically, expanding out here, we would have basically
+
+35:46.960 --> 35:51.960
+D times F plus H times F minus D times F divide H.
+
+35:51.960 --> 35:54.960
+And then you see how the DF minus DF cancels,
+
+35:54.960 --> 35:59.960
+so you're left with H times F, divide H, which is F.
+
+35:59.960 --> 36:07.960
+So in the limit as H goes to 0 of derivative definition,
+
+36:07.960 --> 36:11.960
+we just get F in a case of D times F.
+
+36:11.960 --> 36:17.960
+So symmetrically, DL by DF will just be D.
+
+36:17.960 --> 36:21.960
+So what we have is that F dot grad, we see now,
+
+36:21.960 --> 36:28.960
+is just the value of D, which is 4.
+
+36:28.960 --> 36:36.960
+And we see that D dot grad is just the value of F.
+
+36:36.960 --> 36:40.960
+And so the value of F is negative 2.
+
+36:40.960 --> 36:44.960
+So we'll set those manually.
+
+36:44.960 --> 36:50.960
+Let me erase this markdown node, and then let's redraw what we have.
+
+36:50.960 --> 36:53.960
+And let's just make sure that these were correct.
+
+36:53.960 --> 36:59.960
+So we seem to think that DL by DD is negative 2, so let's double check.
+
+36:59.960 --> 37:01.960
+Let me erase this plus H from before.
+
+37:01.960 --> 37:04.960
+And now we want the derivative with respect to F.
+
+37:04.960 --> 37:08.960
+So let's just come here when I create F, and let's do a plus H here.
+
+37:08.960 --> 37:13.960
+And this should print a derivative of L with respect to F, so we expect to see 4.
+
+37:13.960 --> 37:18.960
+Yeah, and this is 4 up to floating point funkiness.
+
+37:18.960 --> 37:24.960
+And then DL by DD should be F, which is negative 2.
+
+37:24.960 --> 37:26.960
+Grad is negative 2.
+
+37:26.960 --> 37:34.960
+So if we, again, come here and we change D, D dot data plus equals H, right here.
+
+37:34.960 --> 37:39.960
+So we've added a little H, and then we see how L changed.
+
+37:39.960 --> 37:44.960
+And we expect to print negative 2.
+
+37:44.960 --> 37:47.960
+There we go.
+
+37:47.960 --> 37:49.960
+So we've numerically verified.
+
+37:49.960 --> 37:52.960
+What we're doing here is we're kind of like an inline gradient check.
+
+37:52.960 --> 37:59.960
+The inline check is when we are deriving this like back propagation and getting the derivative with respect to all the intermediate results.
+
+37:59.960 --> 38:05.960
+And then numerical gradient is just estimating it using small step size.
+
+38:05.960 --> 38:08.960
+Now we're getting to the crux of back propagation.
+
+38:08.960 --> 38:14.960
+So this will be the most important node to understand, because if you understand the gradient for this node,
+
+38:14.960 --> 38:18.960
+you understand all of back propagation and all of training on neural nets, basically.
+
+38:18.960 --> 38:22.960
+So we need to derive DL by DC.
+
+38:22.960 --> 38:28.960
+In other words, the derivative of L with respect to C, because we've computed all these other gradients already.
+
+38:28.960 --> 38:32.960
+Now we're coming here and we're continuing the back propagation manually.
+
+38:32.960 --> 38:37.960
+So we want DL by DC, and then we'll also derive DL by DE.
+
+38:37.960 --> 38:39.960
+Now here's the problem.
+
+38:39.960 --> 38:43.960
+How do we derive DL by DC?
+
+38:43.960 --> 38:49.960
+We actually know the derivative L with respect to D, so we know how L is sensitive to D.
+
+38:49.960 --> 38:52.960
+But how is L sensitive to C?
+
+38:52.960 --> 38:57.960
+So if we wiggle C, how does that impact L through D?
+
+38:57.960 --> 39:04.960
+So we know DL by DC, and we also here know how C impacts D.
+
+39:04.960 --> 39:10.960
+And so just very intuitively, if you know the impact that C is having on D and the impact that D is having on L,
+
+39:10.960 --> 39:15.960
+then you should be able to somehow put that information together to figure out how C impacts L.
+
+39:15.960 --> 39:18.960
+And indeed, this is what we can actually do.
+
+39:18.960 --> 39:21.960
+So in particular, we know just concentrating on D first.
+
+39:21.960 --> 39:25.960
+Let's look at how, what is the derivative basically of D with respect to C?
+
+39:25.960 --> 39:30.960
+So in other words, what is DD by DC?
+
+39:30.960 --> 39:35.960
+So here we know that D is C times C plus E, that's what we know.
+
+39:35.960 --> 39:38.960
+And now we're interested in DD by DC.
+
+39:38.960 --> 39:43.960
+If you just know your calculus again and you remember that differentiating C plus E with respect to C,
+
+39:43.960 --> 39:46.960
+you know that that gives you 1.0.
+
+39:46.960 --> 39:49.960
+And we can also go back to the basics and derive this.
+
+39:49.960 --> 39:55.960
+Because again, we can go to our f of x plus h minus f of x divided by h.
+
+39:55.960 --> 39:58.960
+That's the definition of a derivative as h goes to 0.
+
+39:58.960 --> 40:03.960
+And so here, focusing on C and its effect on D,
+
+40:03.960 --> 40:10.960
+we can basically do the f of x plus h will be C is incremented by h plus C.
+
+40:10.960 --> 40:15.960
+That's the first evaluation of our function minus C plus E.
+
+40:15.960 --> 40:17.960
+And then divide h.
+
+40:17.960 --> 40:19.960
+And so what is this?
+
+40:19.960 --> 40:25.960
+Just expanding this out, this will be C plus h plus E minus C minus E divided by h.
+
+40:25.960 --> 40:32.960
+And then you see here how C minus C cancels, E minus E cancels were left with h over h, which is 1.0.
+
+40:32.960 --> 40:42.960
+And so by symmetry also, D by D E will be 1.0 as well.
+
+40:42.960 --> 40:45.960
+So basically the derivative of a sum expression is very simple.
+
+40:45.960 --> 40:47.960
+And this is the local derivative.
+
+40:47.960 --> 40:52.960
+So I call this the local derivative because we have the final output value all the way at the end of this graph.
+
+40:52.960 --> 40:55.960
+And we're now like a small node here.
+
+40:55.960 --> 40:57.960
+And this is a little plus node.
+
+40:57.960 --> 41:02.960
+And the little plus node doesn't know anything about the rest of the graph that it's embedded in.
+
+41:02.960 --> 41:04.960
+All it knows is that it did a plus.
+
+41:04.960 --> 41:08.960
+It took a C and an E, added them and created a D.
+
+41:08.960 --> 41:15.960
+And this plus node also knows the local influence of C on D, or rather the derivative of D with respect to C.
+
+41:15.960 --> 41:19.960
+And it also knows the derivative of D with respect to E.
+
+41:19.960 --> 41:20.960
+But that's not what we want.
+
+41:20.960 --> 41:22.960
+That's just a local derivative.
+
+41:22.960 --> 41:25.960
+What we actually want is D L by DC.
+
+41:25.960 --> 41:28.960
+And L is here just one step away.
+
+41:28.960 --> 41:33.960
+But in a general case, this little plus node could be embedded in like a massive graph.
+
+41:33.960 --> 41:37.960
+So again, we know how L impacts D.
+
+41:37.960 --> 41:40.960
+And now we know how C and E impact D.
+
+41:40.960 --> 41:43.960
+How do we put that information together to arrive D L by DC?
+
+41:43.960 --> 41:46.960
+And the answer of course is the chain rule in calculus.
+
+41:46.960 --> 41:51.960
+And so I pulled up a chain rule here from Wikipedia.
+
+41:51.960 --> 41:54.960
+And I'm going to go through this very briefly.
+
+41:54.960 --> 42:00.960
+So chain rule, Wikipedia sometimes can be very confusing and calculus can be very confusing.
+
+42:00.960 --> 42:05.960
+Like this is the way I learned chain rule and it was very confusing.
+
+42:05.960 --> 42:07.960
+Like what is happening?
+
+42:07.960 --> 42:08.960
+It's just complicated.
+
+42:08.960 --> 42:11.960
+So I like this expression much better.
+
+42:11.960 --> 42:18.960
+If a variable Z depends on a variable Y, which itself depends on a variable X, then Z depends on X as well.
+
+42:18.960 --> 42:21.960
+Obviously through the intermediate variable Y.
+
+42:21.960 --> 42:32.960
+And in this case, the chain rule is expressed as if you want DZ by DX, then you take the DZ by DY and you multiply it by DY by DX.
+
+42:32.960 --> 42:41.960
+So the chain rule fundamentally is telling you how we chain these derivatives together correctly.
+
+42:41.960 --> 42:50.960
+So to differentiate through a function composition, we have to apply a multiplication of those derivatives.
+
+42:50.960 --> 42:53.960
+So that's really what chain rule is telling us.
+
+42:53.960 --> 42:58.960
+And there's a nice little intuitive explanation here, which I also think is kind of cute.
+
+42:58.960 --> 43:06.960
+The chain rule states that knowing the instantaneous rate of change of Z with respect to Y and Y relative to X allows one to calculate the instantaneous rate of change of Z relative to X.
+
+43:06.960 --> 43:11.960
+As a product of those two rates of change, simply the product of those two.
+
+43:11.960 --> 43:13.960
+So here's a good one.
+
+43:13.960 --> 43:24.960
+If a car travels twice as fast as a bicycle, and the bicycle is four times as fast as walking men, then the car travels two times four, eight times as fast as a man.
+
+43:24.960 --> 43:30.960
+And so this makes it very clear that the correct thing to do sort of is to multiply.
+
+43:30.960 --> 43:35.960
+So a car is twice as fast as a bicycle, and a bicycle is four times as fast as a man.
+
+43:35.960 --> 43:39.960
+So the car will be eight times as fast as the man.
+
+43:39.960 --> 43:45.960
+And so we can take these intermediate rates of change, if you will, and multiply them together.
+
+43:45.960 --> 43:49.960
+And that justifies the chain rule intuitively.
+
+43:49.960 --> 43:51.960
+So have a look at chain rule.
+
+43:51.960 --> 43:58.960
+But here really what it means for us is there's a very simple recipe for deriving what we want, which is DL by DC.
+
+43:58.960 --> 44:09.960
+And what we have so far is we know what is the impact of D on L.
+
+44:09.960 --> 44:14.960
+So we know DL by DD, the derivative of L with respect to DD.
+
+44:14.960 --> 44:16.960
+We know that that's negative two.
+
+44:16.960 --> 44:23.960
+And now because of this local reasoning that we've done here, we know DD by DC.
+
+44:23.960 --> 44:25.960
+So how does C impact D?
+
+44:25.960 --> 44:28.960
+And in particular, this is a plus node.
+
+44:28.960 --> 44:30.960
+So the local derivative is simply 1.0.
+
+44:30.960 --> 44:32.960
+It's very simple.
+
+44:32.960 --> 44:50.960
+And so the chain rule tells us that DL by DC going through this intermediate variable will just be simply DL by DD times DD by DC.
+
+44:50.960 --> 44:52.960
+That's chain rule.
+
+44:52.960 --> 45:02.960
+So this is identical to what's happening here, except Z is RL, Y is RD, and X is RC.
+
+45:02.960 --> 45:05.960
+So we literally just have to multiply these.
+
+45:05.960 --> 45:18.960
+And because these local derivatives like DD by DC are just one, we basically just copy over DL by DD because this is just times one.
+
+45:19.960 --> 45:25.960
+So because DL by DD is negative two, what is DL by DC?
+
+45:25.960 --> 45:31.960
+Well, it's the local gradient 1.0 times DL by DD, which is negative two.
+
+45:31.960 --> 45:40.960
+So literally what a plus node does, you can look at it that way, is it literally just routes the gradient because the plus nodes local derivatives are just one.
+
+45:40.960 --> 45:49.960
+And so in the chain rule, one times DL by DD is just DL by DD.
+
+45:49.960 --> 45:54.960
+And so that derivative just gets routed to both C and to E in this case.
+
+45:54.960 --> 46:07.960
+So basically, we have that E dot grad, or let's start with C since that's the one we've looked at, is negative two times one, negative two.
+
+46:07.960 --> 46:13.960
+And in the same way, by symmetry, E dot grad will be negative two, that's the claim.
+
+46:13.960 --> 46:21.960
+So we can set those, we can redraw, and you see how we just assign negative two, negative two.
+
+46:21.960 --> 46:28.960
+So this back propagating signal, which is carrying the information of like, what is the derivative of L with respect to all the intermediate nodes?
+
+46:28.960 --> 46:38.960
+We can imagine it almost like flowing backwards through the graph, and a plus node will simply distribute the derivative to all the leaf nodes, sorry, to all the children nodes of it.
+
+46:38.960 --> 46:41.960
+So this is the claim, and now let's verify it.
+
+46:41.960 --> 46:47.960
+So let me remove the plus H here from before, and now instead what we're going to do is we want to increment C.
+
+46:47.960 --> 46:55.960
+So C dot data will be incremented by H, and when I run this, we expect to see negative two, negative two.
+
+46:55.960 --> 47:02.960
+And then of course for E, so E dot data plus equals H, and we expect to see negative two.
+
+47:02.960 --> 47:06.960
+Simple.
+
+47:06.960 --> 47:10.960
+So those are the derivatives of these internal nodes.
+
+47:10.960 --> 47:17.960
+And now we're going to recurse our way backwards again, and we're again going to apply the chain rule.
+
+47:17.960 --> 47:24.960
+So here we go, our second application of chain rule, and we will apply it all the way through the graph, which has happened to only have one more node remaining.
+
+47:24.960 --> 47:30.960
+We have that dL by dE, as we have just calculated, is negative two.
+
+47:30.960 --> 47:32.960
+So we know that.
+
+47:32.960 --> 47:36.960
+So we know the derivative of L with respect to E.
+
+47:36.960 --> 47:42.960
+And now we want dL by dA, right?
+
+47:42.960 --> 47:51.960
+And the chain rule is telling us that that's just dL by dE, negative two, times the local gradient.
+
+47:51.960 --> 47:53.960
+So what is the local gradient?
+
+47:53.960 --> 47:56.960
+Basically dE by dA.
+
+47:56.960 --> 47:59.960
+We have to look at that.
+
+47:59.960 --> 48:08.960
+So I'm a little times node inside a massive graph, and I only know that I did A times B and I produced an E.
+
+48:08.960 --> 48:12.960
+So now what is dE by dA and dE by dB?
+
+48:12.960 --> 48:14.960
+That's the only thing that I sort of know about.
+
+48:14.960 --> 48:16.960
+That's my local gradient.
+
+48:16.960 --> 48:23.960
+So because we have that E is A times B, we're asking what is dE by dA?
+
+48:23.960 --> 48:26.960
+And of course we just did that here.
+
+48:26.960 --> 48:29.960
+We had a times, so I'm not going to re-derive it.
+
+48:29.960 --> 48:34.960
+But if you want to differentiate this with respect to A, you'll just get B, right?
+
+48:34.960 --> 48:40.960
+The value of B, which in this case is negative 3.0.
+
+48:40.960 --> 48:44.960
+So basically we have that dL by dA.
+
+48:44.960 --> 48:46.960
+Well, let me just do it right here.
+
+48:46.960 --> 48:55.960
+We have that A dot grad, and we are applying chain rule here, is dL by dE, which we see here is negative 2,
+
+48:55.960 --> 48:59.960
+times what is dE by dA?
+
+48:59.960 --> 49:04.960
+It's the value of B, which is negative 3.
+
+49:04.960 --> 49:07.960
+That's it.
+
+49:07.960 --> 49:18.960
+And then we have B dot grad is again dL by dE, which is negative 2, just the same way, times what is dE by dB?
+
+49:18.960 --> 49:23.960
+It's the value of A, which is 2.0.
+
+49:23.960 --> 49:25.960
+That's the value of A.
+
+49:25.960 --> 49:28.960
+So these are our claimed derivatives.
+
+49:28.960 --> 49:31.960
+Let's redraw.
+
+49:31.960 --> 49:37.960
+And we see here that A dot grad turns out to be 6, because that is negative 2 times negative 3.
+
+49:37.960 --> 49:44.960
+And B dot grad is negative 4 times, sorry, is negative 2 times 2, which is negative 4.
+
+49:44.960 --> 49:46.960
+So those are our claims.
+
+49:46.960 --> 49:49.960
+Let's delete this and let's verify them.
+
+49:49.960 --> 49:56.960
+We have A here, A dot data plus equals H.
+
+49:56.960 --> 50:01.960
+So the claim is that A dot grad is 6.
+
+50:01.960 --> 50:04.960
+Let's verify, 6.
+
+50:04.960 --> 50:08.960
+And we have B dot data plus equals H.
+
+50:08.960 --> 50:14.960
+So nudging B by H and looking at what happens, we claim it's negative 4.
+
+50:14.960 --> 50:21.960
+And indeed, it's negative 4, plus minus, again, float, oddness.
+
+50:21.960 --> 50:23.960
+And that's it.
+
+50:23.960 --> 50:30.960
+That was the manual backup application all the way from here to all the leaf nodes.
+
+50:30.960 --> 50:32.960
+And we've done it piece by piece.
+
+50:32.960 --> 50:39.960
+And really, all we've done is, as you saw, we iterated through all the nodes one by one and locally applied the chain rule.
+
+50:39.960 --> 50:43.960
+We always know what is the derivative of L with respect to this little output.
+
+50:43.960 --> 50:45.960
+And then we look at how this output was produced.
+
+50:45.960 --> 50:51.960
+This output was produced through some operation and we have the pointers to the children nodes of this operation.
+
+50:51.960 --> 50:58.960
+And so in this little operation, we know what the local derivatives are and we just multiply them onto the derivative always.
+
+50:58.960 --> 51:03.960
+So we just go through and recursively multiply on the local derivatives.
+
+51:03.960 --> 51:05.960
+And that's what back propagation is.
+
+51:05.960 --> 51:09.960
+It's just a recursive application of chain rule backwards through the computation graph.
+
+51:09.960 --> 51:12.960
+Let's see this power in action just very briefly.
+
+51:12.960 --> 51:18.960
+What we're going to do is we're going to nudge our inputs to try to make L go up.
+
+51:18.960 --> 51:22.960
+So in particular, what we're doing is we want a data, we're going to change it.
+
+51:22.960 --> 51:27.960
+And if we want L to go up, that means we just have to go in the direction of the gradient.
+
+51:27.960 --> 51:33.960
+So a should increase in the direction of gradient by like some small step amount.
+
+51:33.960 --> 51:35.960
+This is the step size.
+
+51:35.960 --> 51:45.960
+And we don't just want this for B, but also for B, also for C, also for F.
+
+51:45.960 --> 51:49.960
+Those are leaf nodes, which we usually have control over.
+
+51:49.960 --> 51:54.960
+And if we nudge in direction of the gradient, we expect a positive influence on L.
+
+51:54.960 --> 51:58.960
+So we expect L to go up positively.
+
+51:58.960 --> 52:00.960
+So it should become less negative.
+
+52:00.960 --> 52:04.960
+It should go up to say negative six or something like that.
+
+52:04.960 --> 52:06.960
+It's hard to tell exactly.
+
+52:06.960 --> 52:08.960
+And we'd have to rerun the forward pass.
+
+52:08.960 --> 52:12.960
+So let me just do that here.
+
+52:15.960 --> 52:17.960
+This would be the forward pass.
+
+52:17.960 --> 52:19.960
+F would be unchanged.
+
+52:19.960 --> 52:21.960
+This is effectively the forward pass.
+
+52:21.960 --> 52:28.960
+And now if we print L.data, we expect, because we nudged all the values, all the inputs in the direction of gradient,
+
+52:28.960 --> 52:30.960
+we expect it less negative L.
+
+52:30.960 --> 52:32.960
+We expect it to go up.
+
+52:32.960 --> 52:34.960
+So maybe it's negative six or so.
+
+52:34.960 --> 52:36.960
+Let's see what happens.
+
+52:36.960 --> 52:38.960
+Okay, negative seven.
+
+52:38.960 --> 52:43.960
+And this is basically one step of an optimization that will end up running.
+
+52:43.960 --> 52:48.960
+And really this gradient just give us some power because we know how to influence the final outcome.
+
+52:48.960 --> 52:52.960
+And this will be extremely useful for training all that's as well as CMC.
+
+52:52.960 --> 53:01.960
+So now I would like to do one more example of manual back propagation using a bit more complex and useful example.
+
+53:01.960 --> 53:04.960
+We are going to back propagate through a neuron.
+
+53:04.960 --> 53:09.960
+So we want to eventually build out neural networks.
+
+53:09.960 --> 53:12.960
+And in the simplest case, these are multi-layer perceptrons, as they're called.
+
+53:12.960 --> 53:15.960
+So this is a two-layer neural net.
+
+53:15.960 --> 53:17.960
+And it's got these hidden layers made up of neurons.
+
+53:17.960 --> 53:19.960
+And these neurons are fully connected to each other.
+
+53:19.960 --> 53:25.960
+Now biologically, neurons are very complicated devices, but we have very simple mathematical models of them.
+
+53:25.960 --> 53:28.960
+And so this is a very simple mathematical model of a neuron.
+
+53:28.960 --> 53:34.960
+You have some inputs, X's, and then you have these synapses that have weights on them.
+
+53:34.960 --> 53:38.960
+So the W's are weights.
+
+53:38.960 --> 53:43.960
+And then the synapse interacts with the input to this neuron multiplicatively.
+
+53:43.960 --> 53:48.960
+So what flows to the cell body of this neuron is W times X.
+
+53:48.960 --> 53:50.960
+But there's multiple inputs.
+
+53:50.960 --> 53:53.960
+So there's many W times X's flowing into the cell body.
+
+53:53.960 --> 53:56.960
+The cell body then has also like some bias.
+
+53:56.960 --> 54:02.960
+So this is kind of like the innate sort of trigger happiness of this neuron.
+
+54:02.960 --> 54:07.960
+So this bias can make it a bit more trigger happy or a bit less trigger happy, regardless of the input.
+
+54:07.960 --> 54:12.960
+But basically we're taking all the W times X of all the inputs, adding the bias,
+
+54:12.960 --> 54:15.960
+and then we take it through an activation function.
+
+54:15.960 --> 54:19.960
+And this activation function is usually some kind of a squashing function,
+
+54:19.960 --> 54:22.960
+like a sigmoid or 10H or something like that.
+
+54:22.960 --> 54:26.960
+So as an example, we're going to use the 10H in this example.
+
+54:26.960 --> 54:30.960
+NumPy has a np.10H.
+
+54:30.960 --> 54:35.960
+So we can call it on a range and we can plot it.
+
+54:35.960 --> 54:37.960
+This is the 10H function.
+
+54:37.960 --> 54:43.960
+And you see that the inputs as they come in get squashed on the white coordinate here.
+
+54:43.960 --> 54:47.960
+So right at zero, we're going to get exactly zero.
+
+54:47.960 --> 54:54.960
+And then as you go more positive in the input, then you'll see that the function will only go up to one and then plateau out.
+
+54:54.960 --> 55:00.960
+And so if you pass in very positive inputs, we're going to cap it smoothly at one.
+
+55:00.960 --> 55:03.960
+And on the negative side, we're going to cap it smoothly to negative one.
+
+55:03.960 --> 55:05.960
+So that's 10H.
+
+55:05.960 --> 55:09.960
+And that's the squashing function or an activation function.
+
+55:09.960 --> 55:17.960
+And what comes out of this neuron is just the activation function applied to the dot product of the weights and the inputs.
+
+55:17.960 --> 55:21.960
+So let's write one out.
+
+55:21.960 --> 55:28.960
+I'm going to copy paste because I don't want to type too much.
+
+55:28.960 --> 55:32.960
+But okay, so here we have the inputs x1, x2.
+
+55:32.960 --> 55:33.960
+So this is a two-dimensional neuron.
+
+55:33.960 --> 55:35.960
+So two inputs are going to come in.
+
+55:35.960 --> 55:40.960
+These are thought of as the weights of this neuron, weights w1, w2.
+
+55:40.960 --> 55:44.960
+And these weights again are the synaptic strengths for each input.
+
+55:44.960 --> 55:48.960
+And this is the bias of the neuron, b.
+
+55:48.960 --> 55:57.960
+And now what we want to do is, according to this model, we need to multiply x1 times w1 and x2 times w2.
+
+55:57.960 --> 56:00.960
+And then we need to add bias on top of it.
+
+56:00.960 --> 56:07.960
+And it gets a little messy here, but all we are trying to do is x1, w1 plus x2, w2 plus b.
+
+56:07.960 --> 56:09.960
+And these are multiplied here.
+
+56:09.960 --> 56:14.960
+Except I'm doing it in small steps so that we actually have pointers to all these intermediate nodes.
+
+56:14.960 --> 56:20.960
+So we have x1, w1 variable, x2, w2 variable, and I'm also labeling them.
+
+56:20.960 --> 56:29.960
+So n is now the cell body raw activation without the activation function for now.
+
+56:29.960 --> 56:32.960
+And this should be enough to basically plot it.
+
+56:32.960 --> 56:42.960
+So draw dot of n gives us x1 times w1, x2 times w2 being added.
+
+56:42.960 --> 56:44.960
+Then the bias gets added on top of this.
+
+56:44.960 --> 56:48.960
+And this n is this sum.
+
+56:48.960 --> 56:51.960
+So we're now going to take it through an activation function.
+
+56:51.960 --> 56:55.960
+And let's say we use the tanh so that we produce the output.
+
+56:55.960 --> 57:04.960
+So what we'd like to do here is we'd like to do the output, and I'll call it o, is n dot tanh.
+
+57:04.960 --> 57:07.960
+But we haven't yet written the tanh.
+
+57:07.960 --> 57:15.960
+Now the reason that we need to implement another tanh function here is that tanh is a hyperbolic function.
+
+57:15.960 --> 57:21.960
+And we've only so far implemented a plus and a times, and you can't make a tanh out of just pluses and times.
+
+57:21.960 --> 57:23.960
+You also need exponentiation.
+
+57:23.960 --> 57:26.960
+So tanh is this kind of a formula here.
+
+57:26.960 --> 57:28.960
+You can use either one of these.
+
+57:28.960 --> 57:33.960
+And you see that there is exponentiation involved, which we have not implemented yet for our low value node here.
+
+57:33.960 --> 57:38.960
+So we're not going to be able to produce tanh yet, and we have to go back up and implement something like it.
+
+57:38.960 --> 57:46.960
+Now one option here is we could actually implement exponentiation, right?
+
+57:46.960 --> 57:51.960
+And we could return the exp of a value instead of a tanh of a value.
+
+57:51.960 --> 57:55.960
+Because if we had exp, then we have everything else that we need.
+
+57:55.960 --> 58:02.960
+So because we know how to add and we know how to multiply.
+
+58:02.960 --> 58:06.960
+So we'd be able to create tanh if we knew how to exp.
+
+58:06.960 --> 58:17.960
+But for the purposes of this example, I specifically wanted to show you that we don't necessarily need to have the most atomic pieces in this value object.
+
+58:17.960 --> 58:23.960
+We can actually like create functions at arbitrary points of abstraction.
+
+58:23.960 --> 58:27.960
+They can be complicated functions, but they can be also very, very simple functions like a plus.
+
+58:27.960 --> 58:29.960
+And it's totally up to us.
+
+58:29.960 --> 58:33.960
+The only thing that matters is that we know how to differentiate through any one function.
+
+58:33.960 --> 58:36.960
+So we take some inputs and we make an output.
+
+58:36.960 --> 58:42.960
+The only thing that matters can be arbitrarily complex function as long as you know how to create the local derivative.
+
+58:42.960 --> 58:46.960
+If you know the local derivative of how the inputs impact the output, then that's all you need.
+
+58:46.960 --> 58:52.960
+So we're going to cluster up all of this expression and we're not going to break it down to its atomic pieces.
+
+58:52.960 --> 58:54.960
+We're just going to directly implement tanh.
+
+58:54.960 --> 58:58.960
+So let's do that.
+
+58:58.960 --> 59:04.960
+And then out will be a value of, and we need this expression here.
+
+59:04.960 --> 59:13.960
+So let me actually copy paste.
+
+59:13.960 --> 59:16.960
+Let's grab n, which is a solid theta.
+
+59:16.960 --> 59:20.960
+And then this, I believe, is the tanh.
+
+59:20.960 --> 59:29.960
+Math.x of 2, you know, n minus 1 over 2n plus 1.
+
+59:29.960 --> 59:34.960
+Maybe I can call this x, just so that it matches exactly.
+
+59:34.960 --> 59:41.960
+Okay, and now this will be t and children of this node.
+
+59:41.960 --> 59:45.960
+There's just one child and I'm wrapping it in a tuple.
+
+59:45.960 --> 59:47.960
+So this is a tuple of one object, just self.
+
+59:47.960 --> 59:51.960
+And here the name of this operation will be tanh.
+
+59:51.960 --> 59:57.960
+And we're going to return that.
+
+59:57.960 --> 01:00:01.960
+So now values should be implementing tanh.
+
+01:00:01.960 --> 01:00:06.960
+And now we can scroll all the way down here and we can actually do n dot tanh.
+
+01:00:06.960 --> 01:00:10.960
+And that's going to return the tanh output of n.
+
+01:00:10.960 --> 01:00:14.960
+And now we should be able to draw it out of O, not of n.
+
+01:00:14.960 --> 01:00:18.960
+So let's see how that worked.
+
+01:00:18.960 --> 01:00:19.960
+There we go.
+
+01:00:19.960 --> 01:00:23.960
+And went through tanh to produce this output.
+
+01:00:23.960 --> 01:00:32.960
+So now tanh is a sort of our little micrograd supported node here as an operation.
+
+01:00:32.960 --> 01:00:37.960
+And as long as we know the derivative of tanh, then we'll be able to back propagate through it.
+
+01:00:37.960 --> 01:00:39.960
+Now let's see this tanh in action.
+
+01:00:39.960 --> 01:00:43.960
+Currently it's not squashing too much because the input to it is pretty low.
+
+01:00:43.960 --> 01:00:53.960
+So if the bias was increased to say 8, then we'll see that what's flowing into the tanh now is 2.
+
+01:00:53.960 --> 01:00:56.960
+And tanh is squashing it to 0.96.
+
+01:00:56.960 --> 01:01:02.960
+So we're already hitting the tail of this tanh and it will sort of smoothly go up to 1 and then plateau out over there.
+
+01:01:02.960 --> 01:01:05.960
+Okay, so now I'm going to do something slightly strange.
+
+01:01:05.960 --> 01:01:10.960
+I'm going to change this bias from 8 to this number, 6.88, etc.
+
+01:01:11.960 --> 01:01:16.960
+And I'm going to do this for specific reasons because we're about to start back propagation.
+
+01:01:16.960 --> 01:01:19.960
+And I want to make sure that our numbers come out nice.
+
+01:01:19.960 --> 01:01:21.960
+They're not like very crazy numbers.
+
+01:01:21.960 --> 01:01:24.960
+They're nice numbers that we can sort of understand in our head.
+
+01:01:24.960 --> 01:01:26.960
+Let me also add pose label.
+
+01:01:26.960 --> 01:01:29.960
+O is short for output here.
+
+01:01:29.960 --> 01:01:31.960
+So that's the R.
+
+01:01:31.960 --> 01:01:35.960
+Okay, so 0.88 flows into tanh comes out 0.7.
+
+01:01:35.960 --> 01:01:39.960
+So now we're going to do back propagation and we're going to fill in all the gradients.
+
+01:01:39.960 --> 01:01:45.960
+So what is the derivative O with respect to all the inputs here?
+
+01:01:45.960 --> 01:01:55.960
+And of course, in a typical neural network setting, what we really care about the most is the derivative of these neurons on the weights specifically, the W2 and W1,
+
+01:01:55.960 --> 01:01:58.960
+because those are the weights that we're going to be changing part of the optimization.
+
+01:01:58.960 --> 01:02:02.960
+And the other thing that we have to remember is here we have only a single neuron,
+
+01:02:02.960 --> 01:02:05.960
+but in the neural net you typically have many neurons and they're connected.
+
+01:02:06.960 --> 01:02:09.960
+So this is only like a one small neuron, a piece of a much bigger puzzle,
+
+01:02:09.960 --> 01:02:13.960
+and eventually there's a loss function that sort of measures the accuracy of the neural net,
+
+01:02:13.960 --> 01:02:18.960
+and we're back propagating with respect to that accuracy and trying to increase it.
+
+01:02:18.960 --> 01:02:24.960
+So let's start off back propagation here and what is the derivative of O with respect to O?
+
+01:02:24.960 --> 01:02:29.960
+The base case sort of we know always is that the gradient is just 1.0.
+
+01:02:29.960 --> 01:02:40.960
+So let me fill it in and then let me split out the drawing function here.
+
+01:02:42.960 --> 01:02:48.960
+And then here, cell cleared this output here.
+
+01:02:48.960 --> 01:02:53.960
+So now when we draw O, we'll see that grad is 1.
+
+01:02:53.960 --> 01:02:55.960
+So now we're going to back propagate through the 10h.
+
+01:02:55.960 --> 01:02:59.960
+So to back propagate through 10h, we need to know the local derivative of 10h.
+
+01:02:59.960 --> 01:03:10.960
+So if we have that O is 10h of n, then what is dO by dn?
+
+01:03:10.960 --> 01:03:14.960
+Now what you could do is you could come here and you could take this expression
+
+01:03:14.960 --> 01:03:19.960
+and you could do your calculus derivative taking, and that would work.
+
+01:03:19.960 --> 01:03:25.960
+But we can also just scroll down Wikipedia here into a section that hopefully tells us
+
+01:03:25.960 --> 01:03:31.960
+that derivative d by dx of 10h of x is any of these.
+
+01:03:31.960 --> 01:03:34.960
+I like this one, 1 minus 10h square of x.
+
+01:03:34.960 --> 01:03:38.960
+So this is 1 minus 10h of x squared.
+
+01:03:38.960 --> 01:03:49.960
+So basically what this is saying is that dO by dn is 1 minus 10h of n squared.
+
+01:03:49.960 --> 01:03:55.960
+And we already have 10h of n. It's just O. So it's 1 minus O squared.
+
+01:03:55.960 --> 01:03:57.960
+So O is the output here.
+
+01:03:57.960 --> 01:04:00.960
+So the output is this number.
+
+01:04:01.960 --> 01:04:05.960
+O that data is this number.
+
+01:04:05.960 --> 01:04:11.960
+And then what this is saying is that dO by dn is 1 minus this squared.
+
+01:04:11.960 --> 01:04:18.960
+So 1 minus O that data squared is 0.5 conveniently.
+
+01:04:18.960 --> 01:04:23.960
+So the local derivative of this 10h operation here is 0.5.
+
+01:04:23.960 --> 01:04:26.960
+And so that would be dO by dn.
+
+01:04:26.960 --> 01:04:33.960
+So we can fill in that n.grad is 0.5.
+
+01:04:33.960 --> 01:04:35.960
+We'll just fill it in.
+
+01:04:41.960 --> 01:04:44.960
+So this is exactly 0.5, 0.5.
+
+01:04:44.960 --> 01:04:48.960
+So now we're going to continue the back propagation.
+
+01:04:48.960 --> 01:04:51.960
+This is 0.5 and this is a plus node.
+
+01:04:51.960 --> 01:04:55.960
+So how is back prop going to, what is back prop going to do here?
+
+01:04:55.960 --> 01:05:00.960
+And if you remember our previous example, a plus is just a distributor of gradient.
+
+01:05:00.960 --> 01:05:04.960
+So this gradient will simply flow to both of these equally.
+
+01:05:04.960 --> 01:05:09.960
+And that's because the local derivative of this operation is one for every one of its nodes.
+
+01:05:09.960 --> 01:05:11.960
+So 1 times 0.5 is 0.5.
+
+01:05:11.960 --> 01:05:19.960
+So therefore we know that this node here, which we called this, its grad is just 0.5.
+
+01:05:19.960 --> 01:05:23.960
+And we know that b.grad is also 0.5.
+
+01:05:23.960 --> 01:05:27.960
+So let's set those and let's draw.
+
+01:05:27.960 --> 01:05:29.960
+So this is our 0.5.
+
+01:05:29.960 --> 01:05:31.960
+Continuing, we have another plus.
+
+01:05:31.960 --> 01:05:33.960
+0.5 again will just distribute.
+
+01:05:33.960 --> 01:05:36.960
+So 0.5 will flow to both of these.
+
+01:05:36.960 --> 01:05:42.960
+So we can set theirs.
+
+01:05:42.960 --> 01:05:44.960
+x2w2 as well.
+
+01:05:44.960 --> 01:05:46.960
+That grad is 0.5.
+
+01:05:46.960 --> 01:05:48.960
+And let's redraw.
+
+01:05:48.960 --> 01:05:54.960
+Pluses are my favorite operations to back propagate through because it's very simple.
+
+01:05:54.960 --> 01:05:57.960
+So now what's flowing into these expressions is 0.5.
+
+01:05:57.960 --> 01:06:01.960
+And so really again, keep in mind what derivative is telling us at every point in time along here.
+
+01:06:01.960 --> 01:06:07.960
+This is saying that if we want the output of this neuron to increase,
+
+01:06:07.960 --> 01:06:11.960
+then the influence on these expressions is positive on the output.
+
+01:06:11.960 --> 01:06:19.960
+Both of them are positive contribution to the output.
+
+01:06:19.960 --> 01:06:22.960
+So now back propagating to x2 and w2.
+
+01:06:22.960 --> 01:06:24.960
+First, this is a times node.
+
+01:06:24.960 --> 01:06:28.960
+So we know that the local derivative is the other term.
+
+01:06:28.960 --> 01:06:40.960
+So if we want to calculate x2.grad, then can you think through what it's going to be?
+
+01:06:40.960 --> 01:06:50.960
+So x2.grad will be w2.data times this x2w2.grad.
+
+01:06:50.960 --> 01:07:01.960
+And w2.grad will be x2.data times x2w2.grad.
+
+01:07:01.960 --> 01:07:06.960
+So that's the local piece of chain rule.
+
+01:07:06.960 --> 01:07:09.960
+Let's set them and let's redraw.
+
+01:07:09.960 --> 01:07:15.960
+So here we see that the gradient on our weight 2 is 0 because x2's data was 0.
+
+01:07:15.960 --> 01:07:20.960
+But x2 will have the gradient 0.5 because data here was 1.
+
+01:07:20.960 --> 01:07:25.960
+And so what's interesting here is because the input x2 was 0,
+
+01:07:25.960 --> 01:07:29.960
+then because of the way the times works, of course this gradient will be 0.
+
+01:07:29.960 --> 01:07:32.960
+And think about intuitively why that is.
+
+01:07:32.960 --> 01:07:37.960
+Derivative always tells us the influence of this on the final output.
+
+01:07:37.960 --> 01:07:40.960
+If I wiggle w2, how is the output changing?
+
+01:07:40.960 --> 01:07:43.960
+It's not changing because we're multiplying by 0.
+
+01:07:43.960 --> 01:07:46.960
+So because it's not changing, there is no derivative.
+
+01:07:46.960 --> 01:07:51.960
+And 0 is the correct answer because we're squashing that 0.
+
+01:07:51.960 --> 01:07:56.960
+And let's do it here. 0.5 should come here and flow through this times.
+
+01:07:56.960 --> 01:08:06.960
+And so we'll have that x1.grad is, can you think through a little bit what this should be?
+
+01:08:06.960 --> 01:08:11.960
+The local derivative of times with respect to x1 is going to be w1.
+
+01:08:11.960 --> 01:08:26.960
+So w1's data times x1w1.grad and w1.grad will be x1.data times x1w2w1.grad.
+
+01:08:26.960 --> 01:08:28.960
+Let's see what those came out to be.
+
+01:08:28.960 --> 01:08:33.960
+So this is 0.5, so this would be negative 1.5 and this would be 1.
+
+01:08:33.960 --> 01:08:36.960
+And we've back propagated through this expression.
+
+01:08:36.960 --> 01:08:38.960
+These are the actual final derivatives.
+
+01:08:38.960 --> 01:08:48.960
+So if we want this neuron's output to increase, we know that what's necessary is that w2, we have no gradient.
+
+01:08:48.960 --> 01:08:54.960
+W2 doesn't actually matter to this neuron right now, but this neuron, this weight should go up.
+
+01:08:54.960 --> 01:09:01.960
+So if this weight goes up, then this neuron's output would have gone up and proportionally because the gradient is 1.
+
+01:09:01.960 --> 01:09:04.960
+Okay, so doing the back propagation manually is obviously ridiculous.
+
+01:09:04.960 --> 01:09:11.960
+So we are now going to put an end to this suffering and we're going to see how we can implement the backward pass a bit more automatically.
+
+01:09:11.960 --> 01:09:14.960
+We're not going to be doing all of it manually out here.
+
+01:09:14.960 --> 01:09:19.960
+It's now pretty obvious to us, by example, how these pluses and times are back propagating gradients.
+
+01:09:19.960 --> 01:09:28.960
+So let's go up to the value object and we're going to start codifying what we've seen in the examples below.
+
+01:09:28.960 --> 01:09:35.960
+So we're going to do this by storing a special self dot backward and underscore backward.
+
+01:09:35.960 --> 01:09:40.960
+And this will be a function which is going to do that little piece of chain rule.
+
+01:09:40.960 --> 01:09:51.960
+At each little node that took inputs and produced output, we're going to store how we are going to chain the outputs gradient into the inputs gradients.
+
+01:09:51.960 --> 01:09:57.960
+So by default, this will be a function that doesn't do anything.
+
+01:09:57.960 --> 01:10:02.960
+And you can also see that here in the value in micrograd.
+
+01:10:02.960 --> 01:10:07.960
+So with this backward function, by default, doesn't do anything.
+
+01:10:07.960 --> 01:10:09.960
+This is an empty function.
+
+01:10:09.960 --> 01:10:12.960
+And that would be sort of the case, for example, for a leaf node.
+
+01:10:12.960 --> 01:10:14.960
+For a leaf node, there's nothing to do.
+
+01:10:14.960 --> 01:10:23.960
+But now if when we're creating these out values, these out values are an addition of self and other.
+
+01:10:23.960 --> 01:10:33.960
+And so we want to set out backward to be the function that propagates the gradient.
+
+01:10:33.960 --> 01:10:39.960
+So let's define what should happen.
+
+01:10:39.960 --> 01:10:41.960
+And we're going to store it in a closure.
+
+01:10:41.960 --> 01:10:47.960
+Let's define what should happen when we call out grad.
+
+01:10:47.960 --> 01:10:56.960
+For an addition, our job is to take out grad and propagate it into self grad and other grad.
+
+01:10:56.960 --> 01:11:05.960
+So basically we want to sell self grad to something and we want to set others grad to something.
+
+01:11:05.960 --> 01:11:14.960
+And the way we saw below how chain rule works, we want to take the local derivative times the sort of global derivative, I should call it,
+
+01:11:14.960 --> 01:11:20.960
+which is the derivative of the final output of the expression with respect to out's data.
+
+01:11:20.960 --> 01:11:22.960
+With respect to out.
+
+01:11:22.960 --> 01:11:29.960
+So the local derivative of self in an addition is 1.0.
+
+01:11:29.960 --> 01:11:33.960
+So it's just 1.0 times out's grad.
+
+01:11:33.960 --> 01:11:35.960
+That's the chain rule.
+
+01:11:35.960 --> 01:11:38.960
+And others dot grad will be 1.0 times out grad.
+
+01:11:38.960 --> 01:11:49.960
+And what you basically what you're seeing here is that out's grad will simply be copied onto self grad and others grad as we saw happens for an addition operation.
+
+01:11:49.960 --> 01:11:55.960
+So we're going to later call this function to propagate the gradient having done an addition.
+
+01:11:55.960 --> 01:11:57.960
+Let's not do multiplication.
+
+01:11:57.960 --> 01:12:01.960
+We're going to also define that backward.
+
+01:12:01.960 --> 01:12:07.960
+And we're going to set its backward to be backward.
+
+01:12:07.960 --> 01:12:16.960
+And we want to chain out grad into self grad and others grad.
+
+01:12:16.960 --> 01:12:19.960
+And this will be a little piece of chain rule for multiplication.
+
+01:12:19.960 --> 01:12:22.960
+So we'll have so what should this be?
+
+01:12:22.960 --> 01:12:27.960
+Can you think through?
+
+01:12:27.960 --> 01:12:30.960
+So what is the local derivative here?
+
+01:12:30.960 --> 01:12:34.960
+The local derivative was others that data.
+
+01:12:34.960 --> 01:12:37.960
+And then other stuff data.
+
+01:12:37.960 --> 01:12:39.960
+And then times out that grad.
+
+01:12:39.960 --> 01:12:41.960
+That's chain rule.
+
+01:12:41.960 --> 01:12:44.960
+And here we have self that data times out that grad.
+
+01:12:44.960 --> 01:12:48.960
+That's what we've been doing.
+
+01:12:48.960 --> 01:12:53.960
+And finally here for 10 h that backward.
+
+01:12:53.960 --> 01:12:59.960
+And then we want to set out backwards to be just backward.
+
+01:12:59.960 --> 01:13:02.960
+And here we need to back propagate.
+
+01:13:02.960 --> 01:13:08.960
+We have out that grad and we want to chain it into self grad.
+
+01:13:08.960 --> 01:13:15.960
+And self grad will be the local derivative of this operation that we've done here, which is 10 h.
+
+01:13:15.960 --> 01:13:22.960
+And so we saw that the local gradient is one minus the 10 h of x squared, which here is t.
+
+01:13:22.960 --> 01:13:26.960
+That's the local derivative because that's t is the output of this 10 h.
+
+01:13:26.960 --> 01:13:29.960
+So one minus t square is the local derivative.
+
+01:13:29.960 --> 01:13:34.960
+And then gradients has to be multiplied because of the chain rule.
+
+01:13:34.960 --> 01:13:38.960
+So out grad is chained through the local gradient into self grad.
+
+01:13:38.960 --> 01:13:40.960
+And that should be basically it.
+
+01:13:40.960 --> 01:13:44.960
+So we're going to redefine our value node.
+
+01:13:44.960 --> 01:13:47.960
+We're going to swing all the way down here.
+
+01:13:47.960 --> 01:13:51.960
+And we're going to redefine our expression.
+
+01:13:51.960 --> 01:13:54.960
+Make sure that all the grads are zero.
+
+01:13:55.960 --> 01:13:58.960
+But now we don't have to do this manually anymore.
+
+01:13:58.960 --> 01:14:03.960
+We are going to basically be calling the dot backward in the right order.
+
+01:14:03.960 --> 01:14:13.960
+So first we want to call o's dot backward.
+
+01:14:13.960 --> 01:14:17.960
+So o was the outcome of 10 h.
+
+01:14:17.960 --> 01:14:23.960
+So calling o's backward will be this function.
+
+01:14:23.960 --> 01:14:25.960
+This is what it will do.
+
+01:14:25.960 --> 01:14:31.960
+Now we have to be careful because there's a times out dot grad.
+
+01:14:31.960 --> 01:14:38.960
+And out dot grad, remember, is initialized to zero.
+
+01:14:38.960 --> 01:14:40.960
+So here we see grad zero.
+
+01:14:40.960 --> 01:14:52.960
+So as a base case, we need to set o's dot grad to 1.0 to initialize this with one.
+
+01:14:52.960 --> 01:14:56.960
+And then once this is one, we can call o's dot backward.
+
+01:14:56.960 --> 01:15:01.960
+And what that should do is it should propagate this grad through 10 h.
+
+01:15:01.960 --> 01:15:06.960
+So the local derivative times the global derivative, which is initialized at one.
+
+01:15:06.960 --> 01:15:16.960
+So this should, um, a dot.
+
+01:15:16.960 --> 01:15:21.960
+So I thought about redoing it, but I figured I should just leave the error in here because it's pretty funny.
+
+01:15:21.960 --> 01:15:24.960
+Why is an anti-object not callable?
+
+01:15:24.960 --> 01:15:27.960
+It's because I screwed up.
+
+01:15:27.960 --> 01:15:29.960
+We're trying to save these functions.
+
+01:15:29.960 --> 01:15:31.960
+So this is correct.
+
+01:15:31.960 --> 01:15:35.960
+This here, we don't want to call the function because that returns none.
+
+01:15:35.960 --> 01:15:37.960
+These functions return none.
+
+01:15:37.960 --> 01:15:39.960
+We just want to store the function.
+
+01:15:39.960 --> 01:15:41.960
+So let me redefine the value object.
+
+01:15:41.960 --> 01:15:45.960
+And then we're going to come back in, redefine the expression, draw dot.
+
+01:15:45.960 --> 01:15:47.960
+Everything is great.
+
+01:15:47.960 --> 01:15:49.960
+o dot grad is one.
+
+01:15:49.960 --> 01:15:51.960
+o dot grad is one.
+
+01:15:51.960 --> 01:15:55.960
+And now, now this should work, of course.
+
+01:15:55.960 --> 01:15:56.960
+Okay.
+
+01:15:56.960 --> 01:16:01.960
+So o dot backward should have, this grad should now be 0.5 if we redraw.
+
+01:16:01.960 --> 01:16:03.960
+And if everything went correctly, 0.5.
+
+01:16:03.960 --> 01:16:04.960
+Yay.
+
+01:16:04.960 --> 01:16:05.960
+Okay.
+
+01:16:05.960 --> 01:16:09.960
+So now we need to call n's dot grad.
+
+01:16:09.960 --> 01:16:12.960
+n's dot backward, sorry.
+
+01:16:12.960 --> 01:16:14.960
+n's backward.
+
+01:16:14.960 --> 01:16:17.960
+So that seems to have worked.
+
+01:16:17.960 --> 01:16:21.960
+So n's dot backward routed the gradient to both of these.
+
+01:16:21.960 --> 01:16:23.960
+So this is looking great.
+
+01:16:23.960 --> 01:16:29.960
+Now we can, of course, call b dot grad, b dot backward, sorry.
+
+01:16:29.960 --> 01:16:31.960
+What's going to happen?
+
+01:16:31.960 --> 01:16:33.960
+Well, b doesn't have a backward.
+
+01:16:33.960 --> 01:16:40.960
+b's backward, because b's a leaf node, b's backward is by initialization the empty function.
+
+01:16:40.960 --> 01:16:42.960
+So nothing would happen.
+
+01:16:42.960 --> 01:16:45.960
+But we can call it on it.
+
+01:16:45.960 --> 01:16:56.960
+But when we call this one, it's backward, then we expect this 0.5 to get further routed.
+
+01:16:56.960 --> 01:16:57.960
+Right?
+
+01:16:57.960 --> 01:16:59.960
+So there we go, 0.5.
+
+01:16:59.960 --> 01:17:12.960
+And then finally, we want to call it here on x2w2 and on x1w1.
+
+01:17:13.960 --> 01:17:17.960
+Let's do both of those.
+
+01:17:17.960 --> 01:17:19.960
+And there we go.
+
+01:17:19.960 --> 01:17:24.960
+So we get 0.5, negative 1.5, and 1, exactly as we did before.
+
+01:17:24.960 --> 01:17:31.960
+But now we've done it through calling dot backward, sort of manually.
+
+01:17:31.960 --> 01:17:37.960
+So we have one last piece to get rid of, which is us calling underscore backward manually.
+
+01:17:37.960 --> 01:17:40.960
+So let's think through what we are actually doing.
+
+01:17:40.960 --> 01:17:46.960
+We've laid out a mathematical expression, and now we're trying to go backwards through that expression.
+
+01:17:46.960 --> 01:17:53.960
+So going backwards through the expression just means that we never want to call a dot backward for any node
+
+01:17:53.960 --> 01:17:59.960
+before we've done sort of everything after it.
+
+01:17:59.960 --> 01:18:03.960
+So we have to do everything after it before we're ever going to call dot backward on any one node.
+
+01:18:03.960 --> 01:18:05.960
+We have to get all of its full dependencies.
+
+01:18:05.960 --> 01:18:11.960
+Everything that it depends on has to propagate to it before we can continue back propagation.
+
+01:18:11.960 --> 01:18:17.960
+So this ordering of graphs can be achieved using something called topological sort.
+
+01:18:17.960 --> 01:18:26.960
+So topological sort is basically a laying out of a graph such that all the edges go only from left to right, basically.
+
+01:18:26.960 --> 01:18:31.960
+So here we have a graph, it's a directory acyclic graph, a DAG.
+
+01:18:31.960 --> 01:18:37.960
+And this is two different topological orders of it, I believe, where basically you'll see that it's a laying out of the nodes
+
+01:18:37.960 --> 01:18:41.960
+such that all the edges go only one way from left to right.
+
+01:18:41.960 --> 01:18:45.960
+And implementing topological sort, you can look in Wikipedia and so on.
+
+01:18:45.960 --> 01:18:48.960
+I'm not going to go through it in detail.
+
+01:18:48.960 --> 01:18:53.960
+But basically this is what builds a topological graph.
+
+01:18:53.960 --> 01:19:02.960
+We maintain a set of visited nodes and then we are going through starting at some root node, which for us is O.
+
+01:19:02.960 --> 01:19:05.960
+That's where we want to start the topological sort.
+
+01:19:05.960 --> 01:19:11.960
+And starting at O, we go through all of its children and we need to lay them out from left to right.
+
+01:19:11.960 --> 01:19:14.960
+And basically this starts at O.
+
+01:19:14.960 --> 01:19:17.960
+If it's not visited, then it marks it as visited.
+
+01:19:17.960 --> 01:19:23.960
+And then it iterates through all of its children and calls both topological on them.
+
+01:19:23.960 --> 01:19:27.960
+And then after it's gone through all the children, it adds itself.
+
+01:19:27.960 --> 01:19:32.960
+So basically this node that we're going to call it on, like say O,
+
+01:19:32.960 --> 01:19:38.960
+is only going to add itself to the topo list after all of the children have been processed.
+
+01:19:38.960 --> 01:19:45.960
+And that's how this function is guaranteeing that you're only going to be in the list once all your children are in the list.
+
+01:19:45.960 --> 01:19:47.960
+And that's the invariant that is being maintained.
+
+01:19:47.960 --> 01:19:51.960
+So if we build topo on O and then inspect this list,
+
+01:19:51.960 --> 01:19:55.960
+we're going to see that it ordered our value objects.
+
+01:19:55.960 --> 01:20:01.960
+And the last one is the value of 0.707, which is the output.
+
+01:20:01.960 --> 01:20:04.960
+So this is O and then this is N.
+
+01:20:04.960 --> 01:20:09.960
+And then all the other nodes get laid out before it.
+
+01:20:09.960 --> 01:20:11.960
+So that builds the topological graph.
+
+01:20:11.960 --> 01:20:19.960
+And really what we're doing now is we're just calling dot underscore backward on all of the nodes in a topological order.
+
+01:20:19.960 --> 01:20:24.960
+So if we just reset the gradients, they're all 0, what did we do?
+
+01:20:24.960 --> 01:20:30.960
+We started by setting O dot grad to be 1.
+
+01:20:30.960 --> 01:20:32.960
+That's the base case.
+
+01:20:32.960 --> 01:20:37.960
+Then we built the topological order.
+
+01:20:37.960 --> 01:20:45.960
+And then we went for node in reversed of topo.
+
+01:20:45.960 --> 01:20:53.960
+Now in the reverse order, because this list goes from, you know, we need to go through it in reversed order.
+
+01:20:53.960 --> 01:20:57.960
+So starting at O, node dot backward.
+
+01:20:57.960 --> 01:21:02.960
+And this should be it.
+
+01:21:02.960 --> 01:21:04.960
+There we go.
+
+01:21:04.960 --> 01:21:06.960
+Those are the correct derivatives.
+
+01:21:06.960 --> 01:21:09.960
+Finally, we are going to hide this functionality.
+
+01:21:09.960 --> 01:21:17.960
+So I'm going to copy this and we're going to hide it inside the value class because we don't want to have all that code lying around.
+
+01:21:17.960 --> 01:21:25.960
+So instead of an underscore backward, we're now going to define an actual backward, so that backward without the underscore.
+
+01:21:25.960 --> 01:21:28.960
+And that's going to do all the stuff that we just derived.
+
+01:21:28.960 --> 01:21:30.960
+So let me just clean this up a little bit.
+
+01:21:30.960 --> 01:21:40.960
+So we're first going to build the topological graph starting at self.
+
+01:21:40.960 --> 01:21:48.960
+So build topo of self will populate the topological order into the topo list, which is a local variable.
+
+01:21:48.960 --> 01:21:52.960
+Then we set self dot grad to be 1.
+
+01:21:52.960 --> 01:22:01.960
+And then for each node in the reversed list, so starting at us and going to all the children, underscore backward.
+
+01:22:01.960 --> 01:22:04.960
+And that should be it.
+
+01:22:04.960 --> 01:22:07.960
+So save.
+
+01:22:07.960 --> 01:22:10.960
+Come down here, redefine.
+
+01:22:10.960 --> 01:22:13.960
+Okay, all the grads are zero.
+
+01:22:13.960 --> 01:22:16.960
+And now what we can do is, oh, dot backward without the underscore.
+
+01:22:16.960 --> 01:22:22.960
+And there we go.
+
+01:22:22.960 --> 01:22:26.960
+And that's back propagation.
+
+01:22:26.960 --> 01:22:28.960
+Please for one neuron.
+
+01:22:28.960 --> 01:22:33.960
+We shouldn't be too happy with ourselves actually because we have a bad bug.
+
+01:22:33.960 --> 01:22:39.960
+And we have not surfaced the bug because of some specific conditions that we have to think about right now.
+
+01:22:39.960 --> 01:22:43.960
+So here's the simplest case that shows the bug.
+
+01:22:43.960 --> 01:22:47.960
+Say I create a single node A.
+
+01:22:47.960 --> 01:22:51.960
+And then I create a B that is A plus A.
+
+01:22:51.960 --> 01:22:54.960
+And then I call it backward.
+
+01:22:54.960 --> 01:22:59.960
+So what's going to happen is A is three, and then B is A plus A.
+
+01:22:59.960 --> 01:23:03.960
+So there's two arrows on top of each other here.
+
+01:23:03.960 --> 01:23:06.960
+Then we can see that B is, of course, the forward pass works.
+
+01:23:06.960 --> 01:23:09.960
+B is just A plus A, which is six.
+
+01:23:09.960 --> 01:23:12.960
+But the gradient here is not actually correct.
+
+01:23:12.960 --> 01:23:15.960
+That we calculated automatically.
+
+01:23:15.960 --> 01:23:22.960
+And that's because, of course, just doing calculus in your head,
+
+01:23:22.960 --> 01:23:27.960
+the derivative of B with respect to A should be two.
+
+01:23:27.960 --> 01:23:30.960
+One plus one. It's not one.
+
+01:23:30.960 --> 01:23:32.960
+Intuitively, what's happening here, right?
+
+01:23:32.960 --> 01:23:36.960
+So B is the result of A plus A, and then we call backward on it.
+
+01:23:36.960 --> 01:23:43.960
+So let's go up and see what that does.
+
+01:23:43.960 --> 01:23:45.960
+B is the result of addition.
+
+01:23:45.960 --> 01:23:47.960
+So out as B.
+
+01:23:47.960 --> 01:23:54.960
+And then when we call backward, what happened is self.grad was set to one.
+
+01:23:54.960 --> 01:23:57.960
+And then other.grad was set to one.
+
+01:23:57.960 --> 01:24:03.960
+But because we're doing A plus A, self and other are actually the exact same object.
+
+01:24:03.960 --> 01:24:05.960
+So we are overriding the gradient.
+
+01:24:05.960 --> 01:24:07.960
+We are setting it to one.
+
+01:24:07.960 --> 01:24:09.960
+And then we are setting it again to one.
+
+01:24:09.960 --> 01:24:12.960
+And that's why it stays at one.
+
+01:24:12.960 --> 01:24:14.960
+So that's the problem.
+
+01:24:14.960 --> 01:24:21.960
+There's another way to see this in a little bit more complicated expression.
+
+01:24:21.960 --> 01:24:25.960
+So here we have A and B.
+
+01:24:25.960 --> 01:24:29.960
+And then D will be the multiplication of the two.
+
+01:24:29.960 --> 01:24:31.960
+And E will be the addition of the two.
+
+01:24:31.960 --> 01:24:34.960
+And then we multiply E times D to get F.
+
+01:24:34.960 --> 01:24:36.960
+And then we call it F.backward.
+
+01:24:36.960 --> 01:24:40.960
+And these gradients, if you check, will be incorrect.
+
+01:24:40.960 --> 01:24:48.960
+So fundamentally what's happening here, again, is basically we're going to see an issue anytime we use a variable more than once.
+
+01:24:48.960 --> 01:24:52.960
+Until now, in these expressions above, every variable is used exactly once.
+
+01:24:52.960 --> 01:24:54.960
+So we didn't see the issue.
+
+01:24:54.960 --> 01:24:58.960
+But here if a variable is used more than once, what's going to happen during backward pass?
+
+01:24:58.960 --> 01:25:02.960
+We're back propagating from F to E to D, so far so good.
+
+01:25:02.960 --> 01:25:07.960
+But now E calls it backward, and it deposits its gradients to A and B.
+
+01:25:07.960 --> 01:25:13.960
+But then we come back to D and call backward, and it overwrites those gradients at A and B.
+
+01:25:13.960 --> 01:25:16.960
+So that's obviously a problem.
+
+01:25:16.960 --> 01:25:23.960
+And the solution here, if you look at the multivariate case of the chain rule and its generalization there,
+
+01:25:23.960 --> 01:25:29.960
+the solution there is basically that we have to accumulate these gradients, these gradients add.
+
+01:25:29.960 --> 01:25:36.960
+And so instead of setting those gradients, we can simply do plus equals.
+
+01:25:36.960 --> 01:25:38.960
+We need to accumulate those gradients.
+
+01:25:38.960 --> 01:25:45.960
+Plus equals, plus equals, plus equals, plus equals.
+
+01:25:45.960 --> 01:25:49.960
+And this will be okay, remember, because we are initializing them at zero.
+
+01:25:49.960 --> 01:25:58.960
+So they start at zero, and then any contribution that flows backwards will simply add.
+
+01:25:58.960 --> 01:26:05.960
+So now if we redefine this one, because the plus equals, this now works.
+
+01:26:05.960 --> 01:26:12.960
+Because A dot grad started at zero, and we call B dot backward, we deposit one, and then we deposit one again,
+
+01:26:12.960 --> 01:26:14.960
+and now this is two, which is correct.
+
+01:26:14.960 --> 01:26:17.960
+And here this will also work, and we'll get correct gradients.
+
+01:26:17.960 --> 01:26:21.960
+Because when we call E dot backward, we will deposit the gradients from this branch,
+
+01:26:21.960 --> 01:26:26.960
+and then we get to D dot backward, it will deposit its own gradients,
+
+01:26:26.960 --> 01:26:29.960
+and then those gradients simply add on top of each other.
+
+01:26:29.960 --> 01:26:32.960
+And so we just accumulate those gradients, and that fixes the issue.
+
+01:26:32.960 --> 01:26:35.960
+Okay, now before we move on, let me actually do a bit of cleanup here,
+
+01:26:35.960 --> 01:26:39.960
+and delete some of these, some of this intermediate work.
+
+01:26:39.960 --> 01:26:44.960
+So I'm not going to need any of this, now that we've derived all of it.
+
+01:26:44.960 --> 01:26:48.960
+We are going to keep this, because I want to come back to it.
+
+01:26:48.960 --> 01:26:55.960
+Delete the 10-H, delete the harmonic in any example, delete the step, delete this,
+
+01:26:55.960 --> 01:27:00.960
+keep the code that draws, and then delete this example,
+
+01:27:00.960 --> 01:27:03.960
+and leave behind only the definition of value.
+
+01:27:03.960 --> 01:27:08.960
+And now let's come back to this non-linearity here that we implemented, the 10-H.
+
+01:27:08.960 --> 01:27:13.960
+Now I told you that we could have broken down 10-H into its explicit atoms
+
+01:27:13.960 --> 01:27:16.960
+in terms of other expressions if we had the X function.
+
+01:27:16.960 --> 01:27:21.960
+So if you remember, 10-H is defined like this, and we chose to develop 10-H as a single function,
+
+01:27:21.960 --> 01:27:25.960
+and we can do that because we know it's derivative, and we can back-propagate through it.
+
+01:27:25.960 --> 01:27:29.960
+But we can also break down 10-H into an expressive function of X.
+
+01:27:29.960 --> 01:27:33.960
+And I would like to do that now, because I want to prove to you that you get all the same results
+
+01:27:33.960 --> 01:27:38.960
+and all the same gradients, but also because it forces us to implement a few more expressions.
+
+01:27:38.960 --> 01:27:43.960
+It forces us to do exponentiation, addition, subtraction, division, and things like that,
+
+01:27:43.960 --> 01:27:46.960
+and I think it's a good exercise to go through a few more of these.
+
+01:27:46.960 --> 01:27:50.960
+Okay, so let's scroll up to the definition of value.
+
+01:27:50.960 --> 01:27:56.960
+And here, one thing that we currently can't do is we can't do like a value of, say, 2.0.
+
+01:27:56.960 --> 01:28:03.960
+But we can't do, you know, here, for example, we want to add a constant 1, and we can't do something like this.
+
+01:28:03.960 --> 01:28:07.960
+And we can't do it because it says int object has no attribute data.
+
+01:28:07.960 --> 01:28:13.960
+That's because a plus 1 comes right here to add, and then other is the integer 1.
+
+01:28:13.960 --> 01:28:17.960
+And then here, Python is trying to access 1.data, and that's not a thing.
+
+01:28:17.960 --> 01:28:22.960
+And that's because basically 1 is not a value object, and we only have addition for value objects.
+
+01:28:22.960 --> 01:28:28.960
+So as a matter of convenience so that we can create expressions like this and make that make sense,
+
+01:28:28.960 --> 01:28:31.960
+we can simply do something like this.
+
+01:28:31.960 --> 01:28:37.960
+Basically, we let other alone, if other is an instance of value, but if it's not an instance of value,
+
+01:28:37.960 --> 01:28:42.960
+we're going to assume that it's a number, like an integer or a float, and we're going to simply wrap it in value.
+
+01:28:42.960 --> 01:28:48.960
+And then other will just become value of other, and then other will have a data attribute, and this should work.
+
+01:28:48.960 --> 01:28:52.960
+So if I just say this, redefine value, then this should work.
+
+01:28:52.960 --> 01:28:53.960
+There we go.
+
+01:28:53.960 --> 01:29:00.960
+Okay, now let's do the exact same thing for multiply, because we can't do something like this, again, for the exact same reason.
+
+01:29:00.960 --> 01:29:06.960
+So we just have to go to mall, and if other is not a value, then let's wrap it in value.
+
+01:29:06.960 --> 01:29:09.960
+Let's redefine value, and now this works.
+
+01:29:09.960 --> 01:29:13.960
+Now here's a kind of unfortunate and not obvious part.
+
+01:29:13.960 --> 01:29:18.960
+A times 2 works, we saw that, but 2 times A, is that going to work?
+
+01:29:18.960 --> 01:29:20.960
+You'd expect it to, right?
+
+01:29:20.960 --> 01:29:22.960
+But actually, it will not.
+
+01:29:22.960 --> 01:29:30.960
+And the reason it won't is because Python doesn't know, like when you do A times 2, basically, so A times 2,
+
+01:29:30.960 --> 01:29:35.960
+Python will go and it will basically do something like A dot mall of 2.
+
+01:29:35.960 --> 01:29:36.960
+That's basically what it will call.
+
+01:29:36.960 --> 01:29:44.960
+But to it, 2 times A is the same as 2 dot mall of A, and it doesn't too can't multiply value.
+
+01:29:44.960 --> 01:29:46.960
+And so it's really confused about that.
+
+01:29:46.960 --> 01:29:53.960
+So instead, what happens is in Python, the way this works is you are free to define something called the R mall.
+
+01:29:53.960 --> 01:29:56.960
+And R mall is kind of like a fallback.
+
+01:29:56.960 --> 01:30:04.960
+So if Python can't do 2 times A, it will check if by any chance A knows how to multiply 2.
+
+01:30:04.960 --> 01:30:07.960
+And that will be called into R mall.
+
+01:30:07.960 --> 01:30:12.960
+So because Python can't do 2 times A, it will check, is there an R mall in value?
+
+01:30:12.960 --> 01:30:15.960
+And because there is, it will now call that.
+
+01:30:15.960 --> 01:30:19.960
+And what we'll do here is we will swap the order of the operands.
+
+01:30:19.960 --> 01:30:24.960
+So basically 2 times A will redirect to R mall and R mall will basically call A times 2.
+
+01:30:24.960 --> 01:30:26.960
+And that's how that will work.
+
+01:30:26.960 --> 01:30:31.960
+So redefining that with R mall, 2 times A becomes 4.
+
+01:30:31.960 --> 01:30:36.960
+Okay, now looking at the other elements that we still need, we need to know how to exponentiate and how to divide.
+
+01:30:36.960 --> 01:30:39.960
+So let's first do the exponentiation part.
+
+01:30:39.960 --> 01:30:44.960
+We're going to introduce a single function Xp here.
+
+01:30:44.960 --> 01:30:52.960
+And Xp is going to mirror 10 H in the sense that it's a single function that transforms a single scalar value and outputs a single scalar value.
+
+01:30:52.960 --> 01:31:00.960
+So we pop out the Python number, we use method Xp to exponentiate it, create a new value object, everything that we've seen before.
+
+01:31:00.960 --> 01:31:04.960
+And the tricky part of course is how do you back propagate through e to the x.
+
+01:31:04.960 --> 01:31:13.960
+And so here you can potentially pause the video and think about what should go here.
+
+01:31:13.960 --> 01:31:18.960
+Okay, so basically we need to know what is the local derivative of e to the x.
+
+01:31:18.960 --> 01:31:22.960
+So d by dx of e to the x is famously just e to the x.
+
+01:31:22.960 --> 01:31:26.960
+And we've already just calculated e to the x and it's inside out that data.
+
+01:31:26.960 --> 01:31:31.960
+So we can do out that data at times and out that grad, that's the chain rule.
+
+01:31:31.960 --> 01:31:36.960
+So we're just chaining on to the current running grad and this is what the expression looks like.
+
+01:31:36.960 --> 01:31:41.960
+It looks a little confusing, but this is what it is and that's the exponentiation.
+
+01:31:41.960 --> 01:31:47.960
+So we defining, we should not be able to call e to the x and hopefully the backward pass works as well.
+
+01:31:47.960 --> 01:31:51.960
+Okay, and the last thing we'd like to do of course is we'd like to be able to divide.
+
+01:31:51.960 --> 01:31:55.960
+Now, I actually will implement something slightly more powerful than division
+
+01:31:55.960 --> 01:31:59.960
+because division is just a special case of something a bit more powerful.
+
+01:31:59.960 --> 01:32:06.960
+So in particular, just by rearranging, if we would have some kind of a b equals value of 4.0 here,
+
+01:32:06.960 --> 01:32:10.960
+we'd like to basically be able to do a divide b and we'd like this to be able to give us 0.5.
+
+01:32:10.960 --> 01:32:14.960
+Now, division actually can be reshuffled as follows.
+
+01:32:14.960 --> 01:32:19.960
+If we have a divide b, that's actually the same as a multiplying 1 over b
+
+01:32:19.960 --> 01:32:23.960
+and that's the same as a multiplying b to the power of negative 1.
+
+01:32:23.960 --> 01:32:30.960
+And so what I'd like to do instead is I basically like to implement the operation of x to the k for some constant k.
+
+01:32:30.960 --> 01:32:35.960
+So it's an integer or a float and we would like to be able to differentiate this
+
+01:32:35.960 --> 01:32:39.960
+and then as a special case, negative 1 will be division.
+
+01:32:39.960 --> 01:32:45.960
+And so I'm doing that just because it's more general and you might as well do it that way.
+
+01:32:45.960 --> 01:32:53.960
+So basically what I'm saying is we can redefine division, which we will put here somewhere.
+
+01:32:53.960 --> 01:32:55.960
+Yeah, we can put this here somewhere.
+
+01:32:55.960 --> 01:33:00.960
+What I'm saying is that we can redefine division, so self-divide other.
+
+01:33:00.960 --> 01:33:04.960
+This can actually be rewritten as self times other to the power of negative 1.
+
+01:33:04.960 --> 01:33:10.960
+And now, value raised to the power of negative 1, we have to now define that.
+
+01:33:10.960 --> 01:33:15.960
+So here's, so we need to implement the power function.
+
+01:33:15.960 --> 01:33:17.960
+Where am I going to put the power function?
+
+01:33:17.960 --> 01:33:19.960
+Maybe here somewhere.
+
+01:33:19.960 --> 01:33:21.960
+This is the skeleton for it.
+
+01:33:21.960 --> 01:33:27.960
+So this function will be called when we try to raise a value to some power and other will be that power.
+
+01:33:27.960 --> 01:33:31.960
+Now, I'd like to make sure that other is only an int or a float.
+
+01:33:31.960 --> 01:33:37.960
+Usually other is some kind of a different value object, but here other will be forced to be an int or a float.
+
+01:33:37.960 --> 01:33:43.960
+Otherwise, the math won't work for forward trying to achieve in a specific case.
+
+01:33:43.960 --> 01:33:48.960
+That would be a different derivative expression if we wanted other to be a value.
+
+01:33:48.960 --> 01:33:53.960
+So here we create the active value, which is just this data raised to the power of other.
+
+01:33:53.960 --> 01:33:55.960
+And other here could be, for example, negative 1.
+
+01:33:55.960 --> 01:33:58.960
+That's what we are hoping to achieve.
+
+01:33:58.960 --> 01:34:00.960
+And then this is the backward stub.
+
+01:34:01.960 --> 01:34:11.960
+And this is the fun part, which is what is the chain rule expression here for back propagating through the power function.
+
+01:34:11.960 --> 01:34:14.960
+Where the power is to the power of some kind of a constant.
+
+01:34:14.960 --> 01:34:20.960
+So this is the exercise and maybe pause the video here and see if you can figure it out yourself as to what we should put here.
+
+01:34:20.960 --> 01:34:31.960
+Okay, so you can actually go here and look at derivative rules as an example.
+
+01:34:31.960 --> 01:34:35.960
+And we see lots of derivative rules that you can hopefully know from calculus.
+
+01:34:35.960 --> 01:34:38.960
+In particular, what we're looking for is the power rule.
+
+01:34:38.960 --> 01:34:43.960
+Because that's telling us that if we're trying to take d by dx of x to the n, which is what we're doing here,
+
+01:34:43.960 --> 01:34:48.960
+then that is just n times x to the n minus 1, right?
+
+01:34:48.960 --> 01:34:55.960
+Okay, so that's telling us about the local derivative of this power operation.
+
+01:34:55.960 --> 01:35:02.960
+So all we want here, basically n is now other and self.data is x.
+
+01:35:02.960 --> 01:35:12.960
+And so this now becomes other, which is n times self.data, which is now a Python int or a float.
+
+01:35:12.960 --> 01:35:20.960
+It's not a value object. We're accessing the data attribute raised to the power of other minus 1 or n minus 1.
+
+01:35:20.960 --> 01:35:27.960
+I can put brackets around this, but this doesn't matter because power takes precedence over multiply and by hand.
+
+01:35:27.960 --> 01:35:30.960
+So that would have been okay. And that's the local derivative only.
+
+01:35:30.960 --> 01:35:34.960
+But now we have to chain it and we chain it just simply by multiplying by on top ground.
+
+01:35:34.960 --> 01:35:41.960
+That's chain rule. And this should technically work and we're going to find out soon.
+
+01:35:41.960 --> 01:35:47.960
+But now if we do this, this should now work and we get 0.5.
+
+01:35:47.960 --> 01:35:50.960
+So the forward pass works, but does the backward pass work?
+
+01:35:50.960 --> 01:35:53.960
+And I realized that we actually also have to know how to subtract.
+
+01:35:53.960 --> 01:35:57.960
+So right now a minus b will not work to make it work.
+
+01:35:57.960 --> 01:36:00.960
+We need one more piece of code here.
+
+01:36:00.960 --> 01:36:10.960
+And basically this is the subtraction and the way we're going to implement subtraction is we're going to implement it by addition of a negation.
+
+01:36:10.960 --> 01:36:13.960
+And then to implement negation, we're going to multiply by negative 1.
+
+01:36:13.960 --> 01:36:20.960
+So just again using the stuff we've already built and just expressing it in terms of what we have and a minus b does not work in.
+
+01:36:20.960 --> 01:36:24.960
+Okay, so now let's scroll again to this expression here for this neuron.
+
+01:36:24.960 --> 01:36:31.960
+And let's just compute the backward pass here once we've defined 0 and let's draw it.
+
+01:36:31.960 --> 01:36:37.960
+So here's the gradients for all of these leaf nodes for this two dimensional neuron that has a 10h that we've seen before.
+
+01:36:37.960 --> 01:36:43.960
+So now what I'd like to do is I'd like to break up this 10h into this expression here.
+
+01:36:43.960 --> 01:36:52.960
+So let me copy paste this here and now instead of we'll preserve the label and we will change how we define 0.
+
+01:36:52.960 --> 01:36:55.960
+So in particular, we're going to implement this formula here.
+
+01:36:55.960 --> 01:36:59.960
+So we need e to the 2x minus 1 over e to the x plus 1.
+
+01:36:59.960 --> 01:37:05.960
+So e to the 2x, we need to take 2 times m and we need to exponentiate it.
+
+01:37:05.960 --> 01:37:07.960
+That's e to the 2x.
+
+01:37:07.960 --> 01:37:18.960
+And then because we're using it twice, let's create an intermediate variable e and then define 0 as e plus 1 over e minus 1 over e plus 1.
+
+01:37:18.960 --> 01:37:23.960
+e minus 1 over e plus 1 and that should be it.
+
+01:37:23.960 --> 01:37:26.960
+And then we should be able to draw dot of 0.
+
+01:37:26.960 --> 01:37:30.960
+So now before I run this, what do we expect to see?
+
+01:37:30.960 --> 01:37:37.960
+Number one, we're expecting to see a much longer graph here because we've broken up 10h into a bunch of other operations.
+
+01:37:37.960 --> 01:37:39.960
+But those operations are mathematically equivalent.
+
+01:37:39.960 --> 01:37:44.960
+And so what we're expecting to see is number one, the same result here.
+
+01:37:44.960 --> 01:37:45.960
+So the forward pass works.
+
+01:37:45.960 --> 01:37:52.960
+And number two, because of that mathematical equivalence, we expect to see the same backward pass and the same gradients on these leaf nodes.
+
+01:37:52.960 --> 01:37:54.960
+So these gradients should be identical.
+
+01:37:54.960 --> 01:37:57.960
+So let's run this.
+
+01:37:57.960 --> 01:38:06.960
+So number one, let's verify that instead of a single 10h node, we have now x and we have plus, we have times negative 1.
+
+01:38:06.960 --> 01:38:11.960
+This is the division and we end up with the same forward pass here.
+
+01:38:11.960 --> 01:38:15.960
+And then the gradients, we have to be careful because they're in slightly different order potentially.
+
+01:38:15.960 --> 01:38:26.960
+The gradients for w2x2 should be 0 and 0.5, w2 and x2 are 0 and 0.5 and w1x1 are 1 and negative 1.5.
+
+01:38:26.960 --> 01:38:34.960
+So that means that both our forward passes and backward passes were correct because this turned out to be equivalent to 10h before.
+
+01:38:34.960 --> 01:38:42.960
+And so the reason I wanted to go through this exercise is number one, we got to practice a few more operations and writing more backwards passes.
+
+01:38:42.960 --> 01:38:50.960
+And number two, I wanted to illustrate the point that the level at which you implement your operations is totally up to you.
+
+01:38:50.960 --> 01:38:55.960
+You can implement backward passes for tiny expressions like a single individual plus or a single times.
+
+01:38:55.960 --> 01:39:05.960
+Or you can implement them for say 10h, which is a kind of a, potentially you can see it as a composite operation because it's made up of all these more atomic operations.
+
+01:39:05.960 --> 01:39:07.960
+But really all of this is kind of like a fake concept.
+
+01:39:07.960 --> 01:39:12.960
+All that matters is we have some kind of inputs and some kind of an output and this output is a function of the inputs in some way.
+
+01:39:12.960 --> 01:39:21.960
+And as long as you can do forward pass and the backward pass of that little operation, it doesn't matter what that operation is and how composite it is.
+
+01:39:21.960 --> 01:39:26.960
+If you can write the local gradients, you can chain the gradient and you can continue back propagation.
+
+01:39:26.960 --> 01:39:30.960
+So the design of what those functions are is completely up to you.
+
+01:39:30.960 --> 01:39:41.960
+So now I would like to show you how you can do the exact same thing by using a modern deep neural network library like for example PyTorch, which I've roughly modeled micrograd by.
+
+01:39:41.960 --> 01:39:44.960
+And so PyTorch is something you would use in production.
+
+01:39:44.960 --> 01:39:48.960
+And I'll show you how you can do the exact same thing but in PyTorch API.
+
+01:39:48.960 --> 01:39:51.960
+So I'm just going to copy paste it in and walk you through it a little bit.
+
+01:39:51.960 --> 01:39:53.960
+This is what it looks like.
+
+01:39:53.960 --> 01:40:00.960
+So we're going to import PyTorch and then we need to define these value objects like we have here.
+
+01:40:00.960 --> 01:40:04.960
+Now micrograd is a scalar valued engine.
+
+01:40:04.960 --> 01:40:07.960
+So we only have scalar values like 2.0.
+
+01:40:07.960 --> 01:40:10.960
+But in PyTorch everything is based around tensors.
+
+01:40:10.960 --> 01:40:14.960
+And like I mentioned, tensors are just n dimensional arrays of scalars.
+
+01:40:14.960 --> 01:40:18.960
+So that's why things get a little bit more complicated here.
+
+01:40:18.960 --> 01:40:22.960
+I just need a scalar valued tensor, a tensor with just a single element.
+
+01:40:22.960 --> 01:40:29.960
+But by default when you work with PyTorch you would use more complicated tensors like this.
+
+01:40:29.960 --> 01:40:35.960
+So if I import PyTorch then I can create tensors like this.
+
+01:40:35.960 --> 01:40:44.960
+And this tensor for example is a 2 by 3 array of scalars in a single compact representation.
+
+01:40:44.960 --> 01:40:48.960
+So you can check its shape. We see that it's a 2 by 3 array and so on.
+
+01:40:48.960 --> 01:40:52.960
+So this is usually what you would work with in the actual libraries.
+
+01:40:52.960 --> 01:40:59.960
+So here I'm creating a tensor that has only a single element, 2.0.
+
+01:40:59.960 --> 01:41:07.960
+And then I'm casting it to be double because Python is by default using double precision for its floating point numbers.
+
+01:41:07.960 --> 01:41:09.960
+So I like everything to be identical.
+
+01:41:09.960 --> 01:41:13.960
+By default the data type of these tensors will be float 32.
+
+01:41:13.960 --> 01:41:15.960
+So it's only using a single precision float.
+
+01:41:15.960 --> 01:41:21.960
+So I'm casting it to double so that we have float 64 just like in Python.
+
+01:41:21.960 --> 01:41:27.960
+So I'm casting to double and then we get something similar to value of 2.
+
+01:41:27.960 --> 01:41:33.960
+The next thing I have to do is because these are leaf nodes by default PyTorch assumes that they do not require gradients.
+
+01:41:33.960 --> 01:41:37.960
+So I need to explicitly say that all of these nodes require gradients.
+
+01:41:37.960 --> 01:41:42.960
+So this is going to construct scalar, valued, one element tensors.
+
+01:41:42.960 --> 01:41:45.960
+Make sure that PyTorch knows that they require gradients.
+
+01:41:45.960 --> 01:41:49.960
+Now by default these are set to false by the way because of efficiency reasons.
+
+01:41:49.960 --> 01:41:55.960
+Because usually you would not want gradients for leaf nodes like the inputs to the network.
+
+01:41:55.960 --> 01:41:58.960
+So this is just trying to be efficient in the most common cases.
+
+01:41:58.960 --> 01:42:05.960
+So once we've defined all of our values in PyTorchLand we can perform arithmetic just like we can here in microgradLand.
+
+01:42:05.960 --> 01:42:06.960
+So this would just work.
+
+01:42:06.960 --> 01:42:08.960
+And then there's a torch.10h also.
+
+01:42:08.960 --> 01:42:17.960
+And when we get back as a tensor again and we can just like in micrograd it's got a data attribute and it's got grad attributes.
+
+01:42:17.960 --> 01:42:22.960
+So these tensor objects just like in micrograd have a dot data and a dot grad.
+
+01:42:22.960 --> 01:42:33.960
+And the only difference here is that we need to call it dot item because otherwise PyTorch dot item basically takes a single tensor of one element.
+
+01:42:33.960 --> 01:42:37.960
+And it just returns that element stripping out the tensor.
+
+01:42:37.960 --> 01:42:44.960
+So let me just run this and hopefully we are going to get this is going to print the forward pass which is 0.707.
+
+01:42:44.960 --> 01:42:50.960
+And this will be the gradients which hopefully are 0.50, negative 1.5 and 1.
+
+01:42:50.960 --> 01:42:59.960
+So if we just run this, there we go, 0.7 so the forward pass agrees and then 0.50, negative 1.5 and 1.
+
+01:42:59.960 --> 01:43:01.960
+So PyTorch agrees with us.
+
+01:43:01.960 --> 01:43:08.960
+And just to show you here basically O, here's a tensor with a single element and it's a double.
+
+01:43:08.960 --> 01:43:13.960
+And we can call that item on it to just get the single number out.
+
+01:43:13.960 --> 01:43:15.960
+So that's what item does.
+
+01:43:15.960 --> 01:43:21.960
+And O is a tensor object like I mentioned and it's got a backward function just like we've implemented.
+
+01:43:21.960 --> 01:43:23.960
+And then all of these also have a dot grad.
+
+01:43:23.960 --> 01:43:30.960
+So like X2 for example and the grad and it's a tensor and we can pop out the individual number with dot item.
+
+01:43:30.960 --> 01:43:39.960
+So basically Torch can do what we did in micrograd as a special case when your tensors are all single element tensors.
+
+01:43:39.960 --> 01:43:45.960
+But the big deal with PyTorch is that everything is significantly more efficient because we are working with these tensor objects
+
+01:43:45.960 --> 01:43:50.960
+and we can do lots of operations in parallel on all of these tensors.
+
+01:43:50.960 --> 01:43:54.960
+But otherwise what we've built very much agrees with the API of PyTorch.
+
+01:43:54.960 --> 01:43:58.960
+Okay so now that we have some machinery to build out pretty complicated mathematical expressions,
+
+01:43:58.960 --> 01:44:01.960
+we can also start building out neural nets.
+
+01:44:01.960 --> 01:44:05.960
+And as I mentioned neural nets are just a specific class of mathematical expressions.
+
+01:44:06.960 --> 01:44:13.960
+So we're going to start building out a neural net piece by piece and eventually we'll build out a two layer multi-layer layer perceptron as it's called.
+
+01:44:13.960 --> 01:44:15.960
+And I'll show you exactly what that means.
+
+01:44:15.960 --> 01:44:17.960
+Let's start with a single individual neuron.
+
+01:44:17.960 --> 01:44:19.960
+We've implemented one here.
+
+01:44:19.960 --> 01:44:26.960
+But here I'm going to implement one that also subscribes to the PyTorch API and how it designs its neural network modules.
+
+01:44:26.960 --> 01:44:32.960
+So just like we saw that we can like match the API of PyTorch on the autograd side,
+
+01:44:32.960 --> 01:44:35.960
+we're going to try to do that on the neural network modules.
+
+01:44:35.960 --> 01:44:40.960
+So here's class neuron and just for the sake of efficiency,
+
+01:44:40.960 --> 01:44:44.960
+I'm going to copy paste some sections that are relatively straightforward.
+
+01:44:44.960 --> 01:44:48.960
+So the constructor will take number of inputs to this neuron,
+
+01:44:48.960 --> 01:44:51.960
+which is how many inputs come to a neuron.
+
+01:44:51.960 --> 01:44:54.960
+So this one for example is three inputs.
+
+01:44:54.960 --> 01:45:00.960
+And then it's going to create a weight that is some random number between negative one and one for every one of those inputs
+
+01:45:00.960 --> 01:45:05.960
+and a bias that controls the overall trigger happiness of this neuron.
+
+01:45:05.960 --> 01:45:13.960
+And then we're going to implement a def underscore underscore call of self and x, sum input x.
+
+01:45:13.960 --> 01:45:16.960
+And really what we don't do here is w times x plus b,
+
+01:45:16.960 --> 01:45:20.960
+where w times x here is a dot product specifically.
+
+01:45:20.960 --> 01:45:25.960
+Now if you haven't seen call, let me just return 0.0 here from now.
+
+01:45:25.960 --> 01:45:29.960
+The way this works now is we can have an x which is say like 2.0, 3.0,
+
+01:45:29.960 --> 01:45:34.960
+then we can initialize a neuron that is two dimensional because these are two numbers.
+
+01:45:34.960 --> 01:45:38.960
+And then we can feed those two numbers into that neuron to get an output.
+
+01:45:38.960 --> 01:45:43.960
+And so when you use this notation n of x, Python will use call.
+
+01:45:43.960 --> 01:45:48.960
+So currently call just returns 0.0.
+
+01:45:48.960 --> 01:45:53.960
+Now we'd like to actually do the forward pass of this neuron instead.
+
+01:45:53.960 --> 01:45:59.960
+So what we're going to do here first is we need to basically multiply all of the elements of w
+
+01:45:59.960 --> 01:46:03.960
+with all of the elements of x pairwise. We need to multiply them.
+
+01:46:03.960 --> 01:46:08.960
+So the first thing we're going to do is we're going to zip up salta w and x.
+
+01:46:08.960 --> 01:46:13.960
+And in Python zip takes two iterators and it creates a new iterator
+
+01:46:13.960 --> 01:46:16.960
+that iterates over the tuples of their corresponding entries.
+
+01:46:17.960 --> 01:46:23.960
+So for example, just to show you, we can print this list and still return 0.0 here.
+
+01:46:33.960 --> 01:46:38.960
+So we see that these w's are paired up with the x's, w with x.
+
+01:46:39.960 --> 01:46:53.960
+And now what we want to do is for wixi in, we want to multiply wixi
+
+01:46:53.960 --> 01:46:58.960
+and then we want to sum all of that together to come up with an activation
+
+01:46:58.960 --> 01:47:01.960
+and add also salta b on top.
+
+01:47:01.960 --> 01:47:05.960
+So that's the raw activation and then of course we need to pass that through a normality.
+
+01:47:05.960 --> 01:47:10.960
+So what we're going to be returning is act.tenh and here's out.
+
+01:47:10.960 --> 01:47:16.960
+So now we see that we are getting some outputs and we get a different output from neuron each time
+
+01:47:16.960 --> 01:47:20.960
+because we are initializing different weights and biases.
+
+01:47:20.960 --> 01:47:26.960
+And then to be a bit more efficient here actually, sum by the way takes a second optional parameter
+
+01:47:26.960 --> 01:47:30.960
+which is the start and by default the start is 0.
+
+01:47:30.960 --> 01:47:34.960
+So these elements of this sum will be added on top of 0 to begin with
+
+01:47:34.960 --> 01:47:39.960
+but actually we can just start with salta b and then we just have an expression like this.
+
+01:47:44.960 --> 01:47:48.960
+And then the generator expression here must be parenthesized if I tell them.
+
+01:47:48.960 --> 01:47:50.960
+There we go.
+
+01:47:52.960 --> 01:47:55.960
+Yep, so now we can forward a single neuron.
+
+01:47:55.960 --> 01:47:58.960
+Next up we're going to define a layer of neurons.
+
+01:47:58.960 --> 01:48:01.960
+So here we have a schematic for a MLB.
+
+01:48:01.960 --> 01:48:07.960
+So we see that these MLBs each layer, this is one layer, has actually a number of neurons
+
+01:48:07.960 --> 01:48:10.960
+and they're not connected to each other but all of them are fully connected to the input.
+
+01:48:10.960 --> 01:48:12.960
+So what is a layer of neurons?
+
+01:48:12.960 --> 01:48:15.960
+It's just a set of neurons evaluated independently.
+
+01:48:15.960 --> 01:48:21.960
+So in the interest of time I'm going to do something fairly straightforward here.
+
+01:48:22.960 --> 01:48:24.960
+It's...
+
+01:48:24.960 --> 01:48:28.960
+Literally a layer is just a list of neurons
+
+01:48:28.960 --> 01:48:30.960
+and then how many neurons do we have?
+
+01:48:30.960 --> 01:48:32.960
+We take that as an input argument here.
+
+01:48:32.960 --> 01:48:34.960
+How many neurons do you want in your layer?
+
+01:48:34.960 --> 01:48:36.960
+Number of outputs in this layer.
+
+01:48:36.960 --> 01:48:40.960
+And so we just initialize completely independent neurons with this given dimensionality
+
+01:48:40.960 --> 01:48:45.960
+and when we call on it we just independently evaluate them.
+
+01:48:45.960 --> 01:48:49.960
+So now instead of a neuron we can make a layer of neurons.
+
+01:48:49.960 --> 01:48:52.960
+We have two dimensional neurons and let's have three of them.
+
+01:48:52.960 --> 01:48:58.960
+And now we see that we have three independent evaluations of three different neurons.
+
+01:48:58.960 --> 01:49:04.960
+Okay, finally let's complete this picture and define an entire multilayer perceptron or MLB.
+
+01:49:04.960 --> 01:49:08.960
+And as we can see here in an MLB these layers just feed into each other sequentially.
+
+01:49:08.960 --> 01:49:13.960
+So let's come here and I'm just going to copy the code here in interest of time.
+
+01:49:13.960 --> 01:49:16.960
+So an MLB is very similar.
+
+01:49:16.960 --> 01:49:21.960
+We're taking the number of inputs as before but now instead of taking a single N out
+
+01:49:21.960 --> 01:49:25.960
+which is number of neurons in a single layer we're going to take a list of N outs
+
+01:49:25.960 --> 01:49:29.960
+and this list defines the sizes of all the layers that we want in our MLB.
+
+01:49:29.960 --> 01:49:35.960
+So here we just put them all together and then iterate over consecutive pairs of these sizes
+
+01:49:35.960 --> 01:49:37.960
+and create layer objects for them.
+
+01:49:37.960 --> 01:49:40.960
+And then in the call function we are just calling them sequentially.
+
+01:49:40.960 --> 01:49:42.960
+So that's an MLB really.
+
+01:49:42.960 --> 01:49:44.960
+And let's actually re-implement this picture.
+
+01:49:44.960 --> 01:49:49.960
+So we want three input neurons and then two layers of four and an output unit.
+
+01:49:49.960 --> 01:49:53.960
+So we want three dimensional input.
+
+01:49:53.960 --> 01:49:55.960
+Say this is an example input.
+
+01:49:55.960 --> 01:50:00.960
+We want three inputs into two layers of four and one output.
+
+01:50:00.960 --> 01:50:03.960
+And this of course is an MLB.
+
+01:50:03.960 --> 01:50:04.960
+And there we go.
+
+01:50:04.960 --> 01:50:06.960
+That's a forward pass of an MLB.
+
+01:50:06.960 --> 01:50:09.960
+To make this a little bit nicer you see how we have just a single element
+
+01:50:09.960 --> 01:50:12.960
+but it's wrapped in a list because layer always returns lists.
+
+01:50:12.960 --> 01:50:19.960
+So for convenience return outs at zero if LEN outs is exactly a single element
+
+01:50:19.960 --> 01:50:21.960
+else return full list.
+
+01:50:21.960 --> 01:50:25.960
+And this will allow us to just get a single value out at the last layer
+
+01:50:25.960 --> 01:50:27.960
+that only has a single neuron.
+
+01:50:27.960 --> 01:50:30.960
+And finally we should be able to draw dot of N of X.
+
+01:50:30.960 --> 01:50:37.960
+And as you might imagine these expressions are now getting relatively involved.
+
+01:50:37.960 --> 01:50:44.960
+So this is an entire MLB that we're defining now.
+
+01:50:44.960 --> 01:50:48.960
+All the way until a single output.
+
+01:50:48.960 --> 01:50:53.960
+And so obviously you would never differentiate on pen and paper these expressions
+
+01:50:53.960 --> 01:50:57.960
+but with micrograd we will be able to back propagate all the way through this
+
+01:50:57.960 --> 01:51:02.960
+and back propagate into these weights of all these neurons.
+
+01:51:02.960 --> 01:51:03.960
+So let's see how that works.
+
+01:51:03.960 --> 01:51:07.960
+Okay so let's create ourselves a very simple example data set here.
+
+01:51:07.960 --> 01:51:14.960
+So this data set has four examples and so we have four possible inputs into the neural net.
+
+01:51:14.960 --> 01:51:16.960
+And we have four desired targets.
+
+01:51:16.960 --> 01:51:23.960
+So we'd like the neural net to assign or output 1.0 when it's fed this example.
+
+01:51:23.960 --> 01:51:26.960
+Negative 1 when it's fed these examples and 1 when it's fed this example.
+
+01:51:26.960 --> 01:51:31.960
+So it's a very simple binary classifier neural net basically that we would like here.
+
+01:51:31.960 --> 01:51:35.960
+Now let's think what the neural net currently thinks about these four examples.
+
+01:51:35.960 --> 01:51:37.960
+We can just get their predictions.
+
+01:51:37.960 --> 01:51:44.960
+Basically we can just call N of X for X in axis and then we can print.
+
+01:51:44.960 --> 01:51:48.960
+So these are the outputs of the neural net on those four examples.
+
+01:51:48.960 --> 01:51:53.960
+So the first one is 0.91 but we'd like it to be 1.
+
+01:51:53.960 --> 01:51:55.960
+So we should push this one higher.
+
+01:51:55.960 --> 01:51:57.960
+This one we want to be higher.
+
+01:51:57.960 --> 01:52:01.960
+This one says 0.88 and we want this to be negative 1.
+
+01:52:01.960 --> 01:52:04.960
+This is 0.88 we want it to be negative 1.
+
+01:52:04.960 --> 01:52:07.960
+And this one is 0.88 we want it to be 1.
+
+01:52:07.960 --> 01:52:15.960
+So how do we make the neural net and how do we tune the weights to better predict the desired targets?
+
+01:52:15.960 --> 01:52:24.960
+And the trick used in deep learning to achieve this is to calculate a single number that somehow measures the total performance of your neural net.
+
+01:52:24.960 --> 01:52:27.960
+And we call this single number the loss.
+
+01:52:27.960 --> 01:52:35.960
+So the loss first is a single number that we're going to define that basically measures how well the neural net is performing.
+
+01:52:35.960 --> 01:52:40.960
+Right now we have the intuitive sense that it's not performing very well because we're not very much close to this.
+
+01:52:40.960 --> 01:52:44.960
+So the loss will be high and we'll want to minimize the loss.
+
+01:52:44.960 --> 01:52:49.960
+So in particular in this case what we're going to do is we're going to implement the mean squared error loss.
+
+01:52:49.960 --> 01:53:00.960
+So what this is doing is we're going to basically iterate for y ground truth and y output in zip of y's and y's.
+
+01:53:00.960 --> 01:53:08.960
+So we're going to pair up the ground truths with the predictions and the zip iterates over tuples of them.
+
+01:53:08.960 --> 01:53:18.960
+And for each y ground truth and y output we're going to subtract them and square them.
+
+01:53:18.960 --> 01:53:22.960
+Let's first see what these losses are. These are individual loss components.
+
+01:53:22.960 --> 01:53:29.960
+And so basically for each one of the four we are taking the prediction and the ground truth.
+
+01:53:29.960 --> 01:53:32.960
+We are subtracting them and squaring them.
+
+01:53:32.960 --> 01:53:41.960
+So because this one is so close to its target point nine one is almost one subtracting them gives a very small number.
+
+01:53:41.960 --> 01:53:53.960
+So here we would get like a negative point one and then squaring it just makes sure that regardless of whether we are more negative or more positive we always get a positive number.
+
+01:53:53.960 --> 01:53:58.960
+Instead of squaring we could also take for example the absolute value we need to discard the sign.
+
+01:53:58.960 --> 01:54:05.960
+And so you see that the expression is ranged so that you only get zero exactly when y out is equal to y ground truth.
+
+01:54:05.960 --> 01:54:10.960
+When those two are equal so your prediction is exactly the target you are going to get zero.
+
+01:54:10.960 --> 01:54:14.960
+And if your prediction is not the target you are going to get some other number.
+
+01:54:14.960 --> 01:54:19.960
+So here for example we are way off and so that's why the loss is quite high.
+
+01:54:19.960 --> 01:54:23.960
+And the more off we are the greater the loss will be.
+
+01:54:23.960 --> 01:54:27.960
+So we don't want high loss we want low loss.
+
+01:54:27.960 --> 01:54:33.960
+And so the final loss here will be just the sum of all of these numbers.
+
+01:54:33.960 --> 01:54:39.960
+So you see that this should be zero roughly plus zero roughly but plus seven.
+
+01:54:39.960 --> 01:54:43.960
+So loss should be about seven here.
+
+01:54:43.960 --> 01:54:46.960
+And now we want to minimize the loss.
+
+01:54:46.960 --> 01:54:55.960
+We want the loss to be low because if loss is low then every one of the predictions is equal to its target.
+
+01:54:55.960 --> 01:55:03.960
+So the loss the lowest it can be is zero and the greater it is the worse off the neural net is predicting.
+
+01:55:03.960 --> 01:55:09.960
+So now of course if we do loss that backward something magical happened when I hit enter.
+
+01:55:09.960 --> 01:55:14.960
+And the magical thing of course that happened is that we can look at n dot layers dot neuron
+
+01:55:14.960 --> 01:55:21.960
+n dot layers at say like the first layer dot neurons at zero.
+
+01:55:21.960 --> 01:55:28.960
+Because remember that MLP has the layers which is a list and each layer has a neurons which is a list.
+
+01:55:28.960 --> 01:55:32.960
+And that gives us an individual neuron and then it's got some weights.
+
+01:55:32.960 --> 01:55:39.960
+And so we can for example look at the weights at zero.
+
+01:55:39.960 --> 01:55:43.960
+Oops it's not called weights it's called w.
+
+01:55:43.960 --> 01:55:49.960
+And that's a value but now this value also has a grad because of the backward pass.
+
+01:55:49.960 --> 01:55:57.960
+And so we see that because this gradient here on this particular weight of this particular neuron of this particular layer is negative.
+
+01:55:57.960 --> 01:56:00.960
+We see that its influence on the loss is also negative.
+
+01:56:00.960 --> 01:56:08.960
+So slightly increasing this particular weight of this neuron of this layer would make the loss go down.
+
+01:56:08.960 --> 01:56:12.960
+And we actually have this information for every single one of our neurons and all of their parameters.
+
+01:56:12.960 --> 01:56:17.960
+Actually it's worth looking at also the draw dot loss by the way.
+
+01:56:17.960 --> 01:56:23.960
+So previously we looked at the draw dot of a single neuron neuron forward pass and that was already a large expression.
+
+01:56:23.960 --> 01:56:25.960
+But what is this expression?
+
+01:56:25.960 --> 01:56:32.960
+We actually forwarded every one of those four examples and then we have the loss on top of them with the mean squared error.
+
+01:56:32.960 --> 01:56:39.960
+And so this is a really massive graph because this graph that we've built up now.
+
+01:56:39.960 --> 01:56:44.960
+Oh my gosh this graph that we've built up now which is kind of excessive.
+
+01:56:44.960 --> 01:56:48.960
+Because it has four forward passes of a neural net for every one of the examples.
+
+01:56:48.960 --> 01:56:54.960
+And then it has the loss on top and it ends with the value of the loss which was 7.12.
+
+01:56:54.960 --> 01:57:02.960
+And this loss will now back propagate through all the forward passes all the way through just every single intermediate value of the neural net.
+
+01:57:02.960 --> 01:57:07.960
+All the way back to of course the parameters of the weights which are the input.
+
+01:57:07.960 --> 01:57:11.960
+So these weight parameters here are inputs to this neural net.
+
+01:57:11.960 --> 01:57:16.960
+And these numbers here these scalars are inputs to the neural net.
+
+01:57:16.960 --> 01:57:25.960
+So if we went around here we will probably find some of these examples this 1.0 potentially maybe this 1.0 or you know some of the others.
+
+01:57:25.960 --> 01:57:28.960
+And you'll see that they all have gradients as well.
+
+01:57:28.960 --> 01:57:32.960
+The thing is these gradients on the input data are not that useful to us.
+
+01:57:32.960 --> 01:57:37.960
+And that's because the input data seems to be not changeable.
+
+01:57:37.960 --> 01:57:40.960
+It's a given to the problem and so it's a fixed input.
+
+01:57:40.960 --> 01:57:45.960
+We're not going to be changing it or messing with it even though we do have gradients for it.
+
+01:57:45.960 --> 01:57:52.960
+But some of these gradients here will be for the neural network parameters the W's and the B's.
+
+01:57:52.960 --> 01:57:55.960
+And those we of course we want to change.
+
+01:57:55.960 --> 01:58:03.960
+Okay so now we're going to want some convenience codes to gather up all of the parameters of the neural net so that we can operate on all of them simultaneously.
+
+01:58:03.960 --> 01:58:09.960
+And every one of them we will nudge a tiny amount based on the gradient information.
+
+01:58:09.960 --> 01:58:13.960
+So let's collect the parameters of the neural net all in one array.
+
+01:58:13.960 --> 01:58:25.960
+So let's create a parameters of self that just returns delta W which is a list concatenated with a list of delta B.
+
+01:58:25.960 --> 01:58:28.960
+So this will just return a list.
+
+01:58:28.960 --> 01:58:31.960
+List plus list just you know gives you a list.
+
+01:58:31.960 --> 01:58:33.960
+So that's parameters of neuron.
+
+01:58:33.960 --> 01:58:39.960
+And I'm calling it this way because also PyTorch has a parameters on every single and in module.
+
+01:58:39.960 --> 01:58:41.960
+And it does exactly what we're doing here.
+
+01:58:41.960 --> 01:58:44.960
+It just returns the parameter tensors.
+
+01:58:44.960 --> 01:58:47.960
+For us is the parameter scalars.
+
+01:58:47.960 --> 01:58:49.960
+Now layer is also a module.
+
+01:58:49.960 --> 01:58:53.960
+So it will have parameters self.
+
+01:58:53.960 --> 01:58:59.960
+And basically what we want to do here is something like this like.
+
+01:58:59.960 --> 01:59:06.960
+Params is here and then for neuron in salt neurons.
+
+01:59:06.960 --> 01:59:09.960
+We want to get neuron parameters.
+
+01:59:09.960 --> 01:59:13.960
+And we want to params that extend.
+
+01:59:13.960 --> 01:59:16.960
+So these are the parameters of this neuron.
+
+01:59:16.960 --> 01:59:18.960
+And then we want to put them on top of params.
+
+01:59:18.960 --> 01:59:21.960
+So params dot extend of piece.
+
+01:59:21.960 --> 01:59:24.960
+And then we want to return params.
+
+01:59:24.960 --> 01:59:27.960
+So this is way too much code.
+
+01:59:27.960 --> 01:59:45.960
+So actually there's a way to simplify this which is return P for neuron in self neurons for P in neuron dot parameters.
+
+01:59:45.960 --> 01:59:47.960
+So it's a single list comprehension in Python.
+
+01:59:47.960 --> 01:59:54.960
+You can sort of nest them like this and you can then create the desired array.
+
+01:59:54.960 --> 01:59:56.960
+So these are identical.
+
+01:59:56.960 --> 01:59:59.960
+We can take this out.
+
+01:59:59.960 --> 02:00:03.960
+And then let's do the same here.
+
+02:00:03.960 --> 02:00:20.960
+Def parameters self and return a parameter for layer in self dot layers for P in layer dot parameters.
+
+02:00:20.960 --> 02:00:22.960
+And that should be good.
+
+02:00:22.960 --> 02:00:34.960
+Now let me pop out this so we don't reinitialize our network because we need to reinitialize our.
+
+02:00:34.960 --> 02:00:40.960
+Okay, so unfortunately we will have to probably reinitialize the network because we just add functionality.
+
+02:00:40.960 --> 02:00:48.960
+Because this class of course I want to get all the end dot parameters but that's not going to work because this is the old class.
+
+02:00:49.960 --> 02:00:54.960
+Okay, so unfortunately we do have to reinitialize the network which will change some of the numbers.
+
+02:00:54.960 --> 02:00:57.960
+But let me do that so that we pick up the new API.
+
+02:00:57.960 --> 02:00:59.960
+We can now do end dot parameters.
+
+02:00:59.960 --> 02:01:04.960
+And these are all the weights and biases inside the entire neural net.
+
+02:01:04.960 --> 02:01:10.960
+So in total this MLP has 41 parameters.
+
+02:01:10.960 --> 02:01:14.960
+And now we'll be able to change them.
+
+02:01:14.960 --> 02:01:25.960
+If we recalculate the loss here, we see that unfortunately we have slightly different predictions and slightly different loss.
+
+02:01:25.960 --> 02:01:27.960
+But that's okay.
+
+02:01:27.960 --> 02:01:32.960
+Okay, so we see that this neuron's gradient is slightly negative.
+
+02:01:32.960 --> 02:01:37.960
+We can also look at its data right now which is 0.8.5.
+
+02:01:37.960 --> 02:01:42.960
+So this is the current value of this neuron and this is its gradient on the loss.
+
+02:01:42.960 --> 02:01:48.960
+So what we want to do now is we want to iterate for every p in end dot parameters.
+
+02:01:48.960 --> 02:01:58.960
+So for all the 41 parameters on this neural net, we actually want to change p dot data slightly according to the gradient information.
+
+02:01:58.960 --> 02:02:01.960
+Okay, so dot dot dot to do here.
+
+02:02:01.960 --> 02:02:07.960
+But this will be basically a tiny update in this gradient descent scheme.
+
+02:02:07.960 --> 02:02:18.960
+And in gradient descent, we are thinking of the gradient as a vector pointing in the direction of increased loss.
+
+02:02:18.960 --> 02:02:26.960
+And so in gradient descent, we are modifying p dot data by a small step size in the direction of the gradient.
+
+02:02:26.960 --> 02:02:34.960
+So the step size as an example could be like a very small number like 0.01 is the step size times p dot grad.
+
+02:02:35.960 --> 02:02:38.960
+But we have to think through some of the signs here.
+
+02:02:38.960 --> 02:02:52.960
+So in particular, working with this specific example here, we see that if we just left it like this, then this neuron's value would be currently increased by a tiny amount of the gradient.
+
+02:02:52.960 --> 02:02:54.960
+The gradient is negative.
+
+02:02:54.960 --> 02:02:57.960
+So this value of this neuron would go slightly down.
+
+02:02:57.960 --> 02:03:01.960
+It would become like 0.84 or something like that.
+
+02:03:01.960 --> 02:03:09.960
+But if this neuron's value goes lower, that would actually increase the loss.
+
+02:03:09.960 --> 02:03:14.960
+That's because the derivative of this neuron is negative.
+
+02:03:14.960 --> 02:03:18.960
+So increasing this makes the loss go down.
+
+02:03:18.960 --> 02:03:22.960
+So increasing it is what we want to do instead of decreasing it.
+
+02:03:22.960 --> 02:03:25.960
+So basically what we're missing here is we're actually missing a negative sign.
+
+02:03:25.960 --> 02:03:30.960
+And again, this other interpretation, and that's because we want to minimize the loss.
+
+02:03:30.960 --> 02:03:33.960
+We want to decrease it.
+
+02:03:33.960 --> 02:03:37.960
+And the other interpretation, as I mentioned, is you can think of the gradient vector.
+
+02:03:37.960 --> 02:03:44.960
+So basically just the vector of all the gradients as pointing in the direction of increasing the loss.
+
+02:03:44.960 --> 02:03:46.960
+But then we want to decrease it.
+
+02:03:46.960 --> 02:03:48.960
+So we actually want to go in the opposite direction.
+
+02:03:48.960 --> 02:03:54.960
+And so you can convince yourself that this is the right thing here with the negative because we want to minimize the loss.
+
+02:03:54.960 --> 02:04:03.960
+So if we notch all the parameters by a tiny amount, then we'll see that this data will have changed a little bit.
+
+02:04:03.960 --> 02:04:09.960
+So now this neuron is a tiny amount greater value.
+
+02:04:09.960 --> 02:04:13.960
+So 0.854 went to 0.857.
+
+02:04:13.960 --> 02:04:22.960
+And that's a good thing because slightly increasing this neuron data makes the loss go down according to the gradient.
+
+02:04:22.960 --> 02:04:25.960
+And so the correct thing has happened, signwise.
+
+02:04:25.960 --> 02:04:34.960
+And so now what we would expect, of course, is that because we've changed all these parameters, we expect that the loss should have gone down a bit.
+
+02:04:34.960 --> 02:04:36.960
+So we want to reevaluate the loss.
+
+02:04:36.960 --> 02:04:39.960
+Let me basically...
+
+02:04:39.960 --> 02:04:42.960
+This is just a data definition that hasn't changed.
+
+02:04:42.960 --> 02:04:49.960
+But the forward pass here of the network, we can recalculate.
+
+02:04:49.960 --> 02:04:53.960
+And actually, let me do it outside here so that we can compare the two loss values.
+
+02:04:53.960 --> 02:05:00.960
+So here, if I recalculate the loss, we'd expect the neuron loss now to be slightly lower than this number.
+
+02:05:00.960 --> 02:05:07.960
+So hopefully what we're getting now is a tiny bit lower than 4.86.
+
+02:05:07.960 --> 02:05:14.960
+And remember, the way we've arranged this is that low loss means that our predictions are matching the targets.
+
+02:05:14.960 --> 02:05:19.960
+So our predictions now are probably slightly closer to the targets.
+
+02:05:19.960 --> 02:05:23.960
+And now all we have to do is we have to iterate this process.
+
+02:05:23.960 --> 02:05:27.960
+So again, we've done the forward pass and this is the loss.
+
+02:05:27.960 --> 02:05:29.960
+Now we can loss that backward.
+
+02:05:29.960 --> 02:05:33.960
+Let me take these out and we can do a step size.
+
+02:05:33.960 --> 02:05:35.960
+And now we should have a slightly lower loss.
+
+02:05:35.960 --> 02:05:39.960
+4.36 goes to 3.9.
+
+02:05:39.960 --> 02:05:42.960
+And okay, so we've done the forward pass.
+
+02:05:42.960 --> 02:05:45.960
+Here's the backward pass, nudge.
+
+02:05:45.960 --> 02:05:51.960
+And now the loss is 3.66, 3.47.
+
+02:05:51.960 --> 02:05:53.960
+And you get the idea.
+
+02:05:53.960 --> 02:05:54.960
+We just continue doing this.
+
+02:05:54.960 --> 02:05:56.960
+And this is gradient descent.
+
+02:05:56.960 --> 02:06:00.960
+We're just iteratively doing forward pass, backward pass, update.
+
+02:06:00.960 --> 02:06:02.960
+Forward pass, backward pass, update.
+
+02:06:02.960 --> 02:06:05.960
+And the neural net is improving its predictions.
+
+02:06:05.960 --> 02:06:16.960
+So here if we look at y-pred now, y-pred, we see that this value should be getting closer to 1.
+
+02:06:16.960 --> 02:06:18.960
+So this value should be getting more positive.
+
+02:06:18.960 --> 02:06:19.960
+These should be getting more negative.
+
+02:06:19.960 --> 02:06:21.960
+And this one should be also getting more positive.
+
+02:06:21.960 --> 02:06:26.960
+So if we just iterate this a few more times.
+
+02:06:26.960 --> 02:06:29.960
+Actually, we may be able to afford to go a bit faster.
+
+02:06:29.960 --> 02:06:34.960
+Let's try a slightly higher learning rate.
+
+02:06:34.960 --> 02:06:35.960
+Okay, there we go.
+
+02:06:35.960 --> 02:06:38.960
+So now we're at point 3-1.
+
+02:06:38.960 --> 02:06:46.960
+If you go too fast, by the way, if you try to make it too big of a step, you may actually overstep.
+
+02:06:46.960 --> 02:06:47.960
+It's overconfidence.
+
+02:06:47.960 --> 02:06:50.960
+Because again, remember, we don't actually know exactly about the loss function.
+
+02:06:50.960 --> 02:06:52.960
+The loss function has all kinds of structure.
+
+02:06:52.960 --> 02:06:57.960
+And we only know about the very local dependence of all these parameters on the loss.
+
+02:06:57.960 --> 02:07:02.960
+But if we step too far, we may step into, you know, a part of the loss that is completely different.
+
+02:07:02.960 --> 02:07:07.960
+And that can destabilize training and make your loss actually blow up even.
+
+02:07:07.960 --> 02:07:09.960
+So the loss is now point 0-4.
+
+02:07:09.960 --> 02:07:12.960
+So actually, the predictions should be really quite close.
+
+02:07:12.960 --> 02:07:14.960
+Let's take a look.
+
+02:07:14.960 --> 02:07:18.960
+So you see how this is almost 1, almost negative 1, almost 1.
+
+02:07:18.960 --> 02:07:20.960
+We can continue going.
+
+02:07:20.960 --> 02:07:24.960
+So, yep, backward, update.
+
+02:07:24.960 --> 02:07:26.960
+Oops, there we go.
+
+02:07:26.960 --> 02:07:27.960
+So we went way too fast.
+
+02:07:27.960 --> 02:07:30.960
+And we actually overstepped.
+
+02:07:30.960 --> 02:07:33.960
+So we got too eager.
+
+02:07:33.960 --> 02:07:34.960
+Where are we now?
+
+02:07:34.960 --> 02:07:35.960
+Oops.
+
+02:07:35.960 --> 02:07:36.960
+Okay.
+
+02:07:36.960 --> 02:07:37.960
+7e-9.
+
+02:07:37.960 --> 02:07:40.960
+So this is very, very low loss.
+
+02:07:40.960 --> 02:07:44.960
+And the predictions are basically perfect.
+
+02:07:44.960 --> 02:07:49.960
+So somehow we basically, we were doing way too big updates and we briefly exploded,
+
+02:07:49.960 --> 02:07:52.960
+but then somehow we ended up getting into a really good spot.
+
+02:07:52.960 --> 02:07:56.960
+So usually this learning rate and the tuning of it is a subtle art.
+
+02:07:56.960 --> 02:07:58.960
+You want to set your learning rate.
+
+02:07:58.960 --> 02:08:01.960
+If it's too low, you're going to take way too long to converge.
+
+02:08:01.960 --> 02:08:03.960
+But if it's too high, the whole thing gets unstable
+
+02:08:03.960 --> 02:08:07.960
+and you might actually even explode the loss, depending on your loss function.
+
+02:08:07.960 --> 02:08:12.960
+So finding the step size to be just right, it's a pretty subtle art sometimes
+
+02:08:12.960 --> 02:08:15.960
+when you're using sort of vanilla gradient descent.
+
+02:08:15.960 --> 02:08:17.960
+But we happen to get into a good spot.
+
+02:08:17.960 --> 02:08:21.960
+We can look at end dot parameters.
+
+02:08:21.960 --> 02:08:25.960
+So this is the setting of weights and biases
+
+02:08:25.960 --> 02:08:32.960
+that makes our network predict the desired targets very, very close.
+
+02:08:32.960 --> 02:08:37.960
+And basically we've successfully trained a neural net.
+
+02:08:37.960 --> 02:08:38.960
+Okay.
+
+02:08:38.960 --> 02:08:40.960
+Let's make this a tiny bit more respectable
+
+02:08:40.960 --> 02:08:43.960
+and implement an actual training loop and what that looks like.
+
+02:08:43.960 --> 02:08:45.960
+So this is the data definition that stays.
+
+02:08:45.960 --> 02:08:47.960
+This is the forward pass.
+
+02:08:47.960 --> 02:08:56.960
+So for K in range, we're going to take a bunch of steps.
+
+02:08:56.960 --> 02:08:59.960
+First, you do the forward pass.
+
+02:08:59.960 --> 02:09:02.960
+We validate the loss.
+
+02:09:02.960 --> 02:09:05.960
+Let's reinitialize the neural net from scratch.
+
+02:09:05.960 --> 02:09:07.960
+And here's the data.
+
+02:09:07.960 --> 02:09:12.960
+And we first do the forward pass, then we do the backward pass.
+
+02:09:18.960 --> 02:09:20.960
+And then we do an update.
+
+02:09:20.960 --> 02:09:25.960
+That's gradient descent.
+
+02:09:25.960 --> 02:09:27.960
+And then we should be able to iterate this
+
+02:09:27.960 --> 02:09:31.960
+and we should be able to print the current step, the current loss.
+
+02:09:31.960 --> 02:09:36.960
+Let's just print the sort of number of the loss.
+
+02:09:36.960 --> 02:09:39.960
+And that should be it.
+
+02:09:39.960 --> 02:09:42.960
+And then the learning rate, 0.01 is a little too small.
+
+02:09:42.960 --> 02:09:45.960
+0.1 we saw is like a little bit dangerous if you buy.
+
+02:09:45.960 --> 02:09:47.960
+Let's go somewhere in between
+
+02:09:47.960 --> 02:09:50.960
+and we'll optimize this for not 10 steps,
+
+02:09:50.960 --> 02:09:53.960
+but let's go for say 20 steps.
+
+02:09:53.960 --> 02:09:58.960
+Let me erase all of this junk.
+
+02:09:58.960 --> 02:10:02.960
+And let's run the optimization.
+
+02:10:02.960 --> 02:10:05.960
+And you see how we've actually converged slower
+
+02:10:05.960 --> 02:10:07.960
+in a more controlled manner
+
+02:10:07.960 --> 02:10:10.960
+and got to a loss that is very low.
+
+02:10:10.960 --> 02:10:14.960
+So I expect widespread to be quite good.
+
+02:10:14.960 --> 02:10:16.960
+There we go.
+
+02:10:21.960 --> 02:10:23.960
+And that's it.
+
+02:10:23.960 --> 02:10:25.960
+Okay, so this is kind of embarrassing,
+
+02:10:25.960 --> 02:10:28.960
+but we actually have a really terrible bug in here.
+
+02:10:28.960 --> 02:10:31.960
+And it's a subtle bug and it's a very common bug.
+
+02:10:31.960 --> 02:10:35.960
+And I can't believe I've done it for the 20th time in my life,
+
+02:10:35.960 --> 02:10:37.960
+especially on camera.
+
+02:10:37.960 --> 02:10:39.960
+And I could have reshot the whole thing,
+
+02:10:39.960 --> 02:10:41.960
+but it was pretty funny.
+
+02:10:41.960 --> 02:10:43.960
+And you get to appreciate a bit
+
+02:10:43.960 --> 02:10:47.960
+what working with neural nets maybe is like sometimes.
+
+02:10:47.960 --> 02:10:51.960
+We are guilty of a common bug.
+
+02:10:51.960 --> 02:10:54.960
+I've actually tweeted the most common neural net mistakes
+
+02:10:54.960 --> 02:10:57.960
+a long time ago now.
+
+02:10:57.960 --> 02:11:00.960
+And I'm not really going to explain any of these,
+
+02:11:00.960 --> 02:11:03.960
+except for we are guilty of number three.
+
+02:11:03.960 --> 02:11:06.960
+You forgot to zero grad before dot backward.
+
+02:11:06.960 --> 02:11:08.960
+What is that?
+
+02:11:08.960 --> 02:11:10.960
+Basically what's happening, and it's a subtle bug,
+
+02:11:10.960 --> 02:11:12.960
+and I'm not sure if you saw it,
+
+02:11:12.960 --> 02:11:15.960
+is that all of these weights here
+
+02:11:15.960 --> 02:11:18.960
+have a dot data and a dot grad.
+
+02:11:18.960 --> 02:11:21.960
+And the dot grad starts at zero.
+
+02:11:21.960 --> 02:11:25.960
+And then we do backward and we fill in the gradients.
+
+02:11:25.960 --> 02:11:27.960
+And then we do an update on the data,
+
+02:11:27.960 --> 02:11:29.960
+but we don't flush the grad.
+
+02:11:29.960 --> 02:11:31.960
+It stays there.
+
+02:11:31.960 --> 02:11:33.960
+So when we do the second forward pass
+
+02:11:33.960 --> 02:11:35.960
+and we do backward again,
+
+02:11:35.960 --> 02:11:37.960
+we realize that all the backward operations
+
+02:11:37.960 --> 02:11:39.960
+do a plus equals on the grad.
+
+02:11:39.960 --> 02:11:41.960
+And so these gradients just add up
+
+02:11:41.960 --> 02:11:44.960
+and they never get reset to zero.
+
+02:11:44.960 --> 02:11:47.960
+So basically we didn't zero grad.
+
+02:11:47.960 --> 02:11:50.960
+So here's how we zero grad before backward.
+
+02:11:50.960 --> 02:11:53.960
+We need to iterate over all the parameters.
+
+02:11:53.960 --> 02:11:58.960
+And we need to make sure that p dot grad is set to zero.
+
+02:11:58.960 --> 02:12:00.960
+We need to reset it to zero,
+
+02:12:00.960 --> 02:12:02.960
+just like it is in the constructor.
+
+02:12:02.960 --> 02:12:04.960
+So remember all the way here for all these value nodes,
+
+02:12:04.960 --> 02:12:06.960
+grad is reset to zero.
+
+02:12:06.960 --> 02:12:08.960
+And then all these backward passes
+
+02:12:08.960 --> 02:12:10.960
+do a plus equals from that grad.
+
+02:12:10.960 --> 02:12:14.960
+But we need to make sure that we reset these grads to zero
+
+02:12:14.960 --> 02:12:16.960
+so that when we do backward,
+
+02:12:16.960 --> 02:12:17.960
+all of them start at zero
+
+02:12:17.960 --> 02:12:20.960
+and the actual backward pass accumulates
+
+02:12:20.960 --> 02:12:24.960
+the loss derivatives into the grads.
+
+02:12:24.960 --> 02:12:27.960
+So this is zero grad in PyTorch.
+
+02:12:27.960 --> 02:12:32.960
+And we will get a slightly different optimization.
+
+02:12:32.960 --> 02:12:34.960
+Let's reset the neural net.
+
+02:12:34.960 --> 02:12:35.960
+The data is the same.
+
+02:12:35.960 --> 02:12:37.960
+This is now, I think, correct.
+
+02:12:37.960 --> 02:12:43.960
+And we get a much more slower descent.
+
+02:12:43.960 --> 02:12:45.960
+We still end up with pretty good results
+
+02:12:45.960 --> 02:12:47.960
+and we can continue this a bit more
+
+02:12:47.960 --> 02:12:53.960
+to get down lower and lower and lower.
+
+02:12:53.960 --> 02:12:55.960
+Yeah.
+
+02:12:55.960 --> 02:12:57.960
+So the only reason that the previous thing worked
+
+02:12:57.960 --> 02:12:59.960
+it's extremely buggy.
+
+02:12:59.960 --> 02:13:02.960
+The only reason that worked is that
+
+02:13:02.960 --> 02:13:05.960
+this is a very, very simple problem
+
+02:13:05.960 --> 02:13:08.960
+and it's very easy for this neural net to fit this data.
+
+02:13:08.960 --> 02:13:11.960
+And so the grads ended up accumulating
+
+02:13:11.960 --> 02:13:14.960
+and it effectively gave us a massive step size
+
+02:13:14.960 --> 02:13:18.960
+and it made us converge extremely fast.
+
+02:13:18.960 --> 02:13:21.960
+But basically now we have to do more steps
+
+02:13:21.960 --> 02:13:23.960
+to get to very low values of loss
+
+02:13:23.960 --> 02:13:26.960
+and get Y-Pret to be really good.
+
+02:13:26.960 --> 02:13:34.960
+And try to step a bit greater.
+
+02:13:34.960 --> 02:13:35.960
+Yeah.
+
+02:13:35.960 --> 02:13:38.960
+We're going to get closer and closer to 1 minus 1 and 1.
+
+02:13:38.960 --> 02:13:41.960
+So working with neural nets is sometimes tricky
+
+02:13:41.960 --> 02:13:46.960
+because you may have lots of bugs in the code
+
+02:13:46.960 --> 02:13:49.960
+and your network might actually work,
+
+02:13:49.960 --> 02:13:51.960
+just like ours worked.
+
+02:13:51.960 --> 02:13:54.960
+But chances are is that if we had a more complex problem
+
+02:13:54.960 --> 02:13:56.960
+and actually this bug would have made us
+
+02:13:56.960 --> 02:13:58.960
+not optimize the loss very well
+
+02:13:58.960 --> 02:14:00.960
+and we were only able to get away with it
+
+02:14:00.960 --> 02:14:03.960
+because the problem is very simple.
+
+02:14:03.960 --> 02:14:05.960
+So let's now bring everything together
+
+02:14:05.960 --> 02:14:07.960
+and summarize what we learned.
+
+02:14:07.960 --> 02:14:08.960
+What are neural nets?
+
+02:14:08.960 --> 02:14:11.960
+Neural nets are these mathematical expressions,
+
+02:14:11.960 --> 02:14:13.960
+fairly simple mathematical expressions
+
+02:14:13.960 --> 02:14:15.960
+in the case of multi-layer perceptron
+
+02:14:15.960 --> 02:14:18.960
+that take input as the data
+
+02:14:18.960 --> 02:14:20.960
+and they take input the weights
+
+02:14:20.960 --> 02:14:22.960
+and the parameters of the neural net.
+
+02:14:22.960 --> 02:14:24.960
+So we're going to go over the forward pass
+
+02:14:24.960 --> 02:14:26.960
+followed by a loss function
+
+02:14:26.960 --> 02:14:28.960
+and the loss function tries to measure
+
+02:14:28.960 --> 02:14:30.960
+the accuracy of the predictions
+
+02:14:30.960 --> 02:14:32.960
+and usually the loss will be low
+
+02:14:32.960 --> 02:14:34.960
+when your predictions are matching your targets
+
+02:14:34.960 --> 02:14:37.960
+or where the network is basically behaving well.
+
+02:14:37.960 --> 02:14:39.960
+So we manipulate the loss function
+
+02:14:39.960 --> 02:14:41.960
+so that when the loss is low,
+
+02:14:41.960 --> 02:14:43.960
+the network is doing what you want it to do
+
+02:14:43.960 --> 02:14:45.960
+on your problem.
+
+02:14:45.960 --> 02:14:47.960
+And then we backward the loss.
+
+02:14:47.960 --> 02:14:49.960
+Use back propagation to get the gradient
+
+02:14:49.960 --> 02:14:52.960
+called the parameters to decrease the loss locally.
+
+02:14:52.960 --> 02:14:54.960
+But then we have to iterate that process many times
+
+02:14:54.960 --> 02:14:56.960
+in what's called the gradient descent.
+
+02:14:56.960 --> 02:14:58.960
+So we simply follow the gradient information
+
+02:14:58.960 --> 02:15:00.960
+and that minimizes the loss
+
+02:15:00.960 --> 02:15:03.960
+and the loss is arranged so that when the loss is minimized,
+
+02:15:03.960 --> 02:15:05.960
+the network is doing what you want it to do.
+
+02:15:05.960 --> 02:15:09.960
+And yeah, so we just have a blob of neural stuff
+
+02:15:09.960 --> 02:15:12.960
+and we can make it do arbitrary things
+
+02:15:12.960 --> 02:15:15.960
+and that's what gives neural nets their power.
+
+02:15:15.960 --> 02:15:18.960
+This is a very tiny network with 41 parameters
+
+02:15:18.960 --> 02:15:21.960
+but you can build significantly more complicated neural nets
+
+02:15:21.960 --> 02:15:25.960
+with billions at this point, almost trillions of parameters
+
+02:15:25.960 --> 02:15:28.960
+and it's a massive blob of neural tissue,
+
+02:15:28.960 --> 02:15:31.960
+simulated neural tissue, roughly speaking.
+
+02:15:31.960 --> 02:15:34.960
+And you can make it do extremely complex problems
+
+02:15:34.960 --> 02:15:36.960
+and these neural nets then
+
+02:15:36.960 --> 02:15:39.960
+have all kinds of very fascinating emergent properties
+
+02:15:39.960 --> 02:15:44.960
+when you try to make them do significantly hard problems.
+
+02:15:44.960 --> 02:15:46.960
+As in the case of GPT, for example,
+
+02:15:46.960 --> 02:15:49.960
+we have massive amounts of text from the internet
+
+02:15:49.960 --> 02:15:51.960
+and we're trying to get a neural net to predict,
+
+02:15:51.960 --> 02:15:53.960
+to take like a few words
+
+02:15:53.960 --> 02:15:55.960
+and try to predict the next word in a sequence.
+
+02:15:55.960 --> 02:15:57.960
+That's the learning problem.
+
+02:15:57.960 --> 02:15:59.960
+And it turns out that when you train this on all of internet,
+
+02:15:59.960 --> 02:16:02.960
+the neural net actually has like really remarkable emergent properties
+
+02:16:02.960 --> 02:16:06.960
+but that neural net would have hundreds of billions of parameters.
+
+02:16:06.960 --> 02:16:09.960
+But it works on fundamentally the exact same principles.
+
+02:16:09.960 --> 02:16:12.960
+The neural net, of course, will be a bit more complex
+
+02:16:12.960 --> 02:16:16.960
+but otherwise the evaluating the gradient is there
+
+02:16:16.960 --> 02:16:18.960
+and will be identical
+
+02:16:18.960 --> 02:16:20.960
+and the gradient descent would be there
+
+02:16:20.960 --> 02:16:22.960
+and would be basically identical
+
+02:16:22.960 --> 02:16:24.960
+but people usually use slightly different updates.
+
+02:16:24.960 --> 02:16:27.960
+This is a very simple stochastic gradient descent update
+
+02:16:27.960 --> 02:16:30.960
+and the loss function would not be a mean squared error.
+
+02:16:30.960 --> 02:16:33.960
+They would be using something called the cross entropy loss
+
+02:16:33.960 --> 02:16:35.960
+for predicting the next token.
+
+02:16:35.960 --> 02:16:37.960
+So there's a few more details but fundamentally
+
+02:16:37.960 --> 02:16:39.960
+the neural network setup and neural network training
+
+02:16:39.960 --> 02:16:41.960
+is identical and pervasive
+
+02:16:41.960 --> 02:16:44.960
+and now you understand intuitively how that works under the hood.
+
+02:16:44.960 --> 02:16:46.960
+In the beginning of this video,
+
+02:16:46.960 --> 02:16:48.960
+I told you that by the end of it,
+
+02:16:48.960 --> 02:16:50.960
+you would understand everything in micrograd
+
+02:16:50.960 --> 02:16:52.960
+and then we'd slowly build it up.
+
+02:16:52.960 --> 02:16:54.960
+Let me briefly prove that to you.
+
+02:16:54.960 --> 02:16:57.960
+So I'm going to step through all the code that is in micrograd as of today.
+
+02:16:57.960 --> 02:16:59.960
+Actually, potentially some of the code will change
+
+02:16:59.960 --> 02:17:01.960
+by the time you watch this video
+
+02:17:01.960 --> 02:17:03.960
+because I intend to continue developing micrograd
+
+02:17:03.960 --> 02:17:05.960
+but let's look at what we have so far at least.
+
+02:17:05.960 --> 02:17:07.960
+Init.py is empty.
+
+02:17:07.960 --> 02:17:09.960
+When you go to engine.py, that has the value.
+
+02:17:09.960 --> 02:17:11.960
+Everything here you should mostly recognize.
+
+02:17:11.960 --> 02:17:13.960
+So we have the dead.data.grad attributes,
+
+02:17:13.960 --> 02:17:15.960
+we have the backward function,
+
+02:17:15.960 --> 02:17:17.960
+we have the previous set of children
+
+02:17:17.960 --> 02:17:19.960
+and the operation that produced this value.
+
+02:17:19.960 --> 02:17:21.960
+We have addition, multiplication
+
+02:17:21.960 --> 02:17:24.960
+and raising to a scalar power.
+
+02:17:24.960 --> 02:17:26.960
+We have the relu non-linearity
+
+02:17:26.960 --> 02:17:28.960
+which is slightly different type of non-linearity
+
+02:17:28.960 --> 02:17:30.960
+than 10h that we used in this video.
+
+02:17:30.960 --> 02:17:32.960
+Both of them are non-linearity
+
+02:17:32.960 --> 02:17:34.960
+and notably 10h is not actually present in micrograd
+
+02:17:34.960 --> 02:17:37.960
+as of right now but I intend to add it later.
+
+02:17:37.960 --> 02:17:39.960
+We have the backward which is identical
+
+02:17:39.960 --> 02:17:41.960
+and then all of these other operations
+
+02:17:41.960 --> 02:17:44.960
+which are built up on top of operations here.
+
+02:17:44.960 --> 02:17:46.960
+So values should be very recognizable
+
+02:17:46.960 --> 02:17:49.960
+except for the non-linearity used in this video.
+
+02:17:49.960 --> 02:17:51.960
+There's no massive difference between relu
+
+02:17:51.960 --> 02:17:54.960
+and 10h and sigmoid and these other non-linearity.
+
+02:17:54.960 --> 02:17:57.960
+They're all roughly equivalent and can be used in MLPs.
+
+02:17:57.960 --> 02:17:59.960
+So I use 10h because it's a bit smoother
+
+02:17:59.960 --> 02:18:01.960
+and because it's a little bit more complicated than relu
+
+02:18:01.960 --> 02:18:04.960
+and therefore it's stressed a little bit more
+
+02:18:04.960 --> 02:18:06.960
+for the local gradients
+
+02:18:06.960 --> 02:18:08.960
+and working with those derivatives
+
+02:18:08.960 --> 02:18:10.960
+which I thought would be useful.
+
+02:18:10.960 --> 02:18:13.960
+Nn.py is the neural networks library as I mentioned
+
+02:18:13.960 --> 02:18:16.960
+so you should recognize identical implementation of neural,
+
+02:18:16.960 --> 02:18:18.960
+layer and MLP.
+
+02:18:18.960 --> 02:18:20.960
+Notably but not so much.
+
+02:18:20.960 --> 02:18:22.960
+We have a class module here.
+
+02:18:22.960 --> 02:18:24.960
+There's a parent class of all these modules.
+
+02:18:24.960 --> 02:18:27.960
+I did that because there's an nn.module class in PyTorch
+
+02:18:27.960 --> 02:18:29.960
+and so this exactly matches that API
+
+02:18:29.960 --> 02:18:32.960
+and nn.module in PyTorch has also a zero grad
+
+02:18:32.960 --> 02:18:34.960
+which I refactored out here.
+
+02:18:34.960 --> 02:18:37.960
+So that's the end of micrograd really.
+
+02:18:37.960 --> 02:18:40.960
+Then there's a test which you'll see
+
+02:18:40.960 --> 02:18:43.960
+basically creates two chunks of code,
+
+02:18:43.960 --> 02:18:46.960
+one in micrograd and one in PyTorch
+
+02:18:46.960 --> 02:18:49.960
+and we'll make sure that the forward and the backward paths agree identically
+
+02:18:49.960 --> 02:18:51.960
+for a slightly less complicated expression,
+
+02:18:51.960 --> 02:18:53.960
+a slightly more complicated expression,
+
+02:18:53.960 --> 02:18:55.960
+everything agrees,
+
+02:18:55.960 --> 02:18:58.960
+so we agree with PyTorch on all of these operations.
+
+02:18:58.960 --> 02:19:00.960
+And finally there's a demo.pyymb here
+
+02:19:00.960 --> 02:19:03.960
+and it's a bit more complicated binary classification demo
+
+02:19:03.960 --> 02:19:05.960
+than the one I covered in this lecture.
+
+02:19:05.960 --> 02:19:08.960
+So we only had a tiny data set of four examples.
+
+02:19:08.960 --> 02:19:10.960
+Here we have a bit more complicated example
+
+02:19:10.960 --> 02:19:13.960
+with lots of blue points and lots of red points
+
+02:19:13.960 --> 02:19:16.960
+and we're trying to again build a binary classifier
+
+02:19:16.960 --> 02:19:19.960
+to distinguish two dimensional points as red or blue.
+
+02:19:19.960 --> 02:19:21.960
+It's a bit more complicated MLP here
+
+02:19:21.960 --> 02:19:23.960
+with it's a bigger MLP.
+
+02:19:23.960 --> 02:19:25.960
+The loss is a bit more complicated
+
+02:19:25.960 --> 02:19:28.960
+because it supports batches
+
+02:19:28.960 --> 02:19:30.960
+so because our data set was so tiny
+
+02:19:30.960 --> 02:19:34.960
+we always did a forward pass on the entire data set of four examples.
+
+02:19:34.960 --> 02:19:36.960
+But when your data set is like a million examples
+
+02:19:36.960 --> 02:19:38.960
+what we usually do in practice is
+
+02:19:38.960 --> 02:19:41.960
+we basically pick out some random subset
+
+02:19:41.960 --> 02:19:42.960
+we call that a batch
+
+02:19:42.960 --> 02:19:44.960
+and then we only process the batch
+
+02:19:44.960 --> 02:19:46.960
+forward, backward and update
+
+02:19:46.960 --> 02:19:48.960
+so we don't have to forward the entire training set.
+
+02:19:48.960 --> 02:19:50.960
+So this supports batching
+
+02:19:50.960 --> 02:19:52.960
+because there's a lot more examples here.
+
+02:19:52.960 --> 02:19:54.960
+We do a forward pass
+
+02:19:54.960 --> 02:19:56.960
+the loss is slightly more different
+
+02:19:56.960 --> 02:19:59.960
+this is a max margin loss that I implement here
+
+02:19:59.960 --> 02:20:02.960
+the one that we used was the mean squared error loss
+
+02:20:02.960 --> 02:20:04.960
+because it's the simplest one.
+
+02:20:04.960 --> 02:20:06.960
+There's also the binary cross entropy loss
+
+02:20:06.960 --> 02:20:08.960
+all of them can be used for binary classification
+
+02:20:08.960 --> 02:20:10.960
+and don't make too much of a difference
+
+02:20:10.960 --> 02:20:13.960
+in the simple examples that we looked at so far.
+
+02:20:13.960 --> 02:20:16.960
+There's something called L2 regularization used here
+
+02:20:16.960 --> 02:20:19.960
+this has to do with generalization of the neural net
+
+02:20:19.960 --> 02:20:22.960
+and controls the overfitting in machine learning setting
+
+02:20:22.960 --> 02:20:25.960
+but I did not cover these concepts in this video
+
+02:20:25.960 --> 02:20:26.960
+especially later.
+
+02:20:26.960 --> 02:20:28.960
+And the training loop you should recognize
+
+02:20:28.960 --> 02:20:31.960
+so forward, backward, with, zero grad
+
+02:20:31.960 --> 02:20:34.960
+and update and so on.
+
+02:20:34.960 --> 02:20:35.960
+You'll notice that in the update here
+
+02:20:35.960 --> 02:20:37.960
+the learning rate is scaled as a function
+
+02:20:37.960 --> 02:20:39.960
+of number of iterations
+
+02:20:39.960 --> 02:20:41.960
+and it shrinks
+
+02:20:41.960 --> 02:20:43.960
+and this is something called learning rate decay
+
+02:20:43.960 --> 02:20:45.960
+so in the beginning you have a high learning rate
+
+02:20:45.960 --> 02:20:48.960
+and as the network sort of stabilizes near the end
+
+02:20:48.960 --> 02:20:49.960
+you bring down the learning rate
+
+02:20:49.960 --> 02:20:52.960
+to get some of the fine details in the end
+
+02:20:52.960 --> 02:20:55.960
+and in the end we see the decision surface of the neural net
+
+02:20:55.960 --> 02:20:58.960
+and we see that it learns to separate out the red
+
+02:20:58.960 --> 02:21:01.960
+and the blue area based on the data points.
+
+02:21:01.960 --> 02:21:03.960
+So that's the slightly more complicated example
+
+02:21:03.960 --> 02:21:05.960
+in the demo.iPyYmb
+
+02:21:05.960 --> 02:21:07.960
+that you're free to go over
+
+02:21:07.960 --> 02:21:09.960
+but yeah, as of today, that is micrograd.
+
+02:21:09.960 --> 02:21:11.960
+I also wanted to show you a little bit of real stuff
+
+02:21:11.960 --> 02:21:13.960
+so that you get to see how this is actually implemented
+
+02:21:13.960 --> 02:21:16.960
+in the production grade library like PyTorch.
+
+02:21:16.960 --> 02:21:18.960
+So in particular I wanted to show
+
+02:21:18.960 --> 02:21:20.960
+you how to find and show you
+
+02:21:20.960 --> 02:21:22.960
+the backward pass for 10h in PyTorch.
+
+02:21:22.960 --> 02:21:24.960
+So here in micrograd we see that
+
+02:21:24.960 --> 02:21:26.960
+the backward pass for 10h is
+
+02:21:26.960 --> 02:21:28.960
+1 minus t square
+
+02:21:28.960 --> 02:21:31.960
+where t is the output of the 10h of x
+
+02:21:31.960 --> 02:21:34.960
+times out that grad which is the chain rule.
+
+02:21:34.960 --> 02:21:37.960
+So we're looking for something that looks like this.
+
+02:21:37.960 --> 02:21:40.960
+Now I went to PyTorch
+
+02:21:40.960 --> 02:21:43.960
+which has an open source GitHub code base
+
+02:21:43.960 --> 02:21:46.960
+and I looked through a lot of its code
+
+02:21:46.960 --> 02:21:49.960
+and honestly I spent about 15 minutes
+
+02:21:49.960 --> 02:21:51.960
+and I couldn't find 10h
+
+02:21:51.960 --> 02:21:53.960
+and that's because these libraries unfortunately
+
+02:21:53.960 --> 02:21:55.960
+they grow in size and entropy
+
+02:21:55.960 --> 02:21:57.960
+and if you just search for 10h
+
+02:21:57.960 --> 02:21:59.960
+you get apparently 2,800 results
+
+02:21:59.960 --> 02:22:02.960
+and 406 files.
+
+02:22:02.960 --> 02:22:06.960
+So I don't know what these files are doing honestly
+
+02:22:06.960 --> 02:22:09.960
+and why there are so many mentions of 10h
+
+02:22:09.960 --> 02:22:11.960
+but unfortunately these libraries are quite complex
+
+02:22:11.960 --> 02:22:14.960
+they're meant to be used, not really inspected.
+
+02:22:14.960 --> 02:22:17.960
+Eventually I did stumble on someone
+
+02:22:17.960 --> 02:22:20.960
+who tries to change the 10h backward code
+
+02:22:20.960 --> 02:22:22.960
+for some reason
+
+02:22:22.960 --> 02:22:24.960
+and someone here pointed to the CPU kernel
+
+02:22:24.960 --> 02:22:27.960
+and the CUDA kernel for 10h backward.
+
+02:22:27.960 --> 02:22:29.960
+So basically it depends on if you're using
+
+02:22:29.960 --> 02:22:31.960
+PyTorch on the CPU device or on the GPU
+
+02:22:31.960 --> 02:22:33.960
+which these are different devices
+
+02:22:33.960 --> 02:22:35.960
+and I haven't covered this
+
+02:22:35.960 --> 02:22:37.960
+but this is the 10h backward kernel
+
+02:22:37.960 --> 02:22:39.960
+for CPU
+
+02:22:39.960 --> 02:22:41.960
+and the reason it's so large
+
+02:22:41.960 --> 02:22:43.960
+is that
+
+02:22:43.960 --> 02:22:45.960
+number one this is like if you're using a complex type
+
+02:22:45.960 --> 02:22:47.960
+which we haven't even talked about
+
+02:22:47.960 --> 02:22:49.960
+if you're using a specific data type of BFloat 16
+
+02:22:49.960 --> 02:22:51.960
+which we haven't talked about
+
+02:22:51.960 --> 02:22:53.960
+and then if you're not
+
+02:22:53.960 --> 02:22:55.960
+then this is the kernel
+
+02:22:55.960 --> 02:22:57.960
+and deep here we see something that resembles
+
+02:22:57.960 --> 02:22:59.960
+our backward pass
+
+02:22:59.960 --> 02:23:01.960
+so they have 8 times 1 minus
+
+02:23:01.960 --> 02:23:03.960
+B square
+
+02:23:03.960 --> 02:23:05.960
+so this B here
+
+02:23:05.960 --> 02:23:07.960
+must be the output of the 10h
+
+02:23:07.960 --> 02:23:09.960
+and this is the out.grad
+
+02:23:09.960 --> 02:23:11.960
+here we found it
+
+02:23:11.960 --> 02:23:13.960
+deep inside
+
+02:23:13.960 --> 02:23:15.960
+PyTorch on this location
+
+02:23:15.960 --> 02:23:17.960
+for some reason inside binary ops kernel
+
+02:23:17.960 --> 02:23:19.960
+when 10h is not actually a binary op
+
+02:23:19.960 --> 02:23:21.960
+and then
+
+02:23:21.960 --> 02:23:23.960
+this is the GPU kernel
+
+02:23:23.960 --> 02:23:25.960
+we're not complex
+
+02:23:25.960 --> 02:23:27.960
+we're here
+
+02:23:27.960 --> 02:23:29.960
+and here we go with one line of code
+
+02:23:29.960 --> 02:23:31.960
+so we did find it
+
+02:23:31.960 --> 02:23:33.960
+but basically unfortunately
+
+02:23:33.960 --> 02:23:35.960
+these code bases are very large
+
+02:23:35.960 --> 02:23:37.960
+and micrograd is very very simple
+
+02:23:37.960 --> 02:23:39.960
+but if you actually want to use real stuff
+
+02:23:39.960 --> 02:23:41.960
+finding the code for it
+
+02:23:41.960 --> 02:23:43.960
+you'll actually find that difficult
+
+02:23:43.960 --> 02:23:45.960
+I also wanted to show you
+
+02:23:45.960 --> 02:23:47.960
+a little example here
+
+02:23:47.960 --> 02:23:49.960
+where PyTorch is showing you how you can register
+
+02:23:49.960 --> 02:23:51.960
+a new type of function that you want to add to PyTorch
+
+02:23:51.960 --> 02:23:53.960
+as a Lego building block
+
+02:23:53.960 --> 02:23:55.960
+so here if you want to for example add
+
+02:23:55.960 --> 02:23:57.960
+a Legendre polynomial 3
+
+02:23:57.960 --> 02:23:59.960
+here's how you can do it
+
+02:23:59.960 --> 02:24:01.960
+you will register it
+
+02:24:01.960 --> 02:24:03.960
+as a class that
+
+02:24:03.960 --> 02:24:05.960
+subclasses dors.grad.function
+
+02:24:05.960 --> 02:24:07.960
+and then you have to tell PyTorch how to forward
+
+02:24:07.960 --> 02:24:09.960
+your new function
+
+02:24:09.960 --> 02:24:11.960
+and how to backward through it
+
+02:24:11.960 --> 02:24:13.960
+so as long as you can do the forward pass
+
+02:24:13.960 --> 02:24:15.960
+of this little function piece that you want to add
+
+02:24:15.960 --> 02:24:17.960
+and as long as you know the
+
+02:24:17.960 --> 02:24:19.960
+local derivative, the local gradients
+
+02:24:19.960 --> 02:24:21.960
+which are implemented in the backward
+
+02:24:21.960 --> 02:24:23.960
+PyTorch will be able to back propagate through your function
+
+02:24:23.960 --> 02:24:25.960
+and then you can use this as a Lego block
+
+02:24:25.960 --> 02:24:27.960
+in a larger Lego castle
+
+02:24:27.960 --> 02:24:29.960
+of all the different Lego blocks that PyTorch already has
+
+02:24:29.960 --> 02:24:31.960
+and so that's the only thing
+
+02:24:31.960 --> 02:24:33.960
+you have to tell PyTorch and everything would just work
+
+02:24:33.960 --> 02:24:35.960
+and you can register new types of functions
+
+02:24:35.960 --> 02:24:37.960
+in this way following this example
+
+02:24:37.960 --> 02:24:39.960
+and that is everything that I wanted to cover
+
+02:24:39.960 --> 02:24:41.960
+in this lecture
+
+02:24:41.960 --> 02:24:43.960
+so I hope you enjoyed building out Micrograd with me
+
+02:24:43.960 --> 02:24:45.960
+I hope you find it interesting, insightful
+
+02:24:45.960 --> 02:24:47.960
+and
+
+02:24:47.960 --> 02:24:49.960
+yeah, I will post a lot of the links
+
+02:24:49.960 --> 02:24:51.960
+that are related to this video in the video description below
+
+02:24:51.960 --> 02:24:53.960
+I will also probably
+
+02:24:53.960 --> 02:24:55.960
+post a link to a discussion forum
+
+02:24:55.960 --> 02:24:57.960
+or discussion group where you can ask
+
+02:24:57.960 --> 02:24:59.960
+questions related to this video
+
+02:24:59.960 --> 02:25:01.960
+and then I can answer or someone else can answer
+
+02:25:01.960 --> 02:25:03.960
+your questions
+
+02:25:03.960 --> 02:25:05.960
+and I may also do a follow-up video
+
+02:25:05.960 --> 02:25:07.960
+that answers some of the most common questions
+
+02:25:07.960 --> 02:25:09.960
+but for now that's it
+
+02:25:09.960 --> 02:25:11.960
+I hope you enjoyed it, if you did
+
+02:25:11.960 --> 02:25:13.960
+then please like and subscribe so that YouTube knows
+
+02:25:13.960 --> 02:25:15.960
+to feature this video to more people
+
+02:25:15.960 --> 02:25:17.960
+and that's it for now, I'll see you later
+
+02:25:21.960 --> 02:25:23.960
+now here's the problem
+
+02:25:23.960 --> 02:25:25.960
+we know
+
+02:25:25.960 --> 02:25:27.960
+dL by
+
+02:25:27.960 --> 02:25:29.960
+wait, what is the problem
+
+02:25:31.960 --> 02:25:33.960
+and that's everything I wanted to cover in this lecture
+
+02:25:33.960 --> 02:25:35.960
+so I hope
+
+02:25:35.960 --> 02:25:37.960
+you enjoyed us building out Micrograd
+
+02:25:41.960 --> 02:25:43.960
+okay now let's do the exact same thing for Multiply
+
+02:25:43.960 --> 02:25:45.960
+because we can't do something like 8x2
+
+02:25:47.960 --> 02:25:49.960
+oops
+
+02:25:49.960 --> 02:25:51.960
+I know what happened there
+

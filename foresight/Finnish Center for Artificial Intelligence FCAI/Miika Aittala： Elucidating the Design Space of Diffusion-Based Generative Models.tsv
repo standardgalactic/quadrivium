@@ -1,0 +1,754 @@
+start	end	text
+0	3000	All right. Thanks for the intro.
+3000	7000	Indeed, the title of the paper is
+7000	10000	Solucidating the Descent Space of Diffusion Based Tensive Models.
+10000	14000	This is work with Tero, myself, Timo and Samuli from NVIDIA.
+14000	20000	The agenda here is to try and make sense
+20000	24000	of these recently immersed diffusion models,
+24000	28000	but really dig into the fundamentals
+28000	32000	and with that understanding then ask what are the best practices
+32000	36000	for designing and wanting these methods.
+36000	41000	So for a brief background on generative modelling,
+41000	45000	there are many ways to do it, but the idea is usually
+45000	49000	you have a dataset of something, for example in this case phase photos,
+49000	52000	but it could be anything, even not images,
+52000	55000	and you want to train some kind of a neural method
+55000	59000	for basically converting random numbers into random
+59000	63000	novel instances from that data distribution.
+63000	67000	And after recently GANs where the leading contender in this space,
+67000	72000	and these are from there, but now
+72000	76000	the denoising diffusion methods have really immersed
+76000	80000	as the leading contender here.
+80000	84000	So I'm sure we've all seen these superimpressive results
+84000	88000	from these models like a stable diffusion,
+88000	92000	and everything I'm going to say is basically stuff that runs
+92000	96000	at the bottom of these things, and that is in some way directly applicable
+96000	100000	to anything like this.
+100000	104000	Okay, so all of these methods, the denoising diffusion methods,
+104000	108000	the way they implement this idea is you start from pure random noise,
+108000	113000	you feed it to a neural denoiser, you keep feeding it,
+113000	117000	and reducing the noise level until it reveals a random image
+117000	121000	that was hiding underneath the noise, and now you've generated a random image,
+121000	125000	so this is a generative model.
+125000	129000	One concern with these methods is efficiency.
+129000	133000	You need to call this denoiser tens or even thousands of times in some methods
+133000	137000	to get the best quality. On the other hand,
+137000	141000	it's indeed a trade with the quality of the individual
+141000	147000	generative images and with the distribution as a whole.
+147000	151000	And these tradeoffs are not really well understood in this previous work.
+151000	155000	And some methods simply work better than others,
+155000	159000	and it's a bit of a folklore that this one seems to be
+159000	163000	good one, good and so on.
+163000	167000	And there are many ways to formulate the theory of these methods.
+167000	171000	There are, like, market chains, stochastic differential equations,
+171000	175000	and some more exotic ways. But when you kind of strip away
+175000	179000	all those fancy theories, in the end they all do something like this.
+179000	183000	But they differ, lastly,
+183000	187000	in practical design choices.
+187000	191000	Like at what rate do you reduce the noise level
+191000	195000	at different stages of the generation? Do you do this?
+195000	199000	Oh, it's showing.
+199000	203000	Does anyone know it?
+207000	211000	Yeah, thanks.
+211000	215000	Yeah, whether you do this deterministically
+215000	219000	or stochastically, we'll see the difference soon.
+219000	223000	How do you deal with vastly different
+223000	227000	single magnitudes at different stages of this process? Do you predict the signal
+227000	231000	or the noise? And so on.
+231000	235000	And given that ultimately these are the only differences between these existing methods,
+235000	239000	these must be the explanation for their vastly different performance
+239000	243000	characteristics also. And these are something we wanted to understand
+243000	247000	in this process and project.
+247000	251000	So we'll be building on the differential equation formulation
+251000	255000	from a couple of years back, where the images seem to evolve
+255000	259000	according to stochastic or an ordinary differential equation.
+259000	263000	And in principle it's known that this kind of generalizes
+263000	267000	all of those other methods. You can express them in this framework.
+267000	271000	But nobody has really gone through the work of getting their hands dirty
+271000	275000	and sorting everything into a sort of
+275000	279000	common framework where you could compare and
+279000	283000	understand the impact of these design choices. So that's the first thing
+283000	287000	we are going to be doing here. And armed
+287000	291000	with that knowledge, we'll then ask what are the best
+291000	295000	practices for running this sampling process, namely how do you
+295000	299000	manage this chain of denoising steps in the best possible way.
+299000	303000	First the deterministic version and then the stochastic version.
+303000	307000	And then finally we'll come to
+307000	311000	best practices for training these neural networks. How do you precondition them?
+311000	315000	How do you, what are the lost functions?
+315000	319000	Why does this keep coming back?
+319000	323000	Okay.
+323000	327000	And just one thing we won't be looking at
+327000	331000	the actual neural architectures like whether you should use the answer or not.
+331000	335000	We'll leave that for future work.
+335000	339000	So we'll be studying a few key works in this field.
+339000	343000	There's this paper that presents the so-called VBVE method.
+343000	347000	There's preserving, there's exploding and there's
+347000	351000	DDIM, denoising diffusion implicit model.
+351000	355000	It's not really that important for us what the difference is between these
+355000	359000	but on the face of it they look kind of like
+359000	363000	packages that you have to take as a whole.
+363000	367000	You cannot mix and match their properties.
+367000	371000	But this is not really true.
+371000	375000	The running theme in this paper
+375000	379000	is that we identify this complete and exhaustive set of
+379000	383000	design choices that completely characterize and reproduce
+383000	387000	any given method or at least these three methods and many others
+387000	391000	in this space. And this gives us sort of an
+391000	395000	extra view into the internals of these methods. We can ask
+395000	399000	what are the exact design choices they made about this and this aspect.
+399000	403000	Now don't worry. We won't be looking at slides
+403000	407000	like this. I'll try to keep it visual and intuitive
+407000	411000	to the extent possible. But the important point here is that this can be done
+411000	415000	and with this knowledge we can then ask what is the
+415000	419000	best choice for any given design point here.
+419000	423000	And that gives us our method, which will be building piece by piece
+423000	427000	and that then yields significantly improved results.
+427000	431000	And we'll be measuring our progress with the FID
+431000	435000	metric, which is sort of the current cost standard
+435000	439000	in evaluating any kinds of generative models.
+439000	443000	So let's start looking at how
+443000	447000	Song and Colleagues build this
+447000	451000	and I'll formulate this denoting diffusion problem
+451000	455000	using differential equations.
+455000	459000	So throughout this talk I'll be using this running toy example,
+459000	463000	which is actually one detoy example, which is actually quite
+463000	467000	actually in many ways completely representative of the actual thing that's going on
+467000	471000	with images. So in a way this is one of the images where
+471000	475000	you would have more dimensions on the x-axis,
+475000	479000	with actual high-dimensional images, like
+479000	483000	one megapixel image is a million numbers, so that would be a million dimensional space.
+483000	487000	But this describes the essential characteristics of it.
+487000	491000	So the point is we have some distribution of data.
+491000	495000	Let's imagine there are cat and dog photos or something
+495000	499000	and it happens to be this bimodal thing, so certain pixel values
+499000	503000	are more probable than others.
+503000	507000	We want to learn to produce novel samples from this distribution.
+507000	511000	We have a handful of examples, or let's say millions
+511000	515000	of examples, which is our data set, and based on those
+515000	519000	we want to learn to do this. So in this analogy
+519000	523000	one of the samples we have might be this dog photo.
+523000	527000	On the other axis
+527000	531000	we have increasing time, which is essentially increasing
+531000	535000	noise level. That's what we are going to be dealing with when we want to reduce this noise.
+535000	539000	But before we do that
+539000	543000	let's look at the easier direction of adding noise, like
+543000	547000	destroying an image. So if I start taking this
+547000	551000	image from the training data set, I gradually start adding noise onto it.
+551000	555000	I end up doing this random work in this pixel
+555000	559000	value space until the image is completely drowned under
+559000	563000	this white noise. And if I have a population of images
+563000	567000	in the end they'll all become
+567000	571000	indistinguishable white noise. So if I plot
+571000	575000	the density that these trajectories make
+575000	579000	it'll look like this. So the density of the data
+579000	583000	on the left edge becomes diffused over time until it's completely
+583000	587000	normally distributed at the end. And this is really nice now
+587000	591000	because it has disappeared again.
+591000	595000	No.
+595000	599000	I'll try
+599000	603000	one thing.
+603000	607000	I'll try one thing.
+607000	611000	I'll try one thing.
+611000	615000	Well, maybe we'll just leave
+615000	619000	it. Do you think we can do that?
+619000	623000	Yeah.
+623000	627000	Yeah, let me know if something important seems to be missing underneath it.
+627000	631000	So okay. Okay. So yeah, as I said
+631000	635000	we can sample from this normal distribution at the right edge. We just
+635000	639000	go random in PyTorch. And that'll give us a sample from that edge.
+639000	643000	And the magic is that there exists a way
+643000	647000	to sort of reverse this path we took earlier.
+647000	651000	So go backward in time and that will land us
+651000	655000	on the left edge where we have the density of the actual data. And that of course generates an image.
+655000	659000	And so if I have a population of these
+659000	663000	complete random noises, oops.
+663000	667000	Okay.
+667000	671000	Yeah, if I had many images I would have gotten
+671000	675000	different instances of the image. Okay.
+675000	679000	And what makes it stick is that this can be seen
+679000	683000	as a stochastic differential equation. In this example
+683000	687000	it's about the simplest one we have. When we go forward in time
+687000	691000	over a very short time period
+691000	695000	the change in image dx equals the omega, which is
+695000	699000	white noise. So that's just a mathematical expression
+699000	703000	of doing cumulative sum of random noise.
+703000	707000	Now the magic is that to this forward equation
+707000	711000	corresponds a backward version that has this same
+711000	715000	stochastic component, random walk component. But on top of that
+715000	719000	it has this term that kind of attracts the samples towards
+719000	723000	the data density. You see it's some kind of a gradient of the
+723000	727000	density p. But the problem of course is that this p is unknown
+727000	731000	and here is the axiomagic. This is a well known function
+731000	735000	from previous literature in data science
+735000	739000	called the score function and it has the property
+739000	743000	that you do not need to know the p if you have
+743000	747000	a least gross optimal denoiser for this data set d.
+747000	751000	So you can directly evaluate that formula above
+751000	755000	by the formula below. And this
+755000	759000	is an opportunity. We train a neural network to be such a denoiser
+759000	763000	and this means that we can run this kind of
+763000	767000	backward equation evolution using that
+767000	771000	denoiser.
+771000	775000	So some colleagues also present this deterministic variant of this
+775000	779000	where you don't have the stochastic term
+779000	783000	you only have this chord term scaled in some appropriate way.
+783000	787000	And this has a somewhat different like a visual character.
+787000	791000	You see it's kind of fading in and out instead of like
+791000	795000	jittering around. And this one actually provides
+795000	799000	a much cleaner view into this sampling dynamic. So we'll be looking at
+799000	803000	this first and then returning to the stochastic later.
+803000	807000	And with this I can now always draw this
+807000	811000	paint flow lines of this ODE. So the idea
+811000	815000	is that we are trying to somehow follow these lines to do the generation.
+815000	819000	And indeed the way that happens is by discretization
+819000	823000	I take little but macroscopic steps
+823000	827000	in this space I reduce the time and
+827000	831000	for any change in time I want to jump. The ODE formula
+831000	835000	tells me how much the image changes. And again
+835000	839000	the ODE formula is already does a neural network
+839000	843000	so the neural network tells us where to go on the next step.
+843000	847000	That's the general idea. And that gives me a step.
+847000	851000	I keep stepping until I hit time zero and that's my generated sample.
+851000	855000	With the SDEs we would have some kind of noise addition
+855000	859000	on top of this so we would kind of jitter it
+859000	863000	but I said we'll leave that for later.
+863000	867000	And now we've exactly reproduced this intuitive
+867000	871000	picture using differential equations.
+871000	875000	Okay so that was song and colleagues
+875000	879000	for our purposes. And let's now identify
+879000	883000	some design choices involved in making this kind of an ODE or SD.
+883000	887000	But before we do that we should understand what can go wrong
+887000	891000	in this process. What are the error sources? Well the obvious one
+891000	895000	because I might end up like in a different place than I should have
+895000	899000	when I do this sampling chain. So the obvious one is that if the network
+899000	903000	gives me an incorrect direction I end up moving in the incorrect
+903000	907000	direction and in the end I end up somewhat in the wrong place.
+907000	911000	It's more subtle than this but this is kind of a cartoon.
+911000	915000	The other source of error is that we are trying to approximate this continuous
+915000	919000	trajectory in green here using these linear
+919000	923000	segments. And
+923000	927000	if I try to jump too far at once the curve will kind of
+927000	931000	move away from my feet and I'll end up veering off
+931000	935000	this path. It's of course familiar to anyone who's done like a physical simulation
+935000	939000	with ODE. And
+939000	943000	the proof of solutions to that is to take more steps
+943000	947000	but that's exactly what we want to avoid because that directly means
+947000	951000	more compute to generate an image.
+951000	955000	Okay and so what we argue and what is underappreciated in previous
+955000	959000	work is that these two effects should be analysed
+959000	963000	or can be and should be analysed in isolation.
+963000	967000	You don't have to sample in a certain way just because you train your
+967000	971000	network in a certain way and so on you can decouple this. And indeed
+971000	975000	we'll be looking at sampling first and then coming back to the training later.
+975000	979000	Okay so I promise to show you some
+979000	983000	choices and here is one finally. So
+983000	987000	when I built this example I added noise at a constant rate
+987000	991000	over every time step and that gives me this simplicity, it gives me this schedule
+991000	995000	where the noise level increases as a square root of time
+995000	999000	because that's how the variance will grow linearly so the standard
+999000	1003000	will go square root. That's what you get
+1003000	1007000	if you call random and then do a comp sum on top of it.
+1007000	1011000	Had I added it at a different rate I might have arrived at a schedule
+1011000	1015000	like this for example where the standard deviation is the gross linearity
+1015000	1019000	and indeed I could do any
+1019000	1023000	kind of a choice here. I could do something even something
+1023000	1027000	crazy like this way we schedule here in the middle if I wanted to
+1027000	1031000	for some reason. And indeed we generalise in the paper the
+1031000	1035000	ODE form or we reparametise it in such
+1035000	1039000	a way that we get a clear view into these effects.
+1039000	1043000	So we can parameterise the noise level we want to have reached
+1043000	1047000	by explicitly by this function sigma.
+1051000	1055000	But the real question is why would you want to do something like this.
+1055000	1059000	Well one reason for that could be that if you look at this picture for example
+1059000	1063000	you see almost nothing happens until
+1063000	1067000	at almost zero noise level suddenly curves rapidly
+1067000	1071000	to one of these two basins and
+1071000	1075000	there's high curvature there so we'd probably want to be careful
+1075000	1079000	in stepping. We'll want to take somehow be more careful in sampling
+1079000	1083000	that region and less careful you're in the bulk. So there's two ideas
+1083000	1087000	of how you might do that. You might
+1087000	1091000	first you might take shorter steps at the more difficult parts
+1091000	1095000	usually is the low noise levels because that's where the
+1095000	1099000	image details are usually built. The other alternative
+1099000	1103000	would be to instead warp the noise schedule in such a way
+1103000	1107000	that you just end up spending more time at these difficult parts.
+1107000	1111000	And it's tempting to think
+1111000	1115000	that these two approaches would be equivalent.
+1115000	1119000	And this is an implicit assumption I think that many previous works do.
+1119000	1123000	But this is simply not true because the error characteristics
+1123000	1127000	can be vastly different between these choices like the error that comes
+1127000	1131000	from this tracking this continuous curve
+1131000	1135000	and we'll see the effect of that later.
+1135000	1139000	So now we've identified the first pair of design choices here.
+1139000	1143000	The time steps and the noise schedule.
+1143000	1147000	But let's introduce a couple more.
+1147000	1151000	And this address is the following problem. I zoom out a little
+1151000	1155000	because in reality we add a ton of noise. So at the
+1155000	1159000	other extreme the noise level is very large. I've been showing this zoom in
+1159000	1163000	so we can easier see what's going on. But I zoomed out
+1163000	1167000	now to see what's here. So the issue
+1167000	1171000	if you don't do anything is that the signal magnitude grows
+1171000	1175000	as the noise level grows. You keep piling noise. The signal
+1175000	1179000	is quite simply bigger numerically like the values that
+1179000	1183000	are in your sensor. They are much larger at the high noise levels
+1183000	1187000	than in the low noise levels. And this is known to be really bad for neural network
+1187000	1191000	training dynamics. And these kind of
+1191000	1195000	effects are actually critical to deal with to get good performance.
+1195000	1199000	So the way many previous works approach this is by using
+1199000	1203000	something called variance preserving schedules where you effectively
+1203000	1207000	introduce this additional
+1207000	1211000	so called scale schedule where you squeeze
+1211000	1215000	the signal magnitude into this constant with constant
+1215000	1219000	variance tube. So that makes
+1219000	1223000	that's one way to make the network happy here.
+1223000	1227000	So we generalize this idea again by
+1227000	1231000	just formulating an OD that allows you to directly
+1231000	1235000	specify any arbitrary scale schedule. And viewing this slide
+1235000	1239000	it again becomes appropriate that the only thing that the scale schedule does
+1239000	1243000	is distort these flow lines in some way.
+1243000	1247000	So you are just doing a coordinate transform in a way on this XT plane.
+1247000	1251000	Now there is an alternative
+1251000	1255000	way to deal with this scaling issue. And it is quite
+1255000	1259000	simply this. Instead of changing the OD at all
+1259000	1263000	you could change your neural network in such a way that it has an initial scaling
+1263000	1267000	layer that uses the known single scale
+1267000	1271000	scale it to something that's palatable for the neural network.
+1271000	1275000	And again you might think that this is completely
+1275000	1279000	accurate with the OD, but this is simply not true because again the error characteristics
+1279000	1283000	are vastly different between these two cases. And I'll come
+1283000	1287000	back soon to how the chosen practice.
+1287000	1291000	But now we've identified a second set, second pair of these matrices.
+1291000	1295000	The scaling schedule and the
+1295000	1299000	scaling that happens inside the neural network itself.
+1299000	1303000	And that we kind of saw so-called preconditioning of the neural network.
+1303000	1307000	Okay, so now we have quite a few
+1307000	1311000	collected here. And
+1311000	1315000	at this point we can ask, like get our hands dirty
+1315000	1319000	go look at the appendices of these papers, read their code
+1319000	1323000	for the final ground truth and ask what
+1323000	1327000	formulas actually exactly reproduce their
+1327000	1331000	approaches. And they are these. Again don't worry, but don't even
+1331000	1335000	try to read them. But the question now is
+1335000	1339000	what choices should we actually make, which ones of these are good, which ones are
+1339000	1343000	suboptimal. And that's going to be the topic of the next section.
+1343000	1347000	And for now, we will be ignoring these neural network training
+1347000	1351000	aspects. We will be using pre-trained networks from previous work.
+1351000	1355000	We won't be retraining anything yet. We'll just try to improve the sampling.
+1355000	1359000	So now we move on to the deterministic sampling
+1359000	1363000	and actual prescriptions of what
+1363000	1367000	you might want to do. So first the noise schedule. Why would
+1367000	1371000	some of them be better than others? For example this way one must be
+1371000	1375000	terrible for some reason, but why?
+1375000	1379000	Well, now we get a clear view.
+1379000	1383000	Well, parameterizing things in this way gives us a
+1383000	1387000	quite a clear view to this. So let's zoom out again.
+1387000	1391000	And consider the fact that
+1391000	1395000	we are trying to follow these curving trajectories by following
+1395000	1399000	these linear tangents. And that's probably going to be more successful
+1399000	1403000	when the tangents happen to coincide with this curve trajectory.
+1403000	1407000	So when the trajectory is as straight as possible in other words.
+1407000	1411000	So if I use a bad schedule like this one, you see
+1411000	1415000	there's already a visible gap between the tangent and the curve.
+1415000	1419000	So you easily fall off if you try to step too much.
+1419000	1423000	And indeed if I show you this random family of different
+1423000	1427000	schedules, we see that some of them seem to be better in this regard than others.
+1427000	1431000	In particular this one.
+1431000	1435000	And this is actually the same schedule used in the previous work
+1435000	1439000	DDIM, which is known to be quite good.
+1439000	1443000	And this in a way explains it.
+1443000	1447000	So this is the schedule where standard deviation cross-lineally
+1447000	1451000	and we do not use any scaling. And indeed
+1451000	1455000	we'll be leaving the scaling for neural network parameterization.
+1455000	1459000	And the reason for that is that this scaling also introduces unwanted
+1459000	1463000	curvature into these lines.
+1463000	1467000	Yeah, it just turns them unnecessarily at some point.
+1467000	1471000	It's actually better to let the
+1471000	1475000	signal in the ODE grow from that perspective.
+1475000	1479000	As further, and yeah, with this the
+1479000	1483000	is the ODE becomes very simple. So as a further
+1483000	1487000	demonstration, like an actual mathematical fact about this
+1487000	1491000	schedule and why it allows us to take long steps is that
+1491000	1495000	if I took a step directly to times zero, then
+1495000	1499000	with this schedule and only this schedule
+1499000	1503000	the tangent is pointing directly to the output of the denoiser.
+1503000	1507000	And that's very nice because
+1507000	1511000	the denoiser output changes only very slowly during the
+1511000	1515000	sampling process. And this means that
+1515000	1519000	well, the direction you are going to doesn't change almost at all.
+1519000	1523000	So it means you can take long bold steps and you can consequently only take
+1523000	1527000	a few steps or many fewer steps than with the alternatives.
+1527000	1531000	Okay, and then I said we'll want to direct
+1531000	1535000	our efforts to the difficult places. Now we've tied our
+1535000	1539000	hands with the noise schedule. So the remaining tool
+1539000	1543000	is to take different length steps at different stages
+1543000	1547000	of the generation. And indeed, when you go look
+1547000	1551000	at the possibly implicit choices the previous methods have done,
+1551000	1555000	all of them take shorter steps at low noise levels
+1555000	1559000	because that's where the detail is built again.
+1559000	1563000	And yeah, we
+1563000	1567000	formulate this family of these discretizations
+1567000	1571000	like a polynomial step length growth and we find that there is a broad
+1571000	1575000	optimum of good schedules there.
+1575000	1579000	You can read those details in the paper.
+1579000	1583000	So there's one more thing that this ODE framework allows you to do
+1583000	1587000	which is not so clear with for example the Markov chain
+1587000	1591000	form lessons is use higher order solvers. So again
+1591000	1595000	there is going to be curvature and it can be quite
+1595000	1599000	rapid at places. So you can still fall off
+1599000	1603000	the track if you just naively follow tangent and that method
+1603000	1607000	of following the tangent of course is called the Euler method.
+1607000	1611000	But there are higher order schemes for example in the Hoin scheme you take a second
+1611000	1615000	tentative step and you move it back to where you started from
+1615000	1619000	and your access step is going to be the average of that and the initial one.
+1619000	1623000	And this makes you much better follow these trajectories.
+1623000	1627000	This of course has a cost. You need to take these sub steps.
+1627000	1631000	And what we find in the paper by extension we're studying this
+1631000	1635000	is that this Hoin method strikes the best balance between these higher order methods
+1635000	1639000	for sort of the extra bang for the buck.
+1639000	1643000	And the improvement is actually quite substantial.
+1643000	1647000	Okay, so those are the choices we made.
+1647000	1651000	And now we can evaluate. So we'll be evaluating
+1651000	1655000	these results throughout the talk on a couple of very competitive
+1655000	1659000	generation categories. Saifat Sen
+1659000	1663000	at Resolution 32 using it at Resolution 64.
+1663000	1667000	And I want to say a couple of words on this might sound
+1667000	1671000	like a useless toy example to you if you're used to seeing
+1671000	1675000	like outputs from stable diffusion or something.
+1675000	1679000	But the way also those methods work is they first
+1679000	1683000	they something like a 64 by 64 image and then they upsample it sequentially.
+1683000	1687000	And it turns out that generating the 64 image is the difficult part there.
+1687000	1691000	The upsampling just kind of it just kind of works.
+1691000	1695000	So this is highly indicative of
+1695000	1699000	improvements we get in very relevant
+1699000	1703000	very relevant classes of models.
+1703000	1707000	Okay, so if we look at the performance of the original
+1707000	1711000	samples from these works, from a few previous methods
+1711000	1715000	on these data sets, we see
+1715000	1719000	that we have the quality on the y-axis, the FID lower is
+1719000	1723000	better, and we have a number of samples we need to take, like number of steps
+1723000	1727000	or the function evaluations on the x-axis. We see that we need to take
+1727000	1731000	something like hundreds or even thousands of steps to get kind of
+1731000	1735000	saturate the quality to get the best quality that model gives you.
+1735000	1739000	So introducing the point sampler and our discretization schedule
+1739000	1743000	we vastly improved this. I noticed that
+1743000	1747000	the x-axis is logarithmic, so we've gone from like hundreds
+1747000	1751000	to dozens of evaluations.
+1751000	1755000	And further introducing the noise schedule
+1755000	1759000	and scaling schedule further improved the results by a large amount
+1759000	1763000	except in DDIM which was already using those schedules.
+1763000	1767000	So now we've already made it quite far here
+1767000	1771000	and using some super fancy
+1771000	1775000	higher audio, so it's not worth the effort.
+1775000	1779000	Okay, so now we've covered the deterministic sampling
+1779000	1783000	and let's next
+1783000	1787000	return to the question of SDE which we
+1787000	1791000	put on the back burner on the other slides. And remember
+1791000	1795000	instead of following these nice smooth flow trajectories
+1795000	1799000	the SDE sort of cheaters around as some kind of
+1799000	1803000	exploration around that baseline. So it can be interpreted as
+1803000	1807000	replacing the noise as you go on top of like reducing it.
+1807000	1811000	And the reason why people care about the SDE is of course
+1811000	1815000	well one reason is that that's where this stuff is derived from
+1815000	1819000	but the other is that in practice you tend to get better results when you use the SDE
+1819000	1823000	instead of the ODE, at least in previous work.
+1823000	1827000	And the reason for that will become apparent soon.
+1827000	1831000	But let's first generalize this idea a little.
+1831000	1835000	So in the paper we present this generalized version of the SDE
+1835000	1839000	which allows you to specify the strength of this exploration
+1839000	1843000	by this sort of noise replacement schedule.
+1843000	1847000	So especially when you set it to zero you get just the ODE
+1847000	1851000	boosting this factor. Or you can do more exotic schedules
+1851000	1855000	like something like this
+1855000	1859000	where you have it behave like an SDE in the middle and like the ODE
+1859000	1863000	and so on. And samples would look like this.
+1863000	1867000	But again that's the question of is this just a nice streak
+1867000	1871000	or like what's the point.
+1871000	1875000	And as I said empirically
+1875000	1879000	this improves the results. And now looking at this SDE
+1879000	1883000	the reason becomes somewhat apparent.
+1883000	1887000	So don't try to read it unless you're an expert in SDEs
+1887000	1891000	but we can recognize a couple of familiar parts here.
+1891000	1895000	So the first term in the SDE is actually just the ODE from the previous section.
+1895000	1899000	So that means that we still have this force
+1899000	1903000	that is driving us towards the distribution
+1903000	1907000	of flow lines. And the remainder we can identify
+1907000	1911000	some kind of a lens around diffusion stochastic difference equation
+1911000	1915000	which is a well-known thing from a long ago.
+1915000	1919000	It has this property that it makes the samples sort of explore your
+1919000	1923000	distribution and if the samples are not distributed correctly
+1923000	1927000	it will kind of reduce that error.
+1927000	1931000	So it has this healing property.
+1931000	1935000	And because we do make errors during the sampling it kind of actively corrects
+1935000	1939000	for them. And this is how it looks like. So let's take this extreme situation
+1939000	1943000	we have our samples to blue dots. And
+1943000	1947000	let's say they are really bad. They are not following the underlying distribution at all.
+1947000	1951000	They are skewed to one side.
+1951000	1955000	So if we keep following the ODE it does nothing to actually
+1955000	1959000	correct the skew and we completely miss the other basin of the days for example.
+1959000	1963000	So when I introduce stochasticity to this process
+1963000	1967000	it starts looking like this.
+1967000	1971000	So these samples do this kind of random exploration
+1971000	1975000	and gradually forget where they came from and forget the error
+1975000	1979000	in this opposition. And now we've covered both modes for example
+1979000	1983000	in the generated images on the left edge.
+1983000	1987000	So that's the sort of reason why stochasticity is helpful.
+1987000	1991000	No, arguably this is the only benefit of the SDE over the ODE.
+1991000	1995000	But there are also downsides in using SDEs.
+1995000	1999000	For example we would technically have to use these
+1999000	2003000	complicated solvers that are arguably designed for much more complicated
+2003000	2007000	cases where you have more general SDEs.
+2007000	2011000	So we asked the question could we instead directly combine the ODE solving
+2011000	2015000	with this idea of this
+2015000	2019000	churning of the noise, adding and removing it.
+2019000	2023000	And the answer is this.
+2023000	2027000	So this is a stochastic example we proposed in the paper.
+2027000	2031000	So we have our current noise image at noise level TTI.
+2031000	2035000	Remember in our parent recession the noise level is now
+2035000	2039000	completely equivalent with time.
+2039000	2043000	So we have two sub steps in one step.
+2043000	2047000	So first we add noise. So this represents the lens of an exploration.
+2047000	2051000	So we landed some random
+2051000	2055000	noisier image so the time increases here.
+2055000	2059000	And then we solved the ODE to where we actually wanted to go
+2059000	2063000	with say lower noise level.
+2063000	2067000	And that simply follows the flow line there.
+2067000	2071000	And in practice we do this with a single point step. So we keep alternating between
+2071000	2075000	this noise addition and the point step.
+2075000	2079000	And this brings us closer and closer to time zero as we want.
+2079000	2083000	But underneath it is the ODE running the show
+2083000	2087000	and guiding us along these lines.
+2087000	2091000	But on top of that we now have this jittering with correct servers.
+2091000	2095000	Okay, so this all sounds really nice.
+2095000	2099000	You get free error correction but it's not actually free
+2099000	2103000	because the lens event term is also an approximation of some continuous thing.
+2103000	2107000	And you introduce new error also when you make it.
+2107000	2111000	So it's actually a quite delicate balance of how much you should do this.
+2111000	2115000	And now with this clear view into this dynamics we actually find that it is really
+2115000	2119000	finicky. You need to tune the amount of stochasticity
+2119000	2123000	on a per data set per architecture basis.
+2123000	2127000	You get the benefits but it's really annoying.
+2127000	2131000	So it's a mixed bag.
+2131000	2135000	Nonetheless it is very useful. So if we compare the ODEs from the previous section
+2135000	2139000	their performance with just original SDE
+2139000	2143000	samples from these respective works.
+2143000	2147000	We see that the SDE solvers are simply better in the end
+2147000	2151000	but they are also very slow.
+2151000	2155000	Now applying all of these improvements
+2155000	2159000	with our method, with the optimal tune settings for this data set
+2159000	2163000	we read both much better quality
+2163000	2167000	at a much faster rate.
+2167000	2171000	And yeah, there's been some previous works
+2171000	2175000	that applied also higher order solvers.
+2175000	2179000	So I want to highlight one result here.
+2179000	2183000	This image net 64 highly competitive
+2183000	2187000	just with this change of schedule.
+2187000	2191000	We went from a pretty mediocre FID of 2.07 to 1.55
+2191000	2195000	which at the time of getting this result was state of the art
+2195000	2199000	but that record was broken before the publication
+2199000	2203000	but we'll have our events in a few slides.
+2203000	2207000	But just to show that this is just taking
+2207000	2211000	the existing network and using it better
+2211000	2215000	for improvements already.
+2215000	2219000	Okay, so that's it for deterministic sampling.
+2219000	2223000	At this point I have to say I'm going to go a bit overtime because of the hassle
+2223000	2227000	in the beginning and because this is kind of incompressible anyway.
+2227000	2231000	So if you need to leave then no problem.
+2231000	2235000	So yeah, that's it for stagastic sampling
+2235000	2239000	and for sampling as a whole.
+2239000	2243000	So just a brief recap.
+2243000	2247000	The way this works was that the role of the ODE
+2247000	2251000	is to give us the step direction
+2251000	2255000	which is given by the score function
+2255000	2259000	which is given by the score function
+2259000	2263000	which is given by the score function
+2263000	2267000	which is given by the score function
+2267000	2271000	which can be evaluated using a denoiser
+2271000	2275000	which can be approximated using the neural network
+2275000	2279000	and that is the role of the neural network.
+2279000	2283000	It tells you where to go in a single step or what's the direction you need to go to.
+2283000	2287000	And the theory says that as long as the denoiser does something
+2287000	2291000	that minimizes this loss, the L2 denoising loss
+2291000	2295000	the theory will be happy.
+2295000	2299000	And you can do this separately at every noise level
+2299000	2303000	so you can weight these loss according to the noise level also.
+2303000	2307000	But before we go to these loss weightings
+2307000	2311000	let's look at the denoiser itself.
+2311000	2315000	So I draw the CNN there in a bit of a hazy way
+2315000	2319000	and this is because it's actually a bad idea to directly connect the noise image to the input of the network
+2319000	2323000	or to read the denoised image from its output layer
+2323000	2329000	rather we'll want to wrap it between some kind of signal management layers
+2329000	2333000	to manage those signal scales
+2333000	2337000	of both the input and the output to standardize them somehow
+2337000	2341000	and also in this case we can often recycle stuff from the input
+2341000	2345000	because let's say if the input image is almost noise free
+2345000	2347000	then we don't really need to denoise much
+2347000	2351000	we should just copy what we know and only fix the remainder
+2351000	2355000	we're going to come to that soon.
+2355000	2359000	And this is super critical here.
+2359000	2363000	I mean this might sound like boring technical details
+2363000	2367000	but these kind of things really are critical for the success of the neural network training
+2367000	2371000	and we've seen this over and over again over the years.
+2371000	2375000	And in this case the noise levels vary so widely
+2375000	2379000	that this is extra critical here.
+2379000	2383000	So without too much to do here is how one of the previous methods, the VE method
+2383000	2387000	implements the denoiser.
+2387000	2391000	So the idea of this setup is that they are
+2391000	2395000	learning to predict the noise instead of the signal using those CNN layers.
+2395000	2399000	And the way that works, and I'll explain why soon
+2399000	2403000	the way that works is of course the loss will be happy
+2403000	2407000	if the denoiser can produce the clean image
+2407000	2413000	and we can interpret this model as having this kind of a skip connection
+2413000	2417000	so the noisy input goes through that.
+2417000	2421000	Now implicitly the task of the CNN will be to predict
+2421000	2425000	the negative of the noise component in that image
+2425000	2431000	and then they have an explicit layer that scales that noise to the known noise level.
+2431000	2435000	And so now when you add whatever came from the skip connection to this
+2435000	2439000	you get an estimate of the clean image.
+2439000	2443000	So this way they kind of turn it so that the CNN itself
+2443000	2447000	is concerned with the noise instead of like the signal.
+2447000	2451000	I'll explain soon why that is relevant.
+2451000	2455000	But first let's do the thing I promised to do a long ago.
+2455000	2459000	I said there's huge variations in the magnitude, just the numerical magnitude
+2459000	2463000	of these input signals.
+2463000	2467000	So fairs to accounts for that, which is problematic.
+2467000	2471000	And so we quite simply introduced this
+2471000	2475000	interscaling layer here that uses the known standard deviation of the noise
+2475000	2479000	to scale the image down.
+2479000	2483000	I want to highlight this not like a batch normalization or something.
+2483000	2487000	We know what the noise level is, we know what the signal magnitude should be.
+2487000	2491000	We divide by an appropriate formula.
+2491000	2496000	So that gives you one of the wishes we had on that orientation slide.
+2496000	2500000	On the output side we actually have something nice already.
+2500000	2505000	So this is very good because now the network only needs to produce
+2505000	2509000	a unit standard deviation output and this explicit scaling to the known noise level
+2509000	2514000	takes care of applying the actual like a magnitude of that noise.
+2514000	2517000	So this makes it again much easier for the neural network.
+2517000	2521000	It can always work with these standard sized signals.
+2521000	2525000	And that deals with the second hope we have there.
+2525000	2531000	But now the question of should we predict the noise or the signal and why?
+2531000	2535000	So it turns out this is actually a good idea at small noise levels
+2535000	2539000	but a bad idea at high noise levels.
+2539000	2543000	So I'll show you what happens at low noise levels.
+2543000	2547000	So if we have low noise, the stuff that goes through the skip connection
+2547000	2550000	is almost noise free already.
+2550000	2553000	And now the CNN predicts this negative noise component
+2553000	2557000	and it's scaled down by this very low noise level.
+2557000	2563000	And this is great because the neural network
+2563000	2566000	is actually the only source of error in this process.
+2566000	2569000	So if the network made errors, now we've downscaled them.
+2569000	2572000	So it doesn't really matter if the network is good or bad.
+2572000	2575000	We didn't do much error in this case.
+2575000	2578000	So that's great. We are sort of recycling what we already knew
+2578000	2583000	instead of trying to learn the identity function within your network.
+2583000	2587000	So that kind of deals with the third hope we had on the slide.
+2587000	2591000	But on high noise levels, the situation is reversed.
+2591000	2594000	Whatever comes through the skip connection is completely useless.
+2594000	2599000	It's a huge, huge noise signal with no signal at all.
+2599000	2602000	And now the CNN predicts what the noise is.
+2602000	2605000	And then it is massively boosted at this stage.
+2605000	2610000	So if the network made any errors, now there are going to be huge errors after this.
+2610000	2613000	And those are directly passed out of the denoiser.
+2613000	2620000	So now we've introduced a huge error into our stepping procedure in the ODE.
+2620000	2624000	It's also a bit of an absurd task because you're trying to subtract
+2624000	2628000	two massive signals to get a normal size signal.
+2628000	2636000	And kind of like trying to draw without two meter long pencil, not optimal.
+2636000	2639000	So instead what we'd like to do is somehow disable the skip connection
+2639000	2642000	when the noise level is high.
+2642000	2648000	And in that case, effectively the task of the CNN will be to just break the signal directly.
+2648000	2650000	There won't be any need to scale it up.
+2650000	2653000	So we won't end up boosting errors.
+2653000	2657000	And the way we implement that is by adding this sort of switch
+2657000	2659000	but in a continuous way.
+2659000	2663000	So we have this so-called skip scale, which when set to zero,
+2663000	2665000	effectively disables the skip connection.
+2665000	2668000	Set to one, you get the noise prediction.
+2668000	2672000	And furthermore, we make it so that it's actually a continuous value
+2672000	2676000	between zero and one that depends on the noise level.
+2676000	2681000	And if it's somewhere in between, that means that we are predicting
+2681000	2690000	some kind of a mixture of noise and the signal in this instead of just one of them.
+2690000	2697000	And there is a principle way of calculating what the optimal skip weight is.
+2697000	2701000	But I won't go there in the interest of time.
+2701000	2705000	We have it in the paper of Enix.
+2705000	2710000	And that deals with the remaining issues we had on this slide.
+2710000	2713000	And now we can look at what the previous works did and what we did.
+2713000	2719000	So these are the actual formulas that implement those ideas.
+2719000	2722000	Then there is the couple of training details.
+2722000	2725000	How should you weight the loss based on the noise level
+2725000	2730000	and how often should you show samples of different noise levels.
+2730000	2735000	So the general problem, if you don't deal with these issues,
+2735000	2740000	is that you might have a highly lopsided distribution of gradient feedback.
+2740000	2749000	So if you're not careful, you might be prodding the weights gently to one direction or the other.
+2749000	2757000	And then every few iterations you have this massive gradient smash on the weights and so on.
+2757000	2761000	And that's probably very bad for your training dynamics.
+2761000	2767000	So the role of the loss weighting or the scaling, the numerical scale in front of the loss term,
+2767000	2776000	should we be to just equalize the magnitude of the loss or equivalently equalize the magnitude of the gradient feedback that gives.
+2776000	2783000	And then the noise level distribution, maybe how often you show images of any given noise level.
+2783000	2789000	The role of that is to kind of direct your training efforts to the levels where you know it's relevant,
+2789000	2791000	where you can make an impact.
+2791000	2797000	And for that, in the paper, we have this sort of an important sampling argument that whatever we do,
+2797000	2799000	we end up with this kind of a loss curve.
+2799000	2805000	So we don't make much progress at very low and very high noise levels, but we do make a lot of progress in the middle.
+2805000	2811000	For example, at very low noise end, you're trying to predict noise from a noise free image.
+2811000	2815000	It's impossible, but it also doesn't matter if you can't do it.
+2815000	2829000	So we, based on this, we find that it's enough to, or suffice this to sort of have this very broad distribution
+2829000	2837000	of noise levels here that are targeted towards the levels where you know you can make progress.
+2837000	2842000	And this is a logarithmic scale on the x-axis, so it's a lot of normal distribution.
+2842000	2844000	So those are those sources.
+2844000	2846000	And it's starting to pretty full.
+2846000	2850000	There's one more thing, which I'll just keep in the interest of time.
+2850000	2861000	We have some mechanism presented in the paper for dealing with vastly like two small data sets when your network starts overfitting by this augmentation mechanism.
+2861000	2863000	You can look at it there.
+2863000	2866000	But yeah, let's not go there.
+2866000	2870000	It's really only relevant for various small data sets like Cypher.
+2870000	2874000	With ImageNet, we haven't found benefits from it, I think.
+2874000	2878000	Okay, so with all these improvements, we can stack them one by one.
+2878000	2880000	These are the lines here.
+2880000	2890000	And in the end, we get state-of-the-art results in various competitive categories.
+2890000	2900000	In deterministic sampling, we get an FID 179.97 on the Cypher categories, which might still be state-of-the-art.
+2900000	2906000	Also at very low sample counts compared to most previous work.
+2906000	2908000	That's more interestingly.
+2908000	2910000	Okay, that was with deterministic sampling.
+2910000	2923000	When we enable the stochastic sampling and tailor it for these architectures for ImageNet and use these retrained networks, we trained ourselves using these principles.
+2923000	2930000	We get an FID of 1.36, which was a state-of-the-art when this paper came out.
+2930000	2936000	It's been overtaken, I think in the last few weeks, possibly earlier.
+2937000	2943000	So all in all, we've turned this model that was okay-ish in the beginning.
+2943000	2954000	And by stacking all of these improvements, we get the best model in the world at that time for generating 64 ImageNet.
+2954000	2963000	Interestingly, the stochasticity is no longer helpful with Cypher in this resume or after the training improvement.
+2963000	2969000	And so it appears that the network has become so good that it doesn't make that many errors.
+2969000	2976000	And any exploration, lands and wine exploration you do, introduces more error than you are actually fixing with it.
+2976000	2979000	But this is still not the case with ImageNet.
+2979000	2984000	So there it's still pays to do stochasticity.
+2984000	2990000	Okay, so that was the, that was mostly it.
+2990000	2994000	Just a brief conclusion.
+2994000	3001000	So we've sort of exposed this completely modular design of these diffusion models.
+3001000	3007000	Instead of viewing them as tightly coupled packages where you can't change anything without breaking something,
+3007000	3015000	we show that you can pretty much change every, like you get a valid method no matter what you do as long as you follow these loose guidelines.
+3015000	3022000	And then with that knowledge, we get a clear view into what we should actually be doing with those choices.
+3022000	3025000	And doing so pays off in a big way.
+3025000	3030000	We get much improved quality at much, much more efficient models.
+3030000	3034000	One takeaway about stochasticity, it's a bit of a double edged sword.
+3034000	3042000	As said, it does help, but it also, it requires that annoying per case tuning.
+3042000	3045000	There are no clear principles how to do that tuning.
+3045000	3050000	There is also a danger that you can even have bugs in your code or something.
+3050000	3054000	And stochasticity will kind of fix them to an extent,
+3054000	3059000	which is of course not what you want to do if you're trying to understand what your potential improvements are,
+3059000	3062000	what their effect is and so on.
+3062000	3067000	Ideally, you'd be able to work in a completely deterministic setting.
+3067000	3076000	And if you want, then in the end just kind of reintroduce the stochasticity as the final, final cherry on the top.
+3076000	3082000	Okay, so we haven't talked about all the fancy stuff like higher resolutions, network architectures,
+3082000	3084000	classifier free guidance and so on.
+3084000	3088000	But probably many of these would be right for a similar principle of analysis.
+3088000	3095000	We hope this inspires you to also think about that kind of things and certainly we are.
+3095000	3099000	So with that, the code and everything is of course available.
+3099000	3105000	I would argue this is probably one of the better places to copy paste your code.
+3105000	3113000	If you want to experiment with stuff, it's very clean code based that directly implements these ideas.
+3113000	3117000	Yeah, so thank you for your attention.
+3124000	3127000	Hey, so we have time.
+3127000	3129000	Yeah, I have some.
+3129000	3135000	I just want to ask a question.
+3135000	3138000	All right.
+3147000	3150000	It probably has to do with the data's complexity.
+3150000	3155000	Seffari is maybe a bit too simplistic in the end.
+3155000	3158000	It's kind of learnable entirely.
+3158000	3165000	But it seems like that something like ImageNet, it's still so extremely cool.

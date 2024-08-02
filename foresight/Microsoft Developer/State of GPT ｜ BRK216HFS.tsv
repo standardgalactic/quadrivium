@@ -1,0 +1,728 @@
+start	end	text
+0	17440	Please welcome AI researcher and founding member of OpenAI, Andre Karpathy.
+17440	23640	Hi, everyone.
+23640	28880	I'm happy to be here to tell you about the state of GPT and more generally about the
+28880	32160	rapidly growing ecosystem of large language models.
+32160	35400	So I would like to partition the talk into two parts.
+35400	39600	In the first part, I would like to tell you about how we train GPT assistants.
+39600	43760	And then in the second part, we are going to take a look at how we can use these assistants
+43760	46760	effectively for your applications.
+46760	50520	So first, let's take a look at the emerging recipe for how to train these assistants and
+50520	53200	keep in mind that this is all very new and still rapidly evolving.
+53200	55400	But so far, the recipe looks something like this.
+55880	60000	Now, this is kind of a complicated slide, so I'm going to go through it piece by piece.
+60000	63400	But roughly speaking, we have four major stages.
+63400	67800	Pre-training, supervised fine-tuning, reward modeling, reinforcement learning, and they
+67800	70000	follow each other serially.
+70000	74840	Now, in each stage, we have a data set that powers that stage.
+74840	81480	We have an algorithm that, for our purposes, will be an objective for training a neural
+81480	82280	network.
+82280	86000	And then we have a resulting model, and then there's some nodes on the bottom.
+86000	88800	So the first stage we're going to start with is the pre-training stage.
+88800	93640	Now, this stage is kind of special in this diagram, and this diagram is not to scale,
+93640	96480	because this stage is where all of the computational work basically happens.
+96480	102040	This is 99% of the training compute time and also flops.
+102040	106680	And so this is where we are dealing with internet-scale data sets with thousands of
+106680	111440	GPUs in the supercomputer and also months of training, potentially.
+111440	116160	The other three stages are fine-tuning stages that are much more along the lines of small
+116160	119440	few number of GPUs and hours or days.
+119440	124240	So let's take a look at the pre-training stage to achieve a base model.
+124240	127880	First we're going to gather a large amount of data.
+127880	132840	Here's an example of what we call a data mixture that comes from this paper that was
+132840	136400	released by Meta, where they released this Lama-based model.
+136400	140600	Now, you can see roughly the kinds of data sets that enter into these collections.
+140600	145520	So we have common crawl, which is just a web scrape, C4, which is also a common crawl,
+145520	147400	and then some high-quality data sets as well.
+147400	151640	So for example, GitHub, Wikipedia, Books, Archive, Stack Exchange, and so on.
+151640	156720	These are all mixed up together, and then they are sampled according to some given proportions,
+156720	161160	and that forms the training set for the neural net for the GPT.
+161160	165080	Now before we can actually train on this data, we need to go through one more pre-processing
+165080	166960	step, and that is tokenization.
+166960	171560	And this is basically a translation of the raw text that we scrape from the internet into
+171560	177640	sequences of integers, because that's the native representation over which GPTs function.
+177640	183880	Now this is a lossless kind of translation between pieces of text and tokens and integers,
+183880	185880	and there are a number of algorithms for this stage.
+185880	189480	Typically, for example, you could use something like byte bearing coding, which iteratively
+189480	194000	merges little text chunks and groups them into tokens.
+194000	198480	And so here I'm showing some example chunks of these tokens, and then this is the raw integer
+198480	202160	sequence that will actually feed into a transformer.
+202160	208280	Now here I'm showing two sort of like examples for hyper-primers that govern this stage.
+208280	212400	So GPT-4, we did not release too much information about how it was trained and so on, so I'm
+212400	217040	using GPT-3's numbers, but GPT-3 is of course a little bit old by now, about three years
+217040	218040	ago.
+218040	220840	But Lama is a fairly recent model from Meta.
+220840	223840	So these are roughly the orders of magnitude that we're dealing with when we're doing
+223840	225280	pre-training.
+225280	229840	The vocabulary size is usually a couple 10,000 tokens, the context length is usually something
+229840	236360	like 2,000, 4,000, or nowadays even 100,000, and this governs the maximum number of integers
+236360	242320	that the GPT will look at when it's trying to predict the next integer in a sequence.
+242320	246480	You can see that roughly the number of parameters is, say, 65 billion for Lama.
+246480	251640	Now even though Lama has only 65B parameters compared to GPT-3's 175 billion parameters,
+251640	256320	Lama is a significantly more powerful model, and intuitively that's because the model is
+256320	260760	trained for significantly longer, in this case 1.4 trillion tokens instead of just 300
+260760	261840	billion tokens.
+261840	265120	So you shouldn't judge the power of a model just by the number of parameters that it
+265120	267120	contains.
+267120	273080	Below I'm showing some tables of rough hyper-parameters that typically go into specifying the transformer
+273080	277920	neural network, so the number of heads, the dimension size, number of layers, and so on.
+277920	281640	And on the bottom I'm showing some training hyper-parameters.
+281640	290040	So for example, to train the 65B model, Meta used 2,000 GPUs, roughly 21 days of training,
+290040	294240	and roughly several million dollars, and so that's the rough orders of magnitude that
+294240	299120	you should have in mind for the pre-training stage.
+299120	302320	Now when we're actually pre-training what happens, roughly speaking, we are going to
+302320	306160	take our tokens and we're going to lay them out into data batches.
+306160	310920	So we have these arrays that will feed into the transformer, and these arrays are B, the
+310920	316680	batch size, and these are all independent examples stacked up in rows, and B by T, T being the
+316680	318120	maximum context length.
+318120	323160	So in my picture I only have 10 of the context lengths, so this could be 2,000, 4,000, etc.
+323160	325120	So these are extremely long rows.
+325120	329120	And what we do is we take these documents and we pack them into rows, and we delimit them
+329120	333760	with these special end-of-text tokens, basically telling the transformer where a new document
+333760	335280	begins.
+335280	340760	And so here I have a few examples of documents, and then I've stretched them out into this
+340760	341760	input.
+341760	348280	Now, we're going to feed all of these numbers into Transformer, and let me just focus on
+348280	352720	a single particular cell, but the same thing will happen at every cell in this diagram.
+352720	354720	So let's look at the green cell.
+354720	359160	The green cell is going to take a look at all of the tokens before it, so all of the
+359160	364340	tokens in yellow, and we're going to feed that entire context into the transformer neural
+364340	369040	network, and the transformer is going to try to predict the next token in a sequence,
+369040	370640	in this case in red.
+370640	373840	Now the transformer, I don't have too much time to unfortunately go into the full details
+373840	379120	of this neural network architecture, is just a large blob of neural net stuff for our purposes,
+379120	382640	and it's got several 10 billion parameters typically, or something like that.
+382640	385840	And of course, as you tune these parameters, you're getting slightly different predicted
+385840	389280	distributions for every single one of these cells.
+389280	395040	And so, for example, if our vocabulary size is 50,257 tokens, then we're going to have
+395040	399600	that many numbers because we need to specify a probability distribution for what comes
+399600	400600	next.
+400600	403160	So basically we have a probability for whatever may follow.
+403160	408120	Now in this specific example for this specific cell, 513 will come next, and so we can use
+408120	411720	this as a source of supervision to update our transformer's weights.
+411760	415920	And so we're applying this basically on every single cell in parallel, and we keep swapping
+415920	419960	batches, and we're trying to get the transformer to make the correct predictions over what
+419960	422440	token comes next in a sequence.
+422440	425800	So let me show you more concretely what this looks like when you train one of these models.
+425800	431160	This is actually coming from New York Times, and they trained a small GPT on Shakespeare,
+431160	434720	and so here's a small snippet of Shakespeare, and they trained a GPT on it.
+434720	439360	Now in the beginning at initialization, the GPT starts with completely random weights,
+439400	442600	so you're just getting completely random outputs as well.
+442600	447520	But over time, as you train the GPT longer and longer, you are getting more and more
+447520	451720	coherent and consistent sort of samples from the model.
+451720	455960	And the way you sample from it, of course, is you predict what comes next, you sample
+455960	460600	from that distribution, and you keep feeding that back into the process, and you can basically
+460600	462240	sample large sequences.
+462240	465880	And so by the end, you see that the transformer has learned about words and where to put spaces
+465880	468400	and where to put commas and so on.
+468400	471800	And so we're making more and more consistent predictions over time.
+471800	474840	These are the kinds of plots that you're looking at when you're doing model pre-training.
+474840	479880	Effectively, we're looking at the loss function over time as you train, and low loss means
+479880	484360	that our transformer is predicting the correct, is giving a higher probability to get the
+484360	487160	correct next integer in a sequence.
+487160	491120	Now what are we going to do with this model once we've trained it after a month?
+491120	496760	Well the first thing that we noticed, we, the field, is that these models basically
+496760	501400	in the process of language modeling learn very powerful, general representations, and
+501400	505360	it's possible to very efficiently fine tune them for any arbitrary downstream task you
+505360	506640	might be interested in.
+506640	510920	So as an example, if you're interested in sentiment classification, the approach used
+510920	514280	to be that you collect a bunch of positives and negatives, and then you train some kind
+514280	520680	of an NLP model for that, but the new approach is ignore sentiment classification, go off
+520680	525480	and do large language model pre-training, train a large transformer, and then you can
+525480	529560	only, you may only have a few examples, and you can very efficiently fine tune your model
+529560	531360	for that task.
+531360	533760	And so this works very well in practice.
+533760	537800	And the reason for this is that basically the transformer is forced to multitask a huge
+537800	542560	amount of tasks in the language modeling task, because just, just in terms of predicting
+542560	546960	the next token, it's forced to understand a lot about the structure of the, of the text
+546960	550320	and all the different concepts therein.
+550320	551320	So that was GPT-1.
+551320	555600	Now around the time of GPT-2, people noticed that actually even better than fine tuning,
+555600	557880	you can actually prompt these models very effectively.
+557880	560560	So these are language models, and they want to complete documents.
+560560	565800	So you can actually trick them into performing tasks just by arranging these fake documents.
+565800	569920	So in this example, for, for example, we have some passage, and then we sort of like do
+569920	574920	QA, QA, QA, this is called a few-shot prompt, and then we do Q, and then as the transformer
+574920	577960	is trying to complete the document, it's actually answering our question.
+577960	581880	And so this is an example of prompt engineering a base model, making the belief that it's
+581880	585920	sort of imitating a document and getting it to perform a task.
+585920	590400	And so this kicked off, I think, the era of, I would say, prompting over fine tuning and
+590400	594200	seeing that this actually can work extremely well on a lot of problems, even without training
+594200	597600	any neural networks, fine tuning, or so on.
+597600	603280	Now since then, we've seen an entire evolutionary tree of base models that everyone has trained.
+603280	605520	Not all of these models are available.
+605520	608400	For example, the GPT-4 base model was never released.
+608400	612400	The GPT-4 model that you might be interacting with over API is not a base model, it's an
+612400	616360	assistant model, and we're going to cover how to get those in a bit.
+616360	621960	GPT-3 base model is available via the API under the name DaVinci, and GPT-2 base model is
+621960	624960	available even as weights on our GitHub repo.
+624960	630280	But currently the best available base model probably is the Lama series from Meta, although
+630280	634000	it is not commercially licensed.
+634000	636880	Now one thing to point out is base models are not assistants.
+636880	641400	They don't want to make answers to your questions.
+641400	643320	They just want to complete documents.
+643320	648440	So if you tell them write a poem about the bread and cheese, it will answer questions
+648440	649440	with more questions.
+649440	651520	It's just completing what it thinks is a document.
+651520	657400	However, you can prompt them in a specific way for base models that is more likely to
+657400	658400	work.
+658400	661280	So as an example, here's a poem about bread and cheese, and in that case it will autocomplete
+661280	663040	correctly.
+663040	667320	You can even trick base models into being assistants, and the way you would do this is
+667320	671160	you would create like a specific few-shot prompt that makes it look like there's some
+671160	676520	kind of a document between a human and assistant, and they're exchanging sort of information.
+676520	681120	And then at the bottom you sort of put your query at the end, and the base model will
+681120	686960	sort of like condition itself into being like a helpful assistant and kind of answer.
+686960	689880	But this is not very reliable and doesn't work super well in practice, although it can
+689880	691240	be done.
+691280	695520	So instead we have a different path to make actual GPT assistants not just base model
+695520	697360	document completers.
+697360	699920	And so that takes us into supervised fine-tuning.
+699920	704640	So in the supervised fine-tuning stage, we are going to collect small but high-quality
+704640	705640	data sets.
+705640	711400	And in this case we're going to ask human contractors to gather data of the form prompt
+711400	715320	and ideal response, and we're going to collect lots of these, typically tens of thousands
+715320	717000	or something like that.
+717000	720360	And then we're going to still do language modeling on this data, so nothing changed
+720360	721360	algorithmically.
+721360	723000	We're just swapping out a training set.
+723000	728600	So it used to be internet documents, which is a high-quantity, low-quantity for basically
+728600	734360	QA prompt response kind of data, and that is low-quantity, high-quality.
+734360	738600	So we still do language modeling, and then after training we get an SFD model.
+738600	741880	And you can actually deploy these models, and they are actual assistants, and they work
+741880	743200	to some extent.
+743200	745960	Let me show you what an example demonstration might look like.
+745960	748480	So here's something that a human contractor might come up with.
+748480	749840	Here's some random prompt.
+749840	753720	When you write a short introduction about the relevance of the term monopsony or something
+753720	757680	like that, and then the contractor also writes out an ideal response.
+757680	761680	And when they write out these responses, they are following extensive labeling documentations,
+761680	765800	and they are being asked to be helpful, truthful, and harmless.
+765800	768600	And this is labeling instructions here.
+768600	772720	You probably can't read it, neither can I, but they're long, and this is just people
+772720	776360	following instructions and trying to complete these prompts.
+776360	778920	So that's what the data set looks like, and you can train these models, and this works
+778920	780440	to some extent.
+780440	785680	Now you can actually continue the pipeline from here on and go into RLHF, Reinforcement
+785680	789840	Learning from Human Feedback, that consists of both reward modeling and reinforcement
+789840	790840	learning.
+790840	793680	So let me cover that, and then I'll come back to why you may want to go through the extra
+793680	796760	steps and how that compares to just SFD models.
+796760	800240	So in the reward modeling step, what we're going to do is we're now going to shift our
+800240	803280	data collection to be of the form of comparisons.
+803280	805800	So here's an example of what our data set will look like.
+805800	810760	I have the same prompt, identical prompt on the top, which is asking the assistant to
+810760	815720	write a program or a function that checks if a given string is a palindrome.
+815720	820080	And then what we do is we take the SFD model, which we've already trained, and we create
+820080	821240	multiple completions.
+821240	824360	So in this case, we have three completions that the model has created.
+824360	827160	And then we ask people to rank these completions.
+827160	830680	So if you stare at this for a while, and by the way, these are very difficult things
+830680	834840	to do to compare some of these predictions, and this can take people even hours for a
+834840	838520	single prompt completion pairs.
+838520	842040	But let's say we decided that one of these is much better than the others, and so on.
+842040	843640	So we rank them.
+843640	847360	Then we can follow that with something that looks very much like a binary classification
+847360	850520	on all the possible pairs between these completions.
+850520	855000	So what we do now is we lay out our prompt in rows, and the prompts is identical across
+855000	856360	all three rows here.
+856360	860640	So it's all the same prompt, but the completion is very, and so the yellow tokens are coming
+860640	862320	from the SFD model.
+862320	868320	Then what we do is we append another special reward readout token at the end, and we basically
+868320	872040	only supervise the transformer at this single green token.
+872040	878560	And the transformer will predict some reward for how good that completion is for that prompt.
+878560	882960	And so basically it makes a guess about the quality of each completion, and then once
+882960	886560	it makes a guess for every one of them, we also have the ground truth, which is telling
+886560	888160	us the ranking of them.
+888160	891800	And so we can actually enforce that some of these numbers should be much higher than others,
+891800	892800	and so on.
+892800	896440	We formulate this into a loss function, and we train our model to make reward predictions
+896440	899840	that are consistent with the ground truth coming from the comparisons from all these
+899840	900840	contractors.
+900840	903040	So that's how we train our reward model.
+903040	907680	And that allows us to score how good a completion is for a prompt.
+907680	912400	Once we have a reward model, we can't deploy this because this is not very useful as an
+912400	916440	assistant by itself, but it's very useful for the reinforcement learning stage that follows
+916440	917440	now.
+917440	921640	Because we have a reward model, we can score the quality of any arbitrary completion for
+921640	923200	any given prompt.
+923200	926720	So what we do during reinforcement learning is we basically get, again, a large collection
+926720	930960	of prompts, and now we do reinforcement learning with respect to the reward model.
+930960	933240	So here's what that looks like.
+933240	937880	We take a single prompt, we lay it out and rose, and now we use the SFD model.
+937880	941960	We use basically the model we'd like to train, which is initialized at SFD model, to create
+941960	943920	some completions in yellow.
+943920	948400	And then we append the reward token again, and we read off the reward according to the
+948400	950600	reward model, which is now kept fixed.
+950600	952400	It doesn't change anymore.
+952400	957400	And now the reward model tells us the quality of every single completion for these prompts.
+957400	960800	And so what we can do is we can now just basically apply the same language modeling
+960800	967040	loss function, but we're currently training on the yellow tokens, and we are weighing
+967040	971440	the language modeling objective by the rewards indicated by the reward model.
+971440	976440	So as an example, in the first row, the reward model said that this is a fairly high-scoring
+976440	977440	completion.
+977440	981400	And so all of the tokens that we happened to sample on the first row are going to get
+981400	985080	reinforced, and they're going to get higher probabilities for the future.
+985080	989000	Conversely, on the second row, the reward model really did not like this completion,
+989000	990080	negative 1.2.
+990080	994040	And so therefore, every single token that we sampled in that second row is going to get
+994040	996440	a slightly higher probability for the future.
+996440	1001200	And we do this over and over on many prompts, on many batches, and basically we get a policy
+1001200	1007280	which creates yellow tokens here, and basically all of the completions here will score high
+1007280	1011640	according to the reward model that we trained in the previous stage.
+1011640	1015240	So that's how we train, that's what the RLHF pipeline is.
+1015240	1020160	Now, and then at the end, you get a model that you could deploy, and so as an example,
+1020160	1024760	chatGPT is an RLHF model, but some other models that you might come across, like for
+1024760	1028380	example, the Kuna 13B and so on, these are SFD models.
+1028380	1033560	So we have base models, SFD models, and RLHF models, and that's kind of like the state
+1033560	1035040	of things there.
+1035040	1037180	Now why would you want to do RLHF?
+1037180	1041100	So one answer that is kind of not that exciting is that it just works better.
+1041100	1043300	So this comes from the InstructGPT paper.
+1043300	1048460	According to these experiments a while ago now, these PPO models are RLHF, and we see
+1048460	1053860	that they are basically just preferred in a lot of comparisons when we give them to humans.
+1053860	1059700	So humans just prefer basically tokens that come from RLHF models compared to SFD models,
+1059700	1064100	compared to base model that is prompted to be an assistant, and so it just works better.
+1064380	1066260	You might ask why?
+1066260	1067420	Why does it work better?
+1067420	1071220	And I don't think that there's a single amazing answer that the community has really agreed
+1071220	1077660	on, but I will just offer one reason potentially, and it has to do with the asymmetry between
+1077660	1082460	how easy computationally it is to compare versus generate.
+1082460	1085260	So let's take an example of generating a haiku.
+1085260	1088260	Suppose I ask a model to write a haiku about paper clips.
+1088260	1092540	If you're a contractor trying to give train data, then imagine being a contractor collecting
+1092540	1096300	basically data for the SFD stage, how are you supposed to create a nice haiku for a
+1096300	1097300	paper clip?
+1097300	1100860	You might just not be very good at that, but if I give you a few examples of haikus,
+1100860	1104380	you might be able to appreciate some of these haikus a lot more than others.
+1104380	1107660	And so judging which one of these is good is a much easier task.
+1107660	1113420	And so basically this asymmetry makes it so that comparisons are a better way to potentially
+1113420	1118220	leverage yourself as a human and your judgment to create a slightly better model.
+1118220	1123860	Now RLHF models are not strictly an improvement on the base models in some cases.
+1123860	1127100	So in particular, we've noticed, for example, that they lose some entropy.
+1127100	1129900	So that means that they give more PT results.
+1129900	1136220	They can output samples with lower variation than the base model.
+1136220	1140340	So base model has lots of entropy and will give lots of diverse outputs.
+1140340	1146140	So for example, one kind of place where I still prefer to use a base model is in a setup
+1146140	1153900	where you basically have n things and you want to generate more things like it.
+1153900	1156460	And so here is an example that I just cooked up.
+1156460	1158900	I want to generate cool Pokemon names.
+1158900	1162900	I gave it seven Pokemon names and I asked the base model to complete the document and
+1162900	1164980	it gave me a lot more Pokemon names.
+1164980	1165980	These are fictitious.
+1165980	1167060	I tried to look them up.
+1167060	1169260	I don't believe they're actual Pokemons.
+1169260	1172340	And this is the kind of task that I think base model would be good at because it still
+1172340	1176660	has lots of entropy and will give you lots of diverse, cool, kind of more things that
+1176660	1180680	look like whatever you give it before.
+1180680	1184220	So this is what, this is the number, having said all that, these are kind of like the
+1184220	1187740	assistant models that are probably available to you at this point.
+1187740	1191780	There's a team at Berkeley that ranked a lot of the available assistant models and
+1191780	1193540	gave them basically ELO ratings.
+1193540	1197740	So currently some of the best models, of course, are GPT-4 by far, I would say, followed by
+1197740	1202420	Claude, GPT-3.5, and then a number of models, some of these might be available as weights
+1202420	1205100	like the Kuna, Koala, et cetera.
+1205100	1210660	And the first three rows here are all, they are all RLHF models and all of the other models
+1210660	1215100	to my knowledge are SFD models, I believe.
+1215100	1219540	Okay, so that's how we train these models on a high level.
+1219540	1225020	Now I'm going to switch gears and let's look at how we can best apply a GPT-assistant model
+1225020	1226460	to your problems.
+1226460	1230100	Now I would like to work in a setting of a concrete example.
+1230100	1233340	So let's, let's work with a concrete example here.
+1233340	1236900	Let's say that you are working on an article or a blog post and you're going to write this
+1236900	1241300	sentence at the end, California's population is 53 times that of Alaska.
+1241300	1245460	So for some reason you want to compare the populations of these two states.
+1245460	1250500	Think about the rich internal monologue and tool use and how much work actually goes computationally
+1250500	1253500	in your brain to generate this one final sentence.
+1253500	1255580	So here's maybe what that could look like in your brain.
+1255780	1260940	Okay, for this next step, let me blog, or my blog, let me compare these two populations.
+1260940	1265380	Okay, first I'm going to obviously need to get both of these populations.
+1265380	1269220	Now I know that I probably don't know these populations off the top of my head.
+1269220	1273420	So I'm kind of like aware of what I know, what I don't know of my self-knowledge, right?
+1273420	1278420	So I go, I do some tool use and I go to Wikipedia and I look up California's population and
+1278420	1280340	Alaska's population.
+1280340	1282420	Now I know that I should divide the two.
+1282420	1287140	But again, I know that dividing 39.2 by 0.74 is very unlikely to succeed.
+1287140	1289820	That's not the kind of thing that I can do in my head.
+1289820	1292580	And so therefore I'm going to rely on a calculator.
+1292580	1297420	So I'm going to use a calculator, punch it in, and see that the output is roughly 53.
+1297420	1300900	And then maybe I do some reflection and sanity checks in my brain.
+1300900	1302540	So does 53 make sense?
+1302540	1306460	Well, that's quite a large fraction, but then California has the most popular state, so
+1306460	1308260	maybe that looks okay.
+1308260	1311540	So then I have all the information I might need, and now I get to the sort of creative
+1311540	1312980	portion of writing.
+1312980	1317460	So I might start to write something like, California has 53x times greater, and then
+1317460	1320420	I think to myself, that's actually like really awkward phrasing.
+1320420	1323660	So let me actually delete that, and let me try again.
+1323660	1328380	And so as I'm writing, I have this separate process almost inspecting what I'm writing
+1328380	1331220	and judging whether it looks good or not.
+1331220	1334940	And then maybe I delete, and maybe I reframe it, and then maybe I'm happy with what comes
+1334940	1335940	out.
+1335940	1340220	So basically long story short, a ton happens under the hood in terms of your internal monologue
+1340220	1342220	when you create sentences like this.
+1342220	1347580	But what does a sentence like this look like when we are training a GPT on it?
+1347580	1350820	From GPT's perspective, this is just a sequence of tokens.
+1350820	1355660	So a GPT when it's reading or generating these tokens, it just goes chunk, chunk, chunk,
+1355660	1356660	chunk, chunk.
+1356660	1360700	And each chunk is roughly the same amount of computational work for each token.
+1360700	1363420	And these transformers are not very shallow networks.
+1363420	1367780	They have about 80 layers of reasoning, but 80 is still not like too much.
+1367780	1371660	And so this transformer is going to do its best to imitate.
+1371660	1376780	But of course, the process here looks very, very different from the process that you took.
+1376780	1380900	So in particular, in our final artifacts, in the data sets that we create and then eventually
+1380900	1386300	feed to LLMs, all of that internal dialogue is completely stripped.
+1386300	1390460	And unlike you, the GPT will look at every single token and spend the same amount of
+1390460	1392340	compute on every one of them.
+1392340	1397540	And so you can't expect it to actually like, well, you can't expect it to sort of do too
+1397540	1399540	much work per token.
+1399540	1403980	So and also in particular, basically these transformers are just like token simulators.
+1403980	1408180	So they don't know what they don't know, like they just imitate the next token.
+1408180	1409860	They don't know what they're good at or not good at.
+1409860	1412500	They just try their best to imitate the next token.
+1412500	1414260	They don't reflect in the loop.
+1414260	1415620	They don't sanity check anything.
+1415620	1418100	They don't correct their mistakes along the way by default.
+1418100	1421060	They just sample token sequences.
+1421060	1423900	They don't have separate inner monologue streams in their head, right?
+1423900	1425740	They're evaluating what's happening.
+1425740	1429580	Now they do have some sort of cognitive advantages, I would say.
+1429580	1433740	And that is that they do actually have very large fact-based knowledge across a vast number
+1433740	1437140	of areas because they have, say, several 10 billion parameters.
+1437140	1440260	So that's a lot of storage for a lot of facts.
+1440260	1444860	But and they also, I think, have a relatively large and perfect working memory.
+1444860	1450260	So whatever fits into the context window is immediately available to the transformer
+1450260	1452700	through its internal self-attention mechanism.
+1452700	1456660	And so it's kind of like perfect memory, but it's got a finite size.
+1456660	1458780	But the transformer has a very direct access to it.
+1458780	1463420	And so it can, like, losslessly remember anything that is inside its context window.
+1463420	1466100	So that's kind of how I would compare those two.
+1466100	1470580	And the reason I bring all of this up is because I think to a large extent, prompting is just
+1470580	1477460	making up for this sort of cognitive difference between these two kind of architectures, like
+1477460	1479700	our brains here and LLM brains.
+1479700	1482260	You can look at it that way almost.
+1482260	1485940	So here's one thing that people found, for example, works pretty well in practice.
+1485940	1490580	Especially if your tasks require reasoning, you can't expect the transformer to do too
+1490580	1492540	much reasoning per token.
+1492540	1496220	And so you have to really spread out the reasoning across more and more tokens.
+1496220	1499500	So for example, you can't give the transformer a very complicated question and expect it
+1499500	1500900	to get the answer in a single token.
+1500900	1503020	There's just not enough time for it.
+1503020	1507140	These transformers need tokens to think, quote, unquote, I like to say sometimes.
+1507140	1509140	And so this is some of the things that work well.
+1509140	1512420	You may, for example, have a few-shot prompt that shows the transformer that it should
+1512420	1516100	like show its work when it's answering the question.
+1516100	1520780	And if you give a few examples, the transformer will imitate that template, and it will just
+1520780	1524380	end up working out better in terms of its evaluation.
+1524380	1528260	Additionally, you can elicit this kind of behavior from the transformer by saying, let's
+1528260	1532900	think step by step, because this conditioned the transformer into sort of like showing
+1532900	1533900	its work.
+1533900	1538020	And because it kind of snaps into a mode of showing its work, it's going to do less
+1538020	1540260	computational work per token.
+1540260	1545100	And so it's more likely to succeed as a result, because it's making slower reasoning over
+1545100	1546740	time.
+1546740	1547740	Here's another example.
+1547740	1550060	This one is called self-consistency.
+1550060	1552940	We saw that we had the ability to start writing.
+1552940	1555180	And then if it didn't work out, I can try again.
+1555180	1560740	And I can try multiple times and maybe select the one that worked best.
+1560740	1564700	So in these kinds of approaches, you may sample not just once, but you may sample multiple
+1564700	1569380	times, and then have some process for finding the ones that are good and then keeping just
+1569380	1572180	those samples or doing a majority vote or something like that.
+1572180	1576380	So basically, these transformers in the process, as they predict the next token, just like
+1576380	1578140	you, they can get unlucky.
+1578140	1582140	And they could sample a not a very good token, and they can go down sort of like a blind
+1582140	1584100	alley in terms of reasoning.
+1584100	1587340	And so unlike you, they cannot recover from that.
+1587340	1591020	They are stuck with every single token they sample, and so they will continue the sequence
+1591020	1594340	even if they even know that this sequence is not going to work out.
+1594380	1601500	So give them the ability to look back, inspect, or try to basically sample around it.
+1601500	1603860	Here's one technique also.
+1603860	1607620	It turns out that actually LLMs, like they know when they've screwed up.
+1607620	1613700	So as an example, say you ask the model to generate a poem that does not rhyme.
+1613700	1616220	And it might give you a poem, but it actually rhymes.
+1616220	1619940	But it turns out that especially for the bigger models like GPT-4, you can just ask it, did
+1619940	1621300	you meet the assignment?
+1621340	1625060	And actually GPT-4 knows very well that it did not meet the assignment.
+1625060	1627460	It just kind of got unlucky in its sampling.
+1627460	1629620	And so it will tell you, no, I didn't actually meet the assignment.
+1629620	1631260	Here's, let me try again.
+1631260	1638180	But without you prompting it, it doesn't even, like it doesn't know to revisit and so on.
+1638180	1640220	So you have to make up for that in your prompts.
+1640220	1642180	You have to get it to check.
+1642180	1645740	If you don't ask it to check, it's not going to check by itself, it's just a token simulator.
+1646740	1653500	I think more generally, a lot of these techniques fall into the bucket of what I would say recreating
+1653500	1654820	our system two.
+1654820	1658260	So you might be familiar with the system one, system two thinking for humans.
+1658260	1660300	System one is a fast automatic process.
+1660300	1664020	And I think kind of corresponds to like an LLM just sampling tokens.
+1664020	1669500	And system two is the slower, deliberate planning sort of part of your brain.
+1669500	1673380	And so this is a paper actually from just last week, because this space is pretty quickly
+1673380	1674380	evolving.
+1675380	1680780	And in tree of thought, the authors of this paper proposed maintaining multiple completions
+1680780	1682620	for any given prompt.
+1682620	1686500	And then they are also scoring them along the way and keeping the ones that are going
+1686500	1688340	well, if that makes sense.
+1688340	1694940	And so a lot of people are like really playing around with kind of prompt engineering to
+1694940	1699980	basically bring back some of these abilities that we sort of have in our brain for LLMs.
+1699980	1703020	Now one thing I would like to note here is that this is not just a prompt.
+1703020	1708060	This is actually prompts that are together used with some Python glue code because you
+1708060	1711180	don't, you actually have to maintain multiple prompts and you also have to do some tree
+1711180	1715620	search algorithm here to like figure out which prompts to expand, et cetera.
+1715620	1720260	So it's a symbiosis of Python glue code and individual prompts that are called in a Y
+1720260	1722540	loop or in a bigger algorithm.
+1722540	1725220	I also think there's a really cool parallel here to AlphaGo.
+1725220	1729740	AlphaGo has a policy for placing the next stone when it plays go and this policy was
+1729740	1732740	trained originally by imitating humans.
+1732740	1737300	But in addition to this policy, it also does multi-carreler tree search and basically it
+1737300	1740740	will play out a number of possibilities in its head and evaluate all of them and only
+1740740	1742060	keep the ones that work well.
+1742060	1749020	And so I think this is kind of an equivalent of AlphaGo, but for text, if that makes sense.
+1749020	1752580	So just like tree of thought, I think more generally people are starting to like really
+1752580	1757740	explore more general techniques of not just the simple question and answer prompts, but
+1757740	1762220	something that looks a lot more like Python glue code stringing together many prompts.
+1762220	1767620	So on the right, I have an example from this paper called React where they structure the
+1767620	1774260	answer to a prompt as a sequence of thought, action, observation, thought, action, observation
+1774260	1778660	and it's a full rollout, kind of a thinking process to answer the query.
+1778660	1782540	And in these actions, the model is also allowed to tool use.
+1782540	1788380	On the left, I have an example of auto-GPT and now auto-GPT, by the way, is a project
+1788380	1793780	that I think got a lot of hype recently and I think, but I think I still find it kind
+1793780	1796220	of inspirationally interesting.
+1796220	1801180	It's a project that allows an LLM to keep task list and continue to recursively break
+1801180	1805220	down tasks and I don't think this currently works very well and I would not advise people
+1805220	1807220	to use it in practical applications.
+1807220	1809980	I just think it's something to generally take inspiration from in terms of where this
+1810060	1813260	is going, I think, over time.
+1813260	1816500	So that's kind of like giving our model system to thinking.
+1816500	1821020	The next thing that I find kind of interesting is this following sort of, I would say, almost
+1821020	1826780	psychological quirk of LLMs is that LLMs don't want to succeed.
+1826780	1828700	They want to imitate.
+1828700	1831420	You want to succeed and you should ask for it.
+1831420	1837820	So what I mean by that is when transformers are trained, they have training sets and there
+1837820	1841620	can be an entire spectrum of performance qualities in their training data.
+1841620	1844900	So for example, there could be some kind of a prompt for some physics question or something
+1844900	1848500	like that and there could be a student solution that is completely wrong, but there can also
+1848500	1851260	be an expert answer that is extremely right.
+1851260	1856340	And transformers can't tell the difference between, like, they know about low-quality
+1856340	1860180	solutions and high-quality solutions, but by default, they want to imitate all of it
+1860180	1862540	because they're just trained on language modeling.
+1862540	1866380	And so at test time, you actually have to ask for a good performance.
+1866380	1872180	So in this example in this paper, they tried various prompts and let's think step-by-step
+1872180	1876020	was very powerful because it sort of spread out the reasoning over many tokens, but what
+1876020	1879980	worked even better is let's work this out in a step-by-step way to be sure we have the
+1879980	1881100	right answer.
+1881100	1884620	And so it's kind of like conditioning on getting a right answer and this actually makes the
+1884620	1889780	transformer work better because the transformer doesn't have to now hedge its probability mass
+1889780	1893060	on low-quality solutions as ridiculous as that sounds.
+1893060	1898620	And so basically, feel free to ask for a strong solution, say something like, you are a leading
+1898620	1902300	expert on this topic, pretend you have IQ 120, et cetera.
+1902300	1906740	But don't try to ask for too much IQ because if you ask for an IQ of, like, 400, you might
+1906740	1911420	be out of data distribution or, even worse, you could be in data distribution for some,
+1911420	1916260	like, sci-fi stuff and it will start to, like, take on some sci-fi role-playing or something
+1916260	1917260	like that.
+1917260	1921620	So you have to find, like, the right amount of IQ, I think, it's got some U-shaped curve
+1921620	1923460	there.
+1923460	1929180	Next up, as we saw, when we are trying to solve problems, we know what we are good at and what
+1929180	1932260	we're not good at and we lean on tools computationally.
+1932260	1935300	You want to do the same potentially with your LLMs.
+1935300	1942260	So in particular, we may want to give them calculators, code interpreters, and so on,
+1942260	1947540	the ability to do search and there's a lot of techniques for doing that.
+1947540	1951580	One thing to keep in mind, again, is that these transformers by default may not know
+1951580	1953100	what they don't know.
+1953100	1956820	So you may even want to tell the transformer in a prompt, you are not very good at mental
+1956820	1957820	arithmetic.
+1957820	1961420	Whenever you need to do very large number addition, multiplication or whatever, instead
+1961420	1962420	use this calculator.
+1962420	1966660	Here's how you use the calculator, use this token, combination, et cetera, et cetera.
+1966660	1969740	So you have to actually, like, spell it out because the model by default doesn't know
+1969740	1975900	what it's good at or not good at necessarily, just like you and I might be.
+1976020	1980540	Next up, I think something that is very interesting is we went from a world that was retrieval
+1980540	1986020	only all the way the pendulum swung to the other extreme where it's memory only in LLMs.
+1986020	1990740	But actually, there's this entire space in between of these retrieval augmented models
+1990740	1993420	and this works extremely well in practice.
+1993420	1997300	As I mentioned, the context window of a transformer is its working memory.
+1997300	2001500	If you can load the working memory with any information that is relevant to the task,
+2001500	2006580	the model will work extremely well because it can immediately access all that memory.
+2006580	2012060	And so I think a lot of people are really interested in basically retrieval augmented
+2012060	2013060	generation.
+2013060	2016740	And on the bottom, I have, like, an example of Lama index, which is one sort of data
+2016740	2021820	connector to lots of different types of data, and you can make it, you can index all of
+2021820	2024500	that data and you can make it accessible to LLMs.
+2024500	2028420	And the emerging recipe there is you take relevant documents, you split them up into
+2028420	2032820	chunks, you embed all of them, and you basically get embedding vectors that represent that
+2032820	2037020	data, you store that in the vector store, and then at test time, you make some kind
+2037020	2041780	of a query to your vector store, and you fetch chunks that might be relevant to your task
+2041780	2044300	and you stuff them into the prompt and then you generate.
+2044300	2046460	So this can work quite well in practice.
+2046460	2050420	So this is, I think, similar to when you and I solve problems, you can do everything from
+2050420	2054780	your memory and transformers have very large and extensive memory, but also it really helps
+2054780	2057820	to reference some primary documents.
+2057820	2061420	So whenever you find yourself going back to a textbook to find something, or whenever
+2061420	2066220	you find yourself going back to documentation of a library to look something up, the transformers
+2066220	2068020	definitely want to do that, too.
+2068020	2072580	You have some memory over how some documentation of a library works, but it's much better to
+2072580	2073580	look it up.
+2073580	2076020	So the same applies here.
+2076020	2079700	Next, I wanted to briefly talk about constraint prompting.
+2079700	2082300	I also find this very interesting.
+2082300	2090380	This is basically techniques for forcing a certain template in the outputs of LLMs.
+2090380	2095420	So guidance is one example from Microsoft, actually, and here we are enforcing that the
+2095420	2100580	output from the LLM will be JSON, and this will actually guarantee that the output will
+2100580	2104060	take on this form because they go in and they mess with the probabilities of all the different
+2104060	2107700	tokens that come out of the transformer and they clamp those tokens.
+2107700	2110780	And then the transformer is only filling in the blanks here, and then you can enforce
+2110820	2113620	additional restrictions on what could go into those blanks.
+2113620	2116940	So this might be really helpful, and I think this kind of constraint sampling is also extremely
+2116940	2117940	interesting.
+2117940	2122660	I also wanted to say a few words about fine-tuning.
+2122660	2127380	It is the case that you can get really far with prompt engineering, but it's also possible
+2127380	2129820	to think about fine-tuning your models.
+2129820	2133340	Now fine-tuning models means that you are actually going to change the weights of the
+2133340	2134500	model.
+2134500	2138900	It is becoming a lot more accessible to do this in practice, and that's because of a
+2138900	2143340	number of techniques that have been developed and have libraries for very recently.
+2143340	2147940	So for example, parameter-efficient fine-tuning techniques like LORA make sure that you're
+2147940	2151220	only training small sparse pieces of your model.
+2151220	2155340	So most of the model is kept clamped at the base model, and some pieces of it are allowed
+2155340	2159340	to change, and this still works pretty well empirically, and makes it much cheaper to
+2159340	2163300	sort of tune only small pieces of your model.
+2163300	2167180	It also means that because most of your model is clamped, you can use very low-precision
+2167180	2171140	inference for computing those parts, because they are not going to be updated by gradient
+2171140	2174500	ascent, and so that makes everything a lot more efficient as well.
+2174500	2177500	And in addition, we have a number of open-sourced, high-quality base models.
+2177500	2181580	Currently, as I mentioned, I think LAMA is quite nice, although it is not commercially
+2181580	2184620	licensed, I believe right now.
+2184620	2189780	Something to keep in mind is that basically fine-tuning is a lot more technically involved.
+2189780	2192900	It requires a lot more, I think, technical expertise to do right.
+2192900	2197260	It requires human data contractors for datasets and or synthetic data pipelines that can be
+2197260	2198860	pretty complicated.
+2198860	2203420	This will definitely slow down your iteration cycle by a lot, and I would say on a high-level
+2203420	2208460	SFD is achievable, because it is just you're continuing the language modeling task.
+2208460	2213540	It's relatively straightforward, but RLHF, I would say, is very much research territory,
+2213540	2218100	and is even much harder to get to work, and so I would probably not advise that someone
+2218100	2220860	just tries to roll their own RLHF implementation.
+2220860	2224780	These things are pretty unstable, very difficult to train, not something that is, I think,
+2224780	2229860	very beginner-friendly right now, and is also potentially likely also to change pretty rapidly
+2229860	2232380	still.
+2232380	2235780	So I think these are my sort of default recommendations right now.
+2235780	2238540	I would break up your task into two major parts.
+2238540	2242820	Number one, achieve your top performance, and number two, optimize your performance in
+2242820	2244580	that order.
+2244580	2247740	Number one, the best performance will currently come from G504 model.
+2247740	2250220	It is the most capable model by far.
+2250220	2255020	These prompts that are very detailed, they have lots of task contents, relevant information
+2255020	2256780	and instructions.
+2256780	2260100	Think along the lines of what would you tell a task contractor if they can't email you
+2260100	2264300	back, but then also keep in mind that a task contractor is a human, and they have inner
+2264300	2269020	monologue and they're very clever, et cetera, LLMs do not possess those qualities, so make
+2269020	2275860	sure to think through the psychology of the LLM almost, and cater prompts to that.
+2275860	2280900	You can even add any relevant context and information to these prompts.
+2280900	2283220	Basically refer to a lot of the prompt engineering techniques.
+2283220	2287540	Some of them I've highlighted in the slides above, but also this is a very large space,
+2287540	2291900	and I would just advise you to look for prompt engineering techniques online.
+2291900	2294220	There's a lot to cover there.
+2294220	2295940	Experiment with few short examples.
+2295940	2300060	What this refers to is you don't just want to tell, you want to show whenever it's possible,
+2300060	2304100	so give it examples of everything that helps it really understand what you mean if you
+2304100	2305100	can.
+2305780	2311260	Experiment with tools and plugins to offload a task that are difficult for LLMs natively,
+2311260	2315100	and then think about not just a single prompt and answer, think about potential chains and
+2315100	2318440	reflection and how you glue them together and how you could potentially make multiple
+2318440	2320300	samples and so on.
+2320300	2324300	Finally, if you think you've squeezed out prompt engineering, which I think you should
+2324300	2331820	stick with for a while, look at some potentially fine-tuning a model to your application, but
+2331820	2334300	expect this to be a lot more slower and involved.
+2334300	2338580	And then there's an expert fragile research zone here, and I would say that is RLHF, which
+2338580	2343220	currently does work a bit better than SFD if you can get it to work, but again, this
+2343220	2345500	is pretty involved, I would say.
+2345500	2350620	And to optimize your costs, try to explore lower capacity models or shorter prompts and
+2350620	2351620	so on.
+2351620	2357380	I also wanted to say a few words about the use cases in which I think LLMs are currently
+2357380	2358860	well suited for.
+2358860	2363780	So in particular, note that there's a large number of limitations to LLMs today, and
+2363780	2366660	so I would keep that definitely in mind for all your applications.
+2366660	2369540	Models, and this, by the way, could be an entire talk, so I don't have time to cover
+2369540	2370940	it in full detail.
+2370940	2375900	Models may be biased, they may fabricate hallucinate information, they may have reasoning errors,
+2375900	2380580	they may struggle in entire classes of applications, they have knowledge cutoffs, so they might
+2380580	2384100	not know any information above, say, September 2021.
+2384100	2388260	They are susceptible to a large range of attacks, which are sort of like coming out on Twitter
+2388260	2393220	daily, including prompt injection, jailbreak attacks, data poisoning attacks, and so on.
+2393220	2398540	So my recommendation right now is use LLMs in low stakes applications, combine them with
+2398540	2403340	always with human oversight, use them as a source of inspiration and suggestions, and
+2403340	2407220	think co-pilots instead of completely autonomous agents that are just like performing a task
+2407220	2408220	somewhere.
+2408220	2412620	It's just not clear that the models are there right now.
+2412620	2415180	So I wanted to close by saying that GPT-4 is an amazing artifact.
+2415180	2419460	I'm very thankful that it exists, and it's beautiful, it has a ton of knowledge across
+2419460	2423380	so many areas, it can do math, code, and so on.
+2423380	2427020	And in addition, there's this thriving ecosystem of everything else that is being built and
+2427020	2432340	incorporated into the ecosystem, some of these things I've talked about.
+2432340	2436060	And all of this power is accessible at your fingertips.
+2436060	2440860	So here's everything that's needed in terms of code to ask GPT-4 a question, to prompt
+2440860	2442700	it and get a response.
+2442700	2446780	In this case, I said, can you say something to inspire the audience of Microsoft Build
+2446780	2448260	2023?
+2448260	2454340	And I just punched this into Python and verbatim, GPT-4 said the following.
+2454340	2458020	And by the way, I did not know that they used this trick in the keynote, so I thought I
+2458020	2464660	was being clever, but it is really good at this, it says, ladies and gentlemen, innovators
+2464660	2469020	and trail bearers of Microsoft Build 2023, welcome to the gathering of brilliant minds
+2469020	2470260	like no other.
+2470260	2474140	You are the architects of the future, the visionaries molding the digital realm in which
+2474180	2479020	humanity thrives, embrace the limitless possibilities of technologies and let your ideas soar as
+2479020	2480540	high as your imagination.
+2480540	2484540	Together, let's create a more connected, remarkable and inclusive world for generations
+2484540	2489620	to come, get ready to unleash your creativity, canvass the unknown, and turn dreams into
+2489620	2490620	reality.
+2490620	2492260	Your journey begins today.
+2504140	2505140	Thank you.
+2505140	2506140	Thank you.
+2506140	2507140	Thank you.
+2507140	2508140	Thank you.
+2508140	2509140	Thank you.
+2509140	2510140	Thank you.
+2510140	2511140	Thank you.
+2511140	2512140	Thank you.
+2512140	2513140	Thank you.
+2513140	2514140	Thank you.
+2514140	2515140	Thank you.
+2515140	2516140	Thank you.
+2516140	2517140	Thank you.
+2517140	2518140	Thank you.
+2518140	2519140	Thank you.
+2519140	2520140	Thank you.
+2520140	2521140	Thank you.
+2521140	2522140	Thank you.
+2522140	2523140	Thank you.
+2523140	2524140	Thank you.
+2524140	2525140	Thank you.
+2525140	2526140	Thank you.
+2526140	2527140	Thank you.
+2527140	2528140	Thank you.
+2529140	2530140	Thank you.
+2530140	2531140	Thank you.
+2531140	2532140	Thank you.
+2532140	2533140	Thank you.
+2533140	2534140	Thank you.
+2534140	2535140	Thank you.
+2535140	2536140	Thank you.
+2536140	2537140	Thank you.
+2537140	2538140	Thank you.
+2538140	2539140	Thank you.
+2539140	2540140	Thank you.
+2540140	2541140	Thank you.
+2541140	2542140	Thank you.
+2542140	2543140	Thank you.
+2543140	2544140	Thank you.
+2544140	2545140	Thank you.
+2545140	2546140	Thank you.
+2546140	2547140	Thank you.
+2547140	2548140	Thank you.
+2548140	2549140	Thank you.
+2549140	2550140	Thank you.
+2550140	2551140	Thank you.
+2551140	2552140	Thank you.
+2552140	2553140	Thank you.
+2553140	2554140	Thank you.
+2554140	2555140	Thank you.
+2555140	2556140	Thank you.
+2556140	2557140	Thank you.

@@ -1,0 +1,355 @@
+start	end	text
+0	7680	My name is Jason Yelik, and I'd like to talk with you about the Hyperledger Fabric Lifecycle
+7680	17520	today. In particular, the new distributed chain code lifecycle introduced in version 2.0 of Hyperledger
+17520	25600	Fabric. Today, we'll be starting by talking about an overview of the version 1.x lifecycle,
+25600	31680	so basically how chain code lifecycle has worked up until version 2.0. Then we'll do a similar
+31680	38160	discussion of the version 2.0 lifecycle, sort of a high level, including a workflow for that,
+38720	45600	and then some permutations around that workflow. Finally, we'll move on to details about the
+45600	52320	version 2.0 lifecycle, and then finally some other notes and considerations that you should keep in
+52320	61840	mind when dealing with the v2 lifecycle. Starting out with how chain code lifecycle worked in
+61840	69040	Fabric 1.x. This should be a pretty familiar picture. You have a couple organizations,
+69840	75920	their respective admins, and an ordering service, and we would like to get chain code installed
+75920	85120	and instantiated so that we can begin transacting on the blockchain. So step one, each org admin
+85120	95440	installs the chain code to one or more of their peers. Step two, one of the admins goes out and
+95440	104480	does a LSCC deploy or upgrade transaction to instantiate that chain code, gets the result,
+104480	110240	submits it to ordering, commits it all the peers, and now the chain code is up and running.
+112240	117040	It's basically a two-step process, which is nice because it's a small number of steps,
+118240	125920	but it has a lot of drawbacks. To begin with, installing a chain code
+126880	135520	sort of grants this unconditional agreement to run that chain code on any channel that your
+136240	140960	peer is joined to, whether or not you agree that that chain code should run on that channel,
+141600	147520	or whether you agree to the assorted parameters to that instantiation. So for instance,
+148800	153760	you might want a certain endorsement policy associated with that chain code.
+154640	160400	You might want to have control over when that chain code is upgraded and downgraded,
+162160	168320	and you might simply not want to execute that chain code. So that's sort of one of the first big
+168320	178880	problems, and this is where we talk about this sort of distributed chain code life cycle,
+179760	186320	or sort of distributed government, the governance distributed agreement. So continuing,
+187040	192800	so when we say that the new life cycle is decentralized, that's what we're talking
+192800	199040	about, that it's not just one admin making the decisions, that that's a problem we had in the
+199040	202960	previous life cycle, and that's something the new life cycle is here to address.
+203920	212720	Now, the second problem, which is a little less obvious, is that the instantiation, i.e. that deploy
+212720	219120	or that upgrade transaction, that includes invoking a knit of the deployed chain code.
+220160	226080	But if we look at our picture here, you can see that that transaction actually only executes on
+226080	234080	Ord1's peer. So even though we may have set an endorsement policy for this chain code,
+234080	240160	that initial invocation of a knit doesn't respect that endorsement policy. And you know,
+240960	245280	in a lot of ways that's fine because it's being invoked by a trusted user and some other things,
+245280	252640	but it's still an asymmetry, and it's something that we wanted to fix. And then finally,
+253600	260560	this is more of an operational one. If you've ever tried to operate a fabric network and you've
+260560	265920	tried onboarding new orgs and that sort of thing, what you'll quickly realize is that
+266560	271200	even though you don't want to change anything about the code of your chain code, any of the
+271200	276320	chain code logic, if you want to modify, say, the endorsement policy to include a new org,
+276880	281440	well, you actually have to go through this whole process of installing the chain code
+281520	290160	and performing an upgrade across the network, which is really unnecessary and causes a lot of churn
+290160	296480	that's a bit of a pain, operationally speaking. So these are sort of the three big problems that
+298080	304160	we encountered in the original chain code lifecycle, which sort of leads to the three
+304960	314400	principles for the new v2 decentralized lifecycle. So first one is that peers only participate in a
+314400	323040	chain code. If the org admin explicitly agrees, yes, I like this configuration for the chain code.
+324000	336400	So until the orgs admin agrees, that peer will not endorse the definition, the instantiation,
+337440	342640	and further it will not endorse any invocation of that chain code, including its init function.
+343920	348880	So this basically, if we go back to our previous slide, we said that the
+349840	353840	installing agrees to instantiate unconditionally, this fixes that problem.
+355440	361520	Secondly, no exceptions to endorsement policies. This corresponds to our second problem we
+361520	367360	enumerated, which is the chain code init should be subject to the same endorsement policy as the
+367440	378960	rest of the invocations. So we enforce that chain code init abides by the
+379840	386400	endorsement policy as defined for the chain code, just like every other transaction.
+387440	394720	But secondly, and this one is a little more subtle, in the v1.x lifecycle,
+394800	403840	lscc really didn't have an endorsement policy. So in the v2 distributed lifecycle, we also
+403840	409120	enforce that the lifecycle at chain code itself is governed by an endorsement policy
+409120	411840	and decisions are validated based on that endorsement policy.
+413840	418960	So finally, the third parameter, which comes back to our operational problems,
+419920	425360	is that you should be able to modify your chain code definition, you should be able to change
+425360	432560	the endorsement policy, add collections, etc., without requiring an upgrade of the code across
+432560	440240	the network. So those three things are sort of the guiding principles behind the design of the
+440960	447840	v2 decentralized lifecycle, and you'll be able to see that reflected in
+449520	454080	just a moment when we do an overview of how the decentralized lifecycle works.
+455840	465200	Now, before we go into the overview of how the lifecycle works, it's important to mention
+465280	472880	sort of an implementation detail. And that's that v2 lifecycle is very much
+473600	478720	powered by a new v2 concept, and that is organization implicit collections.
+479600	486560	Now, if you're at all familiar with private data collections from v1.2 or 3 onwards,
+487920	492640	you'll know that the basic idea is that it's a namespace that's reserved
+492640	498160	that only certain members can read. So on v2, we've sort of extended that concept,
+498720	506560	and you can now associate which members can write to that namespace. And there's the set of
+506560	512880	implicit collections, which are defined implicitly, i.e. they're there without you having to do
+512880	520000	anything to define them. And you get one implicit collection per organization in your channel,
+520640	525120	and only peers from that organization may write to it, and only peers from that
+525120	530560	organization may read from it. So this allows you to implement a lot of interesting things
+530560	535840	in your chain code that weren't previously possible, notably things like voting schemes,
+536720	542960	and ways for a chain code of one org to make a different decision than a chain code of another.
+543920	549920	So that's a bit of a side note, and I don't want to get too off topic here, but
+550960	553920	implicit collections are sort of the underpinning
+556400	562000	technology behind the new v2 lifecycle, and you can use this in your own chain codes as well.
+564240	571520	So back to that overview. Just like with the v1.x lifecycle and the v2 lifecycle,
+571600	576640	the first thing we do is an install. Now the packaging format has been changed,
+577200	582080	there are some different things about the install, but conceptually, it's still just an install,
+582080	585040	you're putting the chain code's code package onto the file system,
+586320	591200	and that takes place as your first step performed by each admin, respectively.
+592640	595600	Secondly, and this is where things start to differ a little bit,
+596560	604080	um, org one's admin, in this case, is going to execute an approve for my org function against
+604080	610640	his peer, send that to ordering, and it commits. Now this is modifying the implicit collection
+610640	617840	for org one, indicating that org one agrees with this particular chain code definition
+617840	625680	that org one's admin is approving. Now org two's admin is going to do the very same thing,
+626560	631280	sends to his own peer, his approval, submits that to ordering, it commits,
+632080	637600	and now we have an entry in the implicit collection for each org, indicating agreement to some
+637600	644560	chain code definition. At this point, org one's admin, or it could be org two's,
+644560	651600	but we'll use org one's in this case, invokes the lifecycle chain code on one of his peers,
+652240	659280	and one of org two's peers, saying let's go ahead and commit this definition,
+659920	663760	submits that to the ordering service, it commits in the public namespace,
+664400	670160	and now the chain code is defined. The definition that was approved by the two
+670160	675920	org admins have committed, and the chain code was ready to execute. At this point,
+676960	684640	typically the same user who did the commit of the definition would be the one who invokes
+684640	695600	init, and init can execute just like any other chain code invocation. The peer will track whether
+695840	699360	or not init has been called and enforce that it's the first function called,
+700640	706480	but I think as people get used to this new decentralized lifecycle,
+709840	716400	you'll realize more and more that init usually isn't necessary, and it's actually a whole lot
+716400	722480	easier and more flexible to implement init logic inside the chain code itself if needed.
+723440	731040	You know, a couple examples for this could be, first off, if you implement init inside a chain
+731040	738480	code, you can require each org to perform some action before the chain code is initialized,
+739120	747280	or if you're doing something like upgrading your key schema, you can require a series of transactions
+748080	752640	that modify your database layout before you allow normal transactions to begin,
+753360	759360	because a single transaction would be too large. And really, to implement init logic,
+760000	766240	it's really very simple. You just pick a reserved key, perform a read against that key, and see
+766240	772480	whether it says the chain code has been initialized or not. If it's not, enforce init, otherwise,
+773040	778640	allow things through as usual. And in fact, that's all fabric does for you
+779520	792000	when in your definition you require init. So, with the new lifecycle, not only
+794160	799680	are the semantics a little different, we had to pick a new name for lifecycle. Now, if you're
+802480	809280	familiar with operating a fabric v1.x network, you'll know that lifecycle operations were done
+809280	816720	through a system chain code called lscc. So, lscc is no longer the chain code used for
+816720	823120	lifecycle operations. Instead, there's a new system chain code called underscore lifecycle.
+824640	831920	And the underscore in the front is a prefix to indicate that it's a system name space,
+832720	837840	the suffix of ending chain codes in scc to indicate system name spaces was
+839760	847200	not one of the better ideas in fabric v1.x. So, underscore is now a reserve system name space,
+847200	857200	underscore lifecycle is the lifecycle system chain code. And in fabric v2, both the underscore
+857200	866080	lifecycle and the lscc chain codes exist. Both are functional. And in the event that
+866880	872080	the distributed lifecycle has been enabled, first we'll check definitions done in the new
+872080	878320	lifecycle. And if there's nothing there, we fall back to the old lifecycle. But it is important
+878320	887040	to note that eventually fabric will be removing support for the legacy lscc. So, it's a good
+887040	891920	idea to go ahead and migrate onto this new lifecycle as soon as possible because
+892880	901280	at a later fabric version, lscc will be removed. And you'll be forced to move there eventually.
+904720	910240	So, let's talk about how lifecycle works sort of from a user perspective.
+910960	918240	Let's say you have three organizations, org one, org two, and org three. And everyone wants to
+918880	927840	run chain code mycc. And we've agreed that two out of three orgs must agree that's the endorsement
+927840	936480	policy we want to go with. So, what would this look like implemented? Someone's got to take the
+937040	943360	lead. Someone has to sort of administrate the process. And for here, we've chosen org one,
+943360	948880	but it could be really any admin. And what they would do is they would package this chain code
+949920	959440	using the pure CLI into what is now just a standard tar GZ. And disseminate that package to
+959440	966080	the other orgs. Now, the other orgs, they can take a look at this package. And unlike in fabric
+966160	972640	v1.x, where the package format was sort of a fabric specific thing, a CDS file,
+974320	982080	in the v2 lifecycle, these packages are standard tar GZs. So, an admin can simply
+982080	986960	use whatever commodity tooling they would like to take a look at that package, make sure it is,
+986960	994320	in fact, the chain code that they want to install. Now, everyone goes and installs this
+994320	1003200	chain code package and commits that approval, sends that approve for my org transaction through,
+1004240	1011360	according to the parameters that we sort of agreed out of band. So, this is my cc, it's version one,
+1012320	1017840	the endorsement policy is two out of three and so forth. Once everyone's done their approval,
+1017920	1023920	and again, typically we would wait for everyone, then the administrative org one
+1024880	1028640	sends the transaction to commit the chain code definition for that channel,
+1029280	1038000	and the chain code is now operational. So, let's look at this visually. We have three peers.
+1039440	1043440	The administrators install the chain code on each of those three peers.
+1044000	1049840	They approve the chain code with all of the same parameters,
+1051920	1058080	and then they commit that chain code definition, and now the chain code is defined,
+1058800	1066000	all three peers are ready to execute it. This is the standard workflow and, you know, what you
+1066000	1072800	can expect to happen in most production fabric networks. You know, everyone is in sync, everyone
+1072880	1079200	is in agreement, everyone does the same approval, and once everyone is ready, the definition commits.
+1080160	1086560	But, you know, we don't want to require unanimous agreement for everything. So,
+1088720	1095440	here are some permutations. Let's say one of the admins doesn't install the chain code. One of
+1095440	1101840	the admins, you know, either they forget to or they simply don't want to execute this chain code.
+1102400	1109440	Well, things still proceed just fine because all three ORGs have agreed on this chain code
+1109440	1117760	definition, and that definition commits as normal, but only ORG1 and ORG2's peers
+1118480	1124640	will service invocations for that chain code because, of course, the chain code is not installed
+1124640	1130720	on ORG3's peer. Hopefully, that's unsurprising and what everyone would expect.
+1132160	1138080	Now, the second one. Now, this is sort of the crux of the difference between
+1138960	1147360	the v1.x and the decentralized lifecycle, and that's if ORG3's admin does not approve that
+1147360	1154640	definition. If ORG3's admin does nothing, well, it's still possible for the chain code to get
+1154640	1160320	defined on the channel because ORG1 and ORG2 agree, and we'll talk a little bit more about that later.
+1161840	1166960	But here, the chain code gets defined, and even though ORG3's peer has the chain code installed,
+1167680	1175440	ORG3's peer will not execute that chain code, and that's because ORG3's admin never agreed to
+1175440	1183200	this particular definition. Well, what if they did agree that they wanted to run this chain code,
+1183200	1189120	but, you know, in a slightly different way? So in this case, you know, you can see in bold here
+1190080	1197680	that for ORG3, their admin said, I want a policy of three out of three for the endorsement policy.
+1197680	1203600	All three ORGs must execute. While ORG1 and ORG2 said, no, two out of three is just fine.
+1204320	1208880	Well, in this case, even though ORG3 has said, yes, I want to run this chain code,
+1209520	1214160	because ORG3's agreement doesn't match what's actually committed in the channel,
+1214800	1219920	ORG3 will still refuse to execute the chain code. So you get the same effect as if the
+1219920	1228160	ORG3's admin had done nothing. And so finally, this is sort of the worst case.
+1229920	1237440	Communications broke down. People couldn't agree on the parameters. Here we have ORG1's
+1238000	1245520	admin picked version 1.1, ORG3 picked a policy of three out of three. We simply don't have enough
+1245520	1251760	agreement here on how this chain code should be instantiated. So in this case, the chain code
+1251760	1255920	could not be defined because we wouldn't be able to gather sufficient endorsements
+1256720	1261440	from the lifecycle chain code to actually get this definition committed.
+1261440	1269040	So I've been sort of avoiding the topic and alluding to it a little bit,
+1269920	1280560	but lifecycle is governed by endorsement policies. In the v1.x lifecycle, there were
+1280560	1289600	a few things going on. There were some sort of hard-coded validation rules in the validation
+1289600	1296400	plugin logic, or vscc, as it used to be called, that treated lifecycle invocation specially.
+1303200	1310880	The endorsement policy was also hard-coded there. In the new lifecycle, everything is
+1310880	1322400	based off of endorsement policies. In particular, to commit a definition into the lifecycle chain
+1322400	1330240	code namespace, you need to satisfy the channel application lifecycle endorsement policy.
+1331200	1337280	So this is a channel configuration policy, much like the channel readers or channel writers
+1337280	1344720	policies, but this one defaults to requiring that a majority of the application orgs
+1345920	1353440	must endorse. So what this means is in the default configuration, so long as a majority
+1353440	1360240	of the organizations in the network can agree on a change, then that change will be permitted.
+1360560	1367520	Now, note, just like we saw back here, just because the network agrees on a definition
+1368400	1375120	doesn't force an org to participate in that chain code, but what it does do is it allows
+1375120	1384560	the network to make changes even if one of the actors is not participating. And so this could be
+1385520	1395120	maybe there's an urgent security bug or other reason that the chain code needs to change,
+1395760	1401360	and one of the organizations, they can't be contacted. They're administrators on vacation,
+1402320	1408640	something like that. We basically didn't want to default to requiring unanimous agreement,
+1409600	1418480	although, of course, this is a configurable policy in the channel config. So for those users who
+1418480	1424160	don't like the default of a majority, this can be modified to be any policy that you like.
+1424720	1431120	In a more dictatorial network, you could require that a single specific org is the only org
+1431200	1440800	authorized to make life cycle changes. Now, secondly, there's another new endorsement
+1440800	1446880	policy, which is simply channel application endorsement, and this serves as the new
+1447840	1455360	default endorsement policy for chain codes when users fail to provide one. In v1.x,
+1455360	1460320	if you failed to provide an endorsement policy for your chain code, the default you got was
+1461520	1470720	any member of any org is an adequate endorsement, which makes for a very convenient development
+1470720	1478960	default. It makes it very easy to get up and going, but we saw confusion from users who maybe
+1478960	1486480	they didn't understand what an endorsement policy was, and they ended up with a default that didn't
+1486480	1491680	give them the security guarantees they were hoping for. So again, we think that this
+1492560	1498880	default of a majority of organizations must endorse, that that's a pretty reasonable default,
+1498880	1507520	but it's just a channel policy. It can be changed to whatever the specifics that a channel requires.
+1510000	1515360	Now, here's another point that sort of was deliberately omitted in the previous slides.
+1517120	1525040	We talk a lot about these sort of sequences of events that org ones admin does something,
+1525040	1533760	and org twos admin does something, and the problem we always have when we have workflows like this
+1533760	1541200	is how do we know that what org one agreed to is still valid and current?
+1542160	1545760	And so you can sort of think of a sequence number as being sort of like
+1546800	1557600	an election year or something like that, that in sequence one, we're all voting on the definition,
+1557600	1564000	on the first definition of a chain code. For sequence two, we're talking about the first
+1564000	1571440	change to that definition. For sequence three, we're talking about the change to the changed
+1571440	1580560	definition and so forth. And so what that allows us to do is we can approve a chain code and commit
+1580560	1586480	its definition at sequence one. And then while that chain code is operating, we can now begin
+1586480	1592240	approving a new definition at sequence two. And once the entire network has, you know,
+1592240	1597040	agreed to that definition, installed that chain code, so on and so forth,
+1597040	1602320	then we can sort of atomically move up to sequence two. And then you have a process
+1602320	1608560	repeats for sequence three, so on and so forth. So this is just a new concept that you need to
+1608560	1615600	be aware of that each incarnation of the chain code definition is assigned to sequence.
+1616480	1619840	And when we want to talk about this version or the next version,
+1620560	1626160	we talk relative to that sequence number. So let's go ahead and look at how this might,
+1626160	1630720	you know, actually manifest. If we go back to our three org example,
+1631840	1636800	you know, if we have org one and org two, they approve a chain code definition at sequence one.
+1637440	1643200	And because org threes administrator is on vacation, they go ahead and commit this chain
+1643200	1649200	code definition. And we end up back in that scenario where org one and org two will,
+1650320	1654480	you know, endorse invocations of that chain code, but org three will not.
+1655840	1661360	Well, org threes admin gets back from vacation, sees what the network did, says, oh, great,
+1661360	1667040	I agree. Now org three can go ahead and approve the definition at sequence one.
+1668000	1672640	And org threes peers will now begin endorsing just like org one and org twos.
+1674160	1680960	The important thing to note here is that without this sequence number, if org three simply sent
+1680960	1687680	a new approval in, it would be unclear whether org three was attempting to, you know, approve
+1688240	1692640	the current definition or whether org three wanted to, you know, maybe make some changes
+1692720	1697280	to the definition. So, and that's what we see in this next step here.
+1698640	1703760	org one, org two and org three, they want some sort of change. So they approve a new definition
+1703760	1709920	at sequence two. Once they've all approved at sequence two, we can commit. And that chain
+1709920	1714640	code definition now goes to sequence two. Of course, if you wanted to make another change to
+1714640	1719520	the chain code, you would make that change at sequence three, so on and so forth.
+1719600	1729600	Now, all of this has corresponding peer CLI commands, and they're not all listed here, in
+1729600	1737760	particular, there's a lot of query ability that you won't see here. But the big, you know, four
+1737760	1743440	you want to be aware of, there's a new packaging command, a pure life cycle chain code package.
+1744720	1749280	That will generate that tar GZ we talked about earlier. There's an install command,
+1749840	1757200	and install it to the peers, and approve command, which will, you know, approve a particular
+1758160	1764080	chain code definition for your org. Note that there is the sequence number attached to this,
+1764800	1772320	whether an it is required and so on and so forth. And then finally, a way to commit that chain code
+1772320	1784560	definition. So a few other notes and considerations. One thing that is either a feature or a,
+1787440	1792080	I won't say a bug, but a problem for operators that you may have run into
+1793200	1799120	is this notion of chain code fingerprint matching. If you've ever tried to package the same chain
+1799120	1807200	code multiple times, and install it on different peers, what you'll often find in your logs is
+1807200	1813280	this chain code fingerprint mismatch error. And essentially, this comes down to the fact that
+1813280	1819200	even if you have the same set of files, getting them to package into exactly the same set of
+1819200	1826000	bytes is a little tricky. That you have things like file timestamps, you have execute bits,
+1826000	1831040	you have different file systems that support different attributes, and so on and so forth.
+1831840	1838160	So in particular, if you tried to package a chain code with the node SDK, and then you tried to
+1838160	1844160	package that same chain code with the peer CLI, you know, you would basically end up with different
+1844160	1851040	package fingerprints. And at your execution time, you would encounter this mismatch,
+1851680	1857760	which is not something that you wanted. Your chain code would otherwise execute just fine,
+1857760	1864400	but you would have these fingerprint mismatches that prevented things from working. So
+1865440	1874160	that exists no more. That's gone, which means actually that your chain codes can even differ
+1874880	1881840	slightly from peer to peer. That if, you know, org one installs a chain code package,
+1882560	1887600	and org two installs a chain code package, those can actually be different chain codes.
+1887600	1892960	Now, they must implement the same logic. And by and large, you know, we would usually expect
+1892960	1898080	them to be the same chain code. But going back to one of our examples from earlier,
+1898720	1907840	let's say that there's a bug in the chain code that the chain code forgot to check if the third
+1907840	1914320	argument was nil before dereferencing it. So if someone sends in bad input, it can crash the
+1914320	1919760	chain code. Well, you know, this doesn't actually have any impact on the chain code read write
+1919760	1925440	set. It just causes the chain code to crash sometimes. So it would be perfectly possible
+1926400	1932560	for org one to recognize this bug, fix it and push a patched version of the chain code to their
+1932560	1938640	peers. And instantly this chain code will no longer crash on their peers on this bad input.
+1940000	1947440	Now, or two, you know, they get the email from org one saying, you know, there's this bug and
+1947440	1953200	we need to fix it. Here's my patch. They can take a look at that patch. They can evaluate it.
+1953200	1958160	In this case, it should be, you know, an obvious we'll accept it. You know, but basically,
+1959520	1965440	organizations can roll out minor fixes to the chain codes, independently of each other,
+1965440	1970880	and we no longer require that coordination. Of course, if you wanted to change the, you know,
+1970880	1978480	the DB layout or, you know, what keys functions are accessing, you know, we still have those
+1978480	1984560	same chain code execution guarantees via the endorsement policy that basically checks to make
+1984560	1990880	sure that the chain codes read exactly the same thing, the same versions and wrote the same things
+1990880	1999200	at the same versions. But, you know, slight variations in chain code logic, in particular
+1999200	2006320	around things like air checking, you know, that's something that can differ. Secondly,
+2007280	2015200	using the new life cycle, you must enable the V2 application capability before any of these
+2015200	2022800	life cycle commands will work. And this is a bit of a double-edged sword. When you flip that
+2022800	2029360	application capability on, the old life cycle, the old LSEC namespace becomes read-only.
+2030320	2037200	So, essentially, if you are using the new life cycle, you know, all of your old chain codes
+2037200	2046800	continue working until they've been redefined in the new life cycle. But, you know, basically,
+2046800	2055200	you can't change them anymore. So, if you needed to, you know, for some emergency reason, go in
+2055280	2060160	and upgrade your version of the chain code, you would need to do that in the new life cycle,
+2060160	2065040	not in the old life cycle. You know, it shouldn't be a problem operationally,
+2066560	2073760	but it's just something to be aware of, you know, make sure that you've thoroughly tested and
+2073760	2079600	you're ready to migrate your chain codes as soon as the application capability is enabled.
+2080320	2082720	You should be able to do this, essentially, without downtime,
+2083840	2090240	you know, because the old chain codes do continue to work. But, you know, once this capability is on,
+2090960	2097280	the old life cycle is no longer an option for modifications. And finally, you know, just in
+2097280	2102800	case, you know, anyone's immediate thought was, oh, let's turn off the capability to get the
+2102800	2110480	old life cycle writable again. You know, that might work. But, like all capabilities,
+2111440	2120240	once you disable or once you enable a capability, disabling it is not supported. It's simply nothing
+2120240	2130160	that's tested and things could go wrong in odd ways. So, even if it might work, this is not
+2130160	2134240	a supported configuration. And there are lots of good reasons for this.
+2135280	2140080	In particular, once you've upgraded or once you've enabled a channel capability,
+2141680	2147440	that's part of the blockchain, which means other peers need to parse this capability.
+2148480	2155760	So, there's really no going back. You know, we have an immutable ledger. And, you know, if you were
+2155760	2162160	to disable the capability, it's still enabled in that section of the blockchain. So, we really
+2162160	2174000	don't want to deal with disabling capabilities. And that's it. So, hopefully, this has been
+2174000	2182640	informative. And, you know, I'm always active out on the paper ledger rocket chat. And,
+2183520	2185360	yeah, thank you.
+2188160	2193440	Great. Thanks, Jason. And there are several questions people might be interested in.
+2194000	2200480	As you mentioned, it's currently possible to run different code for the same chain code across
+2200480	2206880	different organizations. And could you give some examples like how that could be useful,
+2206880	2215520	some use cases or scenarios? Sure. So, you know, we, you know, I touched a little bit on this that,
+2215520	2222960	you know, we now have these, for instance, org implicit collections. So, for those org implicit
+2222960	2232720	collections, the rights to them are only performed by my peers, right? I can execute a transaction
+2232720	2238960	only on my peers and write to this, this implicit collection. So, I don't really need agreement
+2238960	2245920	from other organizations. So, you know, let's go ahead and say that I wanted to implement some sort
+2245920	2255120	of, you know, a bidding chain code. When, you know, my peer gets this, this invocation,
+2255520	2263040	my peer is going to, to write the bid into its implicit collection. But it wants to validate
+2263040	2269360	this bid according to rules that make sense for my organization. So, maybe my chain code
+2270000	2277200	implements some, you know, proprietary logic, or maybe my chain code, you know, looks up,
+2277520	2284000	you know, makes an API call to a user database. Basically, something that's specific to my organization
+2286000	2292320	to decide whether or not it's going to endorse or to enforce some validation on parameters.
+2294560	2298960	So, that's, that's really where, you know, different chain codes start to make sense.
+2299680	2307040	When different orgs require different logic, specifically around rights that aren't coordinated,
+2307040	2313520	things like implicit collections. Now, you can always do sort of, you know, additional
+2313520	2320160	validation and verification, you know, you know, things that, for instance, fail endorsement,
+2321120	2329120	you know, maybe, you know, in the official chain code, it allows arbitrary bids. But,
+2329120	2335600	you know, for you, you want to add some additional air checking saying I will never endorse
+2336560	2343760	a bid for more than, you know, a hundred million dollars or whatever the limit that makes sense
+2344560	2350720	for you is. So, any sort of logic that's going to throw in air and prevent execution
+2351760	2357520	is also a fair game for sort of a difference in a chain code. The things that you want to avoid
+2358480	2367680	are things that read from the state or that write to the state that other orgs are not going to
+2367680	2373440	implement. As I mentioned, the important thing is that the chain code must produce the same reads
+2373440	2383840	and the same rights across all orgs. Okay. The third question is, do you have any
+2383840	2389360	tips or suggestions like people need to pay attention to while migrating to new life cycle?
+2394080	2401120	Sure. So, you know, the new life cycle is really meant to be, you know, very compatible with the
+2401120	2408640	old, you know, the actual instantiation process is a little different, but none of this should require
+2408720	2417040	code changes inside your chain code itself. However, you know, as I had mentioned, I would
+2417680	2425360	encourage everyone to look at their chain codes and, you know, see, is a knit actually being used
+2426080	2432880	to accomplish something useful? Could a knit be, you know, removed from your chain code?
+2433760	2441040	And if so, you know, during this chain code, life cycle migration, if you can drop the
+2441040	2447520	requirement for a knit, you will remove a step from your workflow, which is always a great thing.
+2449440	2457600	You know, otherwise, you know, I think the, you know, sort of the big shocks are really the things
+2457600	2467360	that we, you know, set out to address that you need, you need to know the peer addresses of,
+2467360	2472560	you know, or the addresses of peers and other organizations in order to do your life cycle
+2472560	2479440	operations. You know, you need to coordinate with the other administrators to perform their
+2479440	2486000	approvals. You know, so there's more coordination. There's more knowledge. But, you know, that's
+2486000	2492240	really what was required to get us to this decentralized point. So I guess if I could
+2492240	2497920	leave with a little bit of advice, you know, it would be, you know, sort of to just
+2500800	2507120	take whatever coordination existed within your network before, you know, around making decisions
+2507120	2513840	as to, you know, how and when to upgrade chain codes and sort of just, you know,
+2515840	2523840	codify that into a sort of more formal procedure that, you know, to explicitly enumerate,
+2523840	2529840	this will be the new endorsement policy. This will be the new version. This upgrade will or will not
+2529840	2539520	require init to be executed. And if you can sort of get this, you know, set of data that's required
+2539520	2550960	for this approve for my word command, sort of, you know, down and sort of, if you can get this
+2551760	2557840	into a workflow as a concrete item, then this sort of approve step, the define step,
+2558800	2561520	you know, this should all just follow up very naturally from that.
+2565360	2577520	Okay. Thank you, Jason. Thank you for the great talk. We are now open for questions from audiences.

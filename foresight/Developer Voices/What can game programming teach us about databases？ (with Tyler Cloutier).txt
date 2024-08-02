@@ -1,0 +1,684 @@
+One of the areas of computing that I'm really curious about, and I think the software world
+has a lot to learn from, is game programming. Probably not on a surface level, I've never
+worked for an e-commerce company that needed collision detection. But get below that surface,
+and a lot of modern games, especially once they go multiplayer, they're dealing with
+things like global networking issues, multi-user concurrency, competitive concurrency, massive
+data volumes, under brutal latency requirements. They have a lot of the programming issues that
+we're familiar with, but under much harsher conditions. And being a somewhat separate world,
+they tend to approach the solution from a novel angle. So this week, we're going to go digging
+for system design ideas in the gaming world. And my guest for this is Tyler Cloutier. He's got a
+background in distributed systems and data science for the gaming industry. And he's
+currently building BitCraft, which is a massive multiplayer open world game, and to support it,
+a really interesting flavor of database called SpacetimeDB, from which we're going to mine
+some ideas about concurrency, transactions, data security, query management, lots more. A lot of
+juicy ideas solved from an angle that I'd never considered. So let's get going. I'm your host
+Chris Jenkins. This is Developer Voices. And today's voice is Tyler Cloutier.
+My guest this week is Tyler Cloutier. How you doing, Tyler?
+I'm doing well. How are you?
+I'm very well. You're going to take me to a new world for me, because I have a long history in
+programming, but one thing I've never done is computer game programming. And along with that,
+the one thing I've always wondered is they must have a lot of the same problems that the rest
+of us industrial programmers have, not like the dealing with graphics and story and stuff,
+but then there are data problems everywhere, right?
+That's right. Actually, I would say what I have experience is that they have the normal problems
+that everybody else has, but times 100, because not only do they have to build the thing,
+but it has to interact with all of the data in the program besides just sort of individual parts.
+And then it has to go really, really fast.
+Yeah. Yeah. All our problems except at 60 times a second.
+That's right. Yeah. So your background is originally in game design or data science
+for games or what's your origin story? My original background is actually in chemical and
+biomolecular engineering, which is completely unrelated to games. And then I did my master's
+in computer science focusing on distributed systems and machine learning. After that, I did
+some time at Bloomberg and then Apple and then a company called Machine Zone, which is a game
+development company. Right. And what did you do for them? So there I worked in their data science
+and engineering department as a data science engineer. And there we were building two things.
+One, pipelines for data. So making sure that we got the real live data as quickly as possible
+into a form that we could then feed into our models. So then the second part of what I did is
+also build those models, which predicted various things about how players are likely to behave.
+So like, how likely is this player to turn? How likely is this player to spend money? Will
+they give us a good review? That kind of thing. This is a pay to play game. This is a free to
+play game, actually, that is quite expensive. Ultimately. Because it's the business model
+where like most players don't pay anything, but some pay for like cosmetics upgrades,
+that kind of thing. And they spend a lot. No, no, it's much worse than that. So it's a mobile game.
+And it's the whole idea of the game is it's supposed to simulate what it feels like to be a king.
+And so what that ends up being is that you have this little city, it's called the forex game,
+which is for the four different types of play that you're going to do. And
+you build the city up, you upgrade your buildings. And then you can start sending marches out to
+attack other players. And ultimately, you want to capture a what's called a wonder,
+which will give you make you the king of the kingdom. And the process of capturing that wonder
+is quite an expensive endeavor. So the way it works is that they sell you speed ups. So upgrades
+take time, you can speed things up by paying for it. And some people pay quite a lot. There were
+individuals who spent upwards of several million dollars in that game.
+Several million. You heard that correct. If I did not see it myself, I would not have believed it.
+Gee, I can't, I struggle to compute why someone would do that and how they can be rich enough
+that that's their disposable income. There were Saudi princes, there were people of that kind.
+I mean, it was a global game. And so it attracted a lot of people who were interested in
+simulating what it felt like to be a king. There was one person who was rumored to have hired
+at least one person or a team of people to actually purchase and open the packs because
+it's actually mechanically a lot of work to open a $1 million worth of $100 packs,
+right? That's 10,000. That's 10,000 packs. So there's that. There was another person
+who used to fly his entire alliance out to Las Vegas to be closer to the servers
+so that they could do the Super Wonder event more effectively.
+That's, I mean, A, that's really weird, but B, is it that much weirder than traders putting
+their computers right by their main exchange? I don't know.
+I don't, I suppose not. I mean, these people really cared about the game. I asked players,
+why are you so interested in this game? And I remember one told me, I'm a security guard at
+a place or something to that effect. And I just sat there all day and I downloaded this just to
+pass the time. But over time, I found that I had like real actual friends in this game. And
+when I would log on, they'd say, oh my God, this person's here. And he felt like somebody,
+whereas in real life, he did not really feel like someone. And that, that was important to him.
+Okay, I can see that. But, okay, so curious game mechanics, but that's not why I want to talk to
+you. The thing that's, the reason I get into that is because you're there clearly in a
+background where there's serious amounts of data coming in live and serious money to be made in
+understanding the flow of that data. Certainly. Yep. Tell me about that and how it led into
+what you did next. Sure. So now this is an interesting story because it's sort of
+obliquely leads into what we actually ended up building. Because certainly my time at
+Machine Zone inspired it. But it's not the way I would explain exactly what we're doing. But
+let me tell you, I suppose the origin story. So while I was at Machine Zone, always we wanted
+historical data. So we wanted to know not only this is the current power of this individual,
+or this is the current set of items that they have. But what is the full history of what they
+have? So we can predict, for example, hey, look, this person was attacked, they got zeroed out,
+and now they left the game, and they're not likely to come back. We always wanted to know
+that data. And Machine Zone didn't have that data because the traditional infrastructure of companies
+is to have their game data or their really website data in normal relational databases, like in this
+case, I believe it was MySQL. Right. And the problem is, when you update someone's power in those
+databases, the old power goes away. So you need to have some kind of a way to actually get that
+historical data. And what they started to do was they were snapshotting their databases every 12
+hours. And we would then get that snapshot data, and we'd try to piece together a historical data.
+But that was very sad for two reasons. The first reason is that the data itself was awful, because
+a lot can happen in 12 hours, that could cause you to leave the game, right? So you don't really
+have that information. And I should also say there was another stream of data, which was just event
+data. But it was very loosey-goosey event data that was sort of whatever people had slapped together.
+Right. So you tried to build up a picture of what had happened historically from these two sources.
+And the other reason the snapshotting data was bad was that it was enormous, because if you think
+about it, 99% of the data in a database does not change in 12 hours. If 99% of your players have
+turned, you're just copying this old data every 12 hours. And so eventually, they had to pert to
+the old data, so they couldn't keep it forever. And they spent millions of dollars trying to
+clean up this data and get it into a form. We built a system which was based on the Lambda
+architecture. And if you're not familiar with how the Lambda architecture works, you essentially
+set up a streaming part of your data pipeline, and you set up a sort of a batch part of your data
+pipeline, and you try to weave those two together. So you might put all of your big, well-formed data
+in Hive, which is a write, append-only database made by Facebook for large data, and then you would
+have something like Flink or Apache Spark taking your real-time data and trying to make decision
+space in that and bringing it in with your batch process data as well. There's a huge amount of
+work. And I would say 95% of the data science was actually just getting the data into the
+right form in the right place at the right time. That's a very familiar statement that spans way
+past gaming, right? Absolutely. So when we began to build our own game, I decided I'm not going to
+have it. We're going to have the full history of the data. So I want to be able to go back to
+any point in time and actually see what the game state was. But more than that, I want to actually
+be able to replay it at that time so that you could hop into the game at that time and actually
+see it being replayed. On that level of granularity. Right. So you're not just storing events, but
+player thumbstick movements and stuff. Correct. And actually, I saw on an earlier podcast that
+you had, I think it was maybe two weeks ago, you were talking about event streaming. And the guest
+there said at the end, this doesn't always work for everything. It doesn't work, for example,
+for games. And I thought, aha, how wrong you are. In fact, this is exactly what we're doing.
+So event sourcing is essentially what Space SoundDB does.
+Okay. That's colossal amounts of data, very widely distributed user base,
+high response times required, because you've got to deal with things 60 frames a second ideally.
+That's a big challenge. How do you start to break that down into something? What's your approach?
+I think the best place to start is to first understand what the game is that we're trying to
+build. And then from that, you can see why Space SoundDB is a necessary requirement. So we have
+two products. We have a game called BigCraft Online, which is a massively multiplayer online
+role playing game. You can sort of think of it as like a combination between RuneScape,
+if you're familiar with that, and Minecraft. So there's this very long term
+skilling and progression in the game. But at the same time, you can actually change and edit the
+world and build your own things within the world. That's the game that we set out to build. And in
+order to do that, notably, the first thing you think is, well, we need to put everybody in a
+single world logically, because you can't have people occupying the same space in the way that
+you could in a normal MMORPG, because they actually are editing the world. So if I was a normal MMORPG,
+I'd put many, many instances all in the same city, right? It doesn't matter. In our game,
+it certainly does, because you actually need to do that. So now you have a very interesting
+distributed systems challenge on your hands. Yeah, you've got a large global mutatable state.
+Correct. And it has to be persistent. So if your servers crash, people want to have their
+buildings that they spent their time building and stuff like that. Yeah. So that's the first thing
+you have to understand about how we came at this problem. And so in order to do that, we realized,
+okay, well, we need a system which is built around the persistence, right? Because
+if we're going to be making these permanent changes to the world, and it is everywhere, either we're
+going to be doing the normal architecture of games, which I'll take a brief aside to explain. So the
+normal architecture is you'd have a game server, you'd have your databases, the game server itself,
+unlike a web server, would have quite a bit of state, right? And you at periodic times,
+at periodic times, or when people did important events, would write to the database with a
+transaction. And then you get that back. But you as the developer are doing a lot of work to
+maintain, I suppose, synchronicity between your database and your game server state.
+Because for example, if I kill an enemy, there's a lot of things you can do that make things
+pretty crazy. But if I kill an enemy, that enemy is probably not, their position is probably not
+stored in the database, but they that there was an enemy might be, or that you picked up items
+probably is because if Susie enters your inventory, you don't want to lose that. Or you could do it
+periodically, and then they could do replays and stuff. What you end up getting to is a place where
+you're spending a lot of your time as the game developer, not thinking about the actual gameplay
+programming, and rather thinking about the distributed system environment in which you're
+actually building this game. Yeah, I can believe that. So what we decided to do is say, we are going
+to make that all, I suppose, opaque to the game developer, and we're going to put them in a context
+where they're operating inside a transaction already. That transaction is going to be manipulating
+in memory data. And then we are going to do all of the necessary things to persist that data to
+disk so that the gameplay programmer does not have to think about that at all. What's that look
+like for the programmer? They just, they're treating their local client side instances,
+though it's a relational database. Is this what you say? That is one consequence. But the main
+point of what I'm saying is that on the server, all things inside of BitCraft happen
+within a database. So let me explain just a little bit about how SpacetimeDB works and what it is
+actually. So we built this game and we wanted to do this in this way. So we built a system called
+SpacetimeDB, which is fundamentally a database. So it's very focused on persistence. The way it
+works is you take BitCraft, you compile it to a WebAssembly module, you upload that into the
+database, and then clients connect directly to the database. And now I hear a lot of people
+in the audience screaming, oh, you can't do that. You couldn't do that. And it maybe was a bad idea
+for databases like Postgres and so forth. But we have built a permissions model around SpacetimeDB
+that allows you to do that safely. And so the way that works is you, as a client, call what we
+call reducers on the database. They're very similar to store procedures. And then those store procedures
+which are written in whatever language you want that compiles the WebAssembly will access things
+from the database and write them back to the database. So just as an example, let's say we had
+player move. And notably, everything in BitCraft, including all the player movement,
+all the chat, all the trees, all the ground, everything is stored within the database.
+So if we want to move a player, what we do is we call a reducer called move player
+on the server that updates some rows in the database and then commits those rows. And that's it.
+Then clients, other clients will subscribe to the database state. So they'll say, I want to select
+star from player position, where they are near me, basically, would be what that word clause would
+say. And then all connected clients that have subscribed to that, when that player moves,
+we'll hear about those rows and their updates, and then automatically update it in the database.
+I'm sorry, on their local client. So hang on, where is the database? The database is on a server
+stored. In this case, I believe in New York. Okay, so how on earth does that possibly work
+when I'm moving and expecting things to update 60 times a second? So, okay, this is the first thing
+that's interesting about games. You would not have a tick rate on the server that's 60 times per
+second, unless you were making a game like Counter Strike. So typically, I'll give you sort of a
+range. Minecraft updates 20 times per second. So every 50 milliseconds. RuneScape updates,
+I believe, four times a second. So every quarter of a second. So there's a variety of different
+levels that you can do. Generally speaking, the larger your game is, obviously, the fewer updates
+per second you want to be doing, because there's so many entities to move within a timeframe.
+Yeah, but I mean, I'm in London. I'm not sure I can guarantee four frames a second in New York
+and back. I see. So I understand your question now. With any game like this, you do not wait for
+the round trip. So how long would the round trip be from New York to London? I actually happen to
+know it's about 80 milliseconds or 70 milliseconds, something like that. So it's actually not crazy.
+You can play it without what's called client side prediction. But the typical way
+that you would actually do this is you'd run client side prediction. What does that mean?
+That means that I as a client have some subset of the server state. And when a player, my player,
+decides to do something, I can predict what the server is going to do to my local state,
+assuming that it will work. So based on the state of the world as I know it,
+if I try to move, I should be able to update my local state, assuming the server will agree with
+me. And so I will do that. And then I will immediately see the results of that on my own
+local client. But I will send something to the server. Now, if the server agrees, we basically
+come back, we reconcile, no problem. If the server disagrees, let's say somebody exploded a bomb
+that your client hadn't heard about yet, right on top of you. And the thing you try to do is
+invalidated by that. Maybe you're dead now. What will happen is you will have sent a request to
+the server that says, I want to move. The server interjects and says, actually, you died.
+What will happen is your client will say, oh, I understand, it will roll back to the point at
+which you were going to move. And it will then play forward the updates as they actually happen
+from the server and then try to replay your move. So it would go originally before you heard about
+from the server, it would go, you're standing here, you move, you actually move. Then what happens
+is you hear about the bomb, you roll back to the point at which you were about to move,
+you then blow up because of the bomb. And then you find out, then at that point, you try to move,
+but you can't move because you're dead. Right. And that's how that reconciles.
+This sounds very like transaction on the client side.
+Yes, it does.
+So is there a database on the client side?
+Well, I believe basically everything is a database. I have more I could talk about that,
+but essentially, yes, although typically people don't think of it that way. So typically the way
+that people think about it, first of all, in games is with a tick. So on the client, you would have
+a frame, essentially, that happens, they would call it like a server frame if it's not the
+actual render frame. So the render frame always happens at 60 frames per second, or sometimes
+now like 120 or 144 or whatever your monitor actually has. A server frame typically doesn't
+go beyond 60 frames per second. And it assumes there's a loop. And basically, we're going to
+update all the state once a frame. Space IDB actually doesn't make that assumption. You can
+do that with Space IDB, but it's not a requirement. So I'll just say that. And there's latency
+versus throughput trade-offs with that. That's essentially what that will end up with.
+Because if you have something ticking 60 frames a second, the minimum latency that you can have
+is one 60th of one second. Because you could have the wrong time. You could have tried to do
+something just as the frame was starting. And now you have to wait the full frame time
+before you actually that effect is applied. So now, yes, is the client a database?
+What is happening on the client is there's really two ways of doing it. And so I want to be careful.
+In the one way of doing it, the client has a deterministic simulation of the game world.
+So that means that all of the inputs that are going to manipulate the game state are being sent
+to the server and replicated out to the clients. Those clients then receive that input. And then
+they run the game forward a little bit, like one frame. And they will find out what actually
+has changed in the game state and they move their state forward. That requires having total
+knowledge of all of the state. Because if you don't have total knowledge, you're
+non-deterministic because you no longer know what you don't know. You don't know that that bomb
+might come in from outside and actually...
+Yeah, if you want total knowledge, you have to have the entire world so you can see events
+that might be coming over the horizon.
+Yes, this type of server synchronization really only happens with match-based games.
+So games with a sort of small state, so like League of Legends, that kind of thing.
+Or like RTSs, which is another match-based game, where the inputs are quite simple,
+but the outputs are quite complex. So you might click here to move a group of guys,
+but 500 guys might move. And so that's actually a lot of data to say where all the positions of
+them are, but you don't have to do that. You just have to replicate. I clicked here, or this player
+clicked here, and thus when I play my deterministic simulation forward, all the guys will move within
+my simulation. I don't have to communicate that data over the network.
+Okay, yeah, I can see that. So that's one way to do it. For MMOs, part of the reason they're so
+difficult is you can't do that, because I cannot possibly have the total state of the world
+on my client. It's too big, sort of fundamentally, by design. I can't put the whole world of
+Warcraft and all its players on every single machine. Correct, alas, you cannot. So instead,
+what they do is typically the way this would work is you have your game server. That game server
+knows what a game client is, and when they connect, they know where the player is, and they have a
+bunch of special logic to say, okay, I know what this player is, I know what they need, I'm going
+to send down that data to the client. And then I'm going to send down that data to the client
+let's say once a frame. So every frame, I will compute, okay, what has changed on the server,
+and I'm going to send a bunch of messages down saying these are the new positions of all the
+players. That's the typical way of doing it. Now, notably, this means that you have baked in
+what your client wants to know about into your server code. Because you as the server need to
+know what they need to know, because you're going to do this streaming update to them. Yeah,
+so it's more complex than first, for example, let's say a web site with a GraphQL query,
+because with a GraphQL query, you can say, Oh, I'm this client of client, and I want to know
+all about this data. And I'm this kind of client, I want to know about this data. But because games
+are streaming, and they need to go fast, and they have this tick based thing built into it.
+Historically, people have built them so that you write all the code for synchronizing the
+clients, and you build in some concepts, like you probably build in the concept of positions
+and of players, and that players want to know about things that are around them,
+and all of that good stuff. So if you were to then go build an AI that doesn't care about
+where certain players are, maybe it's trying to regrow the trees or something.
+And it wants to listen to the data. No can do. You've already built in the particular query
+that wants to be done on that game server state. Right. So we're inverting the controls. So the
+server knows what kind of things you would want and pushes those to you.
+Correct. So that really bakes in the server then has to have very fixed ideas about what
+kind of people connect and what they might want to do. Absolutely. Correct.
+What space time to be does is the opposite. We actually treat it sort of from a formal database
+perspective and say, actually, clients are just going to write queries, which are going to be
+executed with a query engine in a subscription based streaming way. So first, we connect,
+and we send a query, and we say, I want to listen to all of these players in this
+region or whatever we are interested in. And then that data will be incrementally streamed
+down. So as the data changes in the database, we compute that query for all the subscribe things
+and we send it down to their clients. Then you can think of their clients as having a replica
+of the server database. Now that replica is a subset of the data, and it is only prefix
+consistent. So it's not strongly consistent. Would you mean by prefix consistent?
+You have the database state as it existed at some point in time in the past. So you have all of the
+updates in a prefix of the message log, of the write ahead log, up to a certain point. That's
+what I mean. Now it's a subset. So it's not, I have the whole database, I have some set of the
+data as it was in time. So it's not eventually consistent. I don't see any weird things about
+it. I will see the database state as it was maybe like five milliseconds ago, or if I'm far away
+a hundred milliseconds ago. Right, yeah. And so what that allows us to do is then you can query
+your local database as though it were the actual database. And so you can get this information
+out from your local database much more conveniently and faster than you might otherwise do in a
+normal game server. You'll forgive me being really boring here, but I'm translating this
+into a non gaming world. And I can see I can imagine I as a as a client of the second client
+of a bank or trading platform, I might want to have all the data relating to my accounts and
+maybe some of my counterparties, but not the entire bank's data. And then I want to be able to
+optimistically make transactions on that data. They get sent back to the central server and I get
+told if that works, but I can progress as though it did. Yes. And that would be exactly the same
+architecture we're talking about in the gaming world. 100%. Yes. So what we are in sense, sense
+trying to do is unify across both of those things. A lot of people in why, why is that important?
+Because many people have tried to make a game service, game server back end kind of thing,
+like a game engine, but for the server, right? So there's unity, you've got Unreal. Wouldn't it
+be nice if somebody made that for the back end? The problem that people have is that
+when you think about what a game is on the client, it's the same across all games. If I'm playing
+chess or solitaire, what I want to do on the client is very similar to what I want to do in
+World of Warcraft. Let's say I'm making a 3D solitaire. I am rendering objects on a screen
+and I have all of that stuff. It's all kind of the same across both games. I want to render a 3D
+world. I want to loop that, apply some logic to the state of that world. And then I want to,
+yes, and I want to turn it into 3D objects and I want to project them onto a screen and I want
+to do lighting effects and I want to do sound effects and I want to do all of that. Every game
+from the client perspective is not identical, but they rhyme. They have a lie in common that
+an engine could do that we don't have to write over and over and over again, essentially. On the
+server, if you think about what chess versus World of Warcraft is, those architectures are,
+they share nothing. They might as well, one is like a web app kind of, right? Like a chess move.
+I could build that with a web server and Node.js and all that. And the other one is a very complex
+multi-user, fast-changing state thing, which synchronizes data persistently to the database
+and updates positions and all of that. So what we're trying to do in some sense with SpacetimeDB
+is close over all of those things and you really have to go all the way back to the database
+for it to be general enough to actually apply to both of those scenarios.
+Yeah. Okay. I can see that. It sounds like a colossal amount of work to do well, though.
+It does. Nobody knows this better than I do. Let me put it to you this way, though, with respect to
+that. When we decided we were going to make BitCraft, we were committed to making such a system.
+The fact that it's available as its own standalone thing is not really that much more work.
+Every MMO that you have ever seen has an architecture which is at least as complicated
+as SpacetimeDB. And I actually know that some of them, I can't necessarily name them,
+operate in the same sort of stored procedure way because it's the sort of convergent evolution
+that they arrived at, but they just didn't formally call it a database. In some sense,
+an easier problem because if you treat it as a database formally, you get to use all of the
+research and learnings that 50 years of database research has brought about. You do not have to
+reinvent the wheel, is what I'm saying on a lot of these things. And so we were always
+destined to create a system that's like this. As soon as we decided we wanted to actually create
+this kind of thing. Ours is arguably just not sort of shoestring and duct tape, not to
+disparage anyone else. It's very hard to build an MMORPG, but that's kind of how I would think
+about it. Let's say rather than that, it's not an afterthought. Not an afterthought,
+yes, correct. Okay, so what we've got here is a system where I as the game programmer,
+updating a row in a date, someone moves the joystick up, I update the Y position
+of their player's row in a database. Correct. Magic Clitty, that's going to be synchronized
+to the server without me worrying about it. And roll back if it turned out it didn't work.
+And then I just have a rendering function that's also looking at my local database
+and drawing it to the screen. That is correct, yes, that's essentially correct.
+Okay, let's start with the first objection. That's going to be too slow, even
+even if you don't have to do the server round trip every time.
+So let me ask a follow up question to your question. What specifically would be too slow?
+Because what I want to ascertain is exactly what you're talking about. There is a perception
+that databases are slow, and perhaps that's what you're driving at.
+I think because, okay, it's got to be transactional. It's probably iterate. Once you get into things
+like, oh, my bullet's flying across the screen and hitting people, it's updating a considerable
+amount of data. And collision detection, it's got to happen a lot of times a second. I won't
+give you the number, you can give it to me. But that feels like that's going to grind on a
+transactional database. Okay, so this is a great question. And I understand where you're coming
+from. And we had to be a little bit crazy to think that this was a thing that should be done
+originally. But for several reasons, which I'm about to outline, I think you will come to agree
+that actually that's completely possible and plausible to do within a database context.
+So the first thing I will draw your attention to is that we're not, by no means the first,
+to do things like this in history. There is a database called times 10,
+which was developed in the 90s. Oh, that was bought out by Oracle, wasn't it?
+It was bought out by Oracle, correct. And it actually has a very similar architecture to
+SpacetimeDB. So a couple of things. One, it's fully in memory. So the whole purpose of that
+database was that for certain very high throughput, low latency applications,
+current databases weren't hacking it, not even that currently server architectures weren't
+hacking it. So what they decided to do is to have a database, have in memory state in that
+database, put the logic of your program, physically within the same process as that database, and
+then have you access the data within the same process. So you're literally reaching into your
+current program memory, you're treating your program memory as though it were a database.
+And then what they do is all the updates to that data, they append in an append-only fashion
+to a write-ahead log. And this was developed for telecom processing, like routing calls,
+these kinds of very, very low latency high throughput things. That's the almost identical
+architecture actually to how SpacetimeDB operates. We have just modernized it for
+use with WebAssembly and whatever language you would like, and some nice things on top of that,
+including subscribing to the database, which I don't believe TimeSend actually provides that
+information. Okay, but that write-ahead log that we've got into persistence, which you said is
+important, isn't that a blocker to the performance? Not typically. So first thing I would say is that
+appending to a write-ahead log is actually quite performant on modern hardware. So that's actually
+how Kafka works, and it's how it's assumed to work. And Kafka is known as sort of a low latency
+streaming thing. It's not that low latency because of details, but it's relative to what a lot of
+people use, very low latency. The other thing that's important to know about Kafka and systems like
+that is that you can trade off throughput for latency. So in the case of Kafka, you can batch
+more things up, which will cause the latency to increase, but will cause the throughput to go
+up. You can always say, I care about latency more than I care about throughput. So I will
+decrease it down to just one transaction. So that would make sense for I want a really high,
+fast-paced game where I really want the lowest possible latency, or I don't really care if things
+come in late. So that's one thing. The next thing I would say is that for games, or really any
+application, choosing the level of durability that you want should be configuration and not code.
+So what I mean by that is I ought to be able to decide that I want to listen to data that might
+not be persisted to disk, because I don't actually care about that. For a player movement, if my
+server crashes and they move back 10 feet, don't really care about that. If I'm running a bank
+transaction and it rolls back the last 10 seconds or whatever of bank transactions, it could be a
+problem, because they might have already given away the item that the guy bought, right?
+Okay, yeah, yeah. So when you say that's configuration, are you configuring it on a
+per object type basis? So could I make some match levels of persistence, you guaranteed?
+You actually configure it on a subscriber basis. So you would say, hey, I'm going to subscribe to
+this data. And for this particular subscription, I want to see the data as soon as it updates.
+I don't care if it's ready. Like, I want to hear about, so there's sort of levels at which you
+can listen in. So there's a pipeline of data that comes in. My message happens, I update the data,
+that changes the stuff in memory, I write it to disk, I replicate it to other machines,
+all of this. And at any point in time, you can decide, like, you know what, it's good enough,
+I want to listen in here, right? So I want to listen in after it's been updated memory versus
+I want to listen after it's been persisted disk versus I want to listen only when it's been replicated
+to five machines. That's a sort of a different level of listening, if that makes sense.
+I'm jumping around trying to get my handle or my hands all over. But, okay, so how does that
+work programming? I let's say the score, player score, is gradually ticking up. It's not the
+end of the world if it maybe rolls back a little bit. Am I writing some code that just subscribes
+to the score changing and just renders that corner of the screen? You certainly could do that.
+Typically, what a client will do is they'll subscribe to all the data that they want right
+up front. So they'll say, like, let's say it's a chess match, you'll say, I want to subscribe to
+all the peace positions. Or I want to subscribe to, it depends on how you program that match,
+but let's say you're going to do it in a certain way. I'm going to listen to all the peace positions
+and I want to subscribe to the score. You don't actually, a lot of cases, you can actually
+compute the score on the client based on the state of the game. But let's say you can't,
+for some reason, in this game, you would subscribe to the score as well. And then that will be
+updated in a row and you'll just say from score table, subscribe, select off star from essentially.
+Am I doing like a, am I joining those datasets? So select all from pieces, union, select all from
+score? Yeah. So in this case, you're going to basically select a subset of each server table.
+We do not yet support subscription joins. We do actually. So we support what's called a
+semi-join. So you may filter out rows from a table based on a join from another table. So for
+example, I might want to subscribe to all players who's, who are friends with this other person.
+So I would write a join and I could, but I would always get the whole player row.
+And I'm not going to get any like player plus others data. If you want to do that,
+you would subscribe to the other table as well. And then we union all of those together and send
+them down. Okay. And are we writing this query in SQL? SQL. Currently. We, there's no reason we
+can't also support other query languages like GraphQL in the future. It's just for right now,
+for building an MMO or RPG, we need SQL. Okay. So as a game programmer, I'm writing,
+like you say, very much like stored procedures that have a mixture of SQL and coding. And like,
+what's the language? So the language is the module that you're writing is a WebAssembly module.
+So it's any language that you want that compiles to WebAssembly. Notably, we support Rust and Csharp
+in terms of building a library of nice things for you to use in those languages.
+In principle, anybody else could do whatever language they want that compiles to WebAssembly.
+But yeah, those are the two that we support right now. Okay.
+I risk framing this all as objections, but I'm trying to think...
+Sure. No, no, please. There is an objectionable idea that happens to work. And so it's quite
+exciting. Okay. So the other thing that people always complain about with stored procedures,
+I mean, a lot of people dislike stored procedures. And I think the reason is,
+I think there's two reasons. One is the language can be weird for stored procedures. Personally,
+I reject that one. If it's valuable enough, you'll learn the language. The real one is
+management of stored procedures is a misery. Correct. Yes, it is. And I think these are the...
+So I would actually go a little bit further too. The permissions model of stored procedures
+at times can be arcane as well. So I believe it's really, to your point, fundamentally a user
+experience problem, not a theoretical or technological problem, if that makes sense.
+Yeah. It's like developer experience rather than this simply doesn't work.
+Yes. I mean, why... If you actually think about stored procedures as they were,
+it's a nightmare. You have data that's in your database operating that's opaque because somebody
+updated it, but you don't... It's not in version control. You don't have any idea like,
+what was running? Did somebody change it? It's like, where is it stored? It's just a nightmare.
+It's a great point. What I will say to this is actually, we didn't set out to build the database
+in stored procedures. What actually happened is we built a system that had the right UX for what
+we wanted our developers to have and then looked at it and said like, oh, from this angle, actually,
+this is just a database with stored procedures. So it was very much a... We backed into it,
+we didn't arrive there. So that's number one. Developer experience is the most important aspect
+of space time DB. And if it is bad, there's no point to doing it. That was why we created it in the
+first place. The way we solve these problems are, number one is we put all of the stored procedures
+as the root of your database. It is all in a single module that's based from a single repo,
+in this case, that you can version in version control and then you can see the versions of it.
+The thing I would liken it to, from a developer experience perspective, and now I'm going to
+say something that will maybe trigger a lot of people, but it's similar in principle to smart
+contracts. So from there, you... Nobody thinks the developer experience of those is bad, except
+the fact that they have to deal with the blockchain. But ultimately... And the programming language
+can be pretty terrible. And the programming language can be pretty terrible. But fortunately,
+we've solved both of those problems by removing the blockchain and making it so you can use whatever
+programming language you'd like. But it's the same idea, right? You do not need a DevOps team
+to maintain or an operations team or any of that or AWS credit or any of that to run your
+smart contract. What you do is you say publish, you set it, you forget it, you walk away. You
+don't have to deal with that ever again. It's running, someone's running it for you. You really
+truly don't care. And that is the promise of the developer experience that I think we can provide
+with store procedures. And it's very easy in the case of smart contracts to keep them in sync.
+Normally, actually, in a lot of systems, you can't update your smart contracts. So that's one thing.
+But in our case, you can update a space-time-due module. And it comes from a database, and you
+can see the version that was up there. And the version is stored in the log. So
+the fact that you're updating your whole database and you can do migrations within your
+module, and you're doing the whole module at a time, vastly, vastly improves it. Then you have
+the language that you want to work within, which is a normal programming language.
+And then on top of that, we have built a permissions model that allows you to
+have complex logic, which is easy to understand by the developer, if that makes sense.
+Let's go through the permissions thing. For instance, if I've got access to subscribing
+to data from the server, I wouldn't. Hypothetical black hat me would very much like to use it to
+cheat on the game. By subscribing to other people's data.
+Okay. So first thing I'll note, all games of the first type that I described, where they have a
+deterministic client and they're replicating inputs, must know about all data in those games.
+So League of Legends, you can cheat. In fact, they're doing like a kernel extension to prevent
+people from cheating. But beside the point, they require you to see all data. So if you see Fog
+of War in an RTS, you could get data, everything under that Fog of War is there. You could remove
+the Fog of War on your client and see all of the units. So sad times. So first of all, they're
+just right out. They don't provide that to you at all. In our case, what you can do is
+there's two types of permissions. There's sort of write permissions and then there's read permissions.
+So if you want to update the database, clients are only allowed to update the database through
+the module. And so what that will be is like, let's say I wanted to move a player, but I try to
+move a player in a way that's illegal. Like I'm trying to go into this level, this place where
+I need to be level 56 and I'm only level 50. What the server will do is it will check the
+level of the player because you're just writing the logic and you'll just fail the transaction.
+So you'll just say, no, you can't do that. We roll everything back and we throw it away.
+All right, so that's the first thing. The way that works is each client has an identifier,
+which is called the identity, makes sense. It's kind of like an Ethereum address,
+if you want to liken it to something in that regard, you can see who the person is.
+And then you can say, you do all the procedural checks you want in the whole world.
+Is this player friends with that or do they know each other, whatever it is,
+and then fail the transaction if it's not allowed? So that's the right. So right is super simple,
+very, very easy to do. From a read perspective, there's a couple layers that you can do. So first
+of all, what we implement today is private tables. So that's just, hey, this table is only
+viewable by the owner of the module. So based with the database creator.
+And we would like to add, so we have not yet added because it's not yet 1.0,
+both column permissions and then column read permissions and then row level security. So
+what that means is you should be able to write a function inside of your module that says,
+well, in the case of column, you're just going to annotate columns as being private, right?
+And that's that's pretty sure for for row level security. That means like, can this person see
+this row? So if they subscribe to these players, maybe this player is invisible, and I shouldn't
+be able to see them right now. Right. So you want to be able to write a filter function
+on a table. So a filter function that applies to a table that allows you to do arbitrary
+procedural logic that basically says whether or not this player should be or this row in this table
+should be visible to this subscriber. So if I had like a hypothetical card game of some kind,
+where I have cards that only I can see, cards that all my teammates can see, and cards that
+the opponent can also see, would I be able to model that? You certainly would. So you'd be able,
+what you'd do is you'd say, let's say you just have one table called cards and you'd write
+a function that says, this is the subscriber, which is like this is the identity of the subscriber.
+Do you want to show this row or these batch of rows or however we end up
+ultimately implementing it for performance reasons? And you would look through the row and you would
+say, ah, is this who is the owner of this card? I am the owner of this card. I can see it. Oh,
+I'm not the owner of this card. Is the owner of this card my teammate? Okay, I can see it.
+I am, you know, and so forth and whatever conflicts logic you want.
+Okay. And I'm writing those functions in the same language?
+In, yes, in Rust or whatever language. Okay. So the language to define security roles is
+the general purpose language. The general purpose language. And it's a procedural language,
+not going very fancy. Obviously, you can do what, for example, SuperBase does, which is they have
+you write those row level security rules in SQL. So we may also support that. I'm not sure right
+now, but boy, it is a lot easier to write Rust than some arcane SQL query about row level security.
+I'll tell you that. Okay. Right. Where does that leave us? So
+is my experience programming the server side similar to my experience program in the client
+side? Okay, this is a fantastic question.
+Let me tell you where we are today. And the vision for where we want to be with SpaceMDB.
+So where we are today is you write your server module that runs on the server. It's written in,
+let's say, Rust. You write your client. We have a Rust SDK. And what that does is
+gives you a bunch of functions that you can use like subscribe function where you can pass in
+all your SQL queries, and then you can get all the data back. The Rust SDK currently stores that
+data internally. So it has this like data, little mini database, if you will, like a little mini
+memory, and you can query that data. The querying of that data is relatively rudimentary. It's based
+on code generation that we do. So your module has a bunch of types, right? And a bunch of
+schemas and all that stuff. You can take a module, and then you can extract the schema from that
+module, and then you can code generate whatever type of clients you want. So for example,
+you can call a particular function from the client. You can get the type, so if you have a
+Rust module and a C sharp client, as we do, you can get that C sharp equivalent type to the Rust
+type on your client, if that makes sense. Okay. Which is important because that's another thing
+with with store procedures is that like, oh, the type, like you hopefully the types work because
+it's like dynamic, who knows, it's just crazy the way they do things. Or you have to sort of like
+apply a type and you have to maintain the types. We are code generating a lot of it's like protobuf,
+right? So you, you have your schema, we scoop that out of your module. It's like a protobuf
+representation of your schema, you can then code generate on whatever client you want,
+whatever types you need. So TypeScript, we support for right now TypeScript, Python,
+Rust and C sharp for clients. Okay. Yeah, but when I call those functions, they're still going to the
+local space time to be client instance. Okay. So they do and then they, they get sent out to the
+server. We don't automatically do client side prediction right now. That is something that
+for example, in bitcraft, we have to replicate the, the logic of so if you move a player, you have
+to move them fit like yourself is to rewrite the logic and C sharp and then you have to write the
+logic in Rust. That's typically how a lot of people do this, these things and it is a huge pain.
+They duplicate the logic and they have to do this thing and it's a huge pain. Yeah.
+Some more clever people, actually, I know of some that are developing
+an RTS use web assembly and they run the server both on the client and the server
+and they do that. And so that's ultimately where we'd like to go with this. So ultimately,
+we want to run space and to be not only in the server, but also in the client and have them
+synchronized between each other automatically based on your subscriptions. And then you have
+a fully running module. So the same module is running the server is running on the client.
+And when you update, when you do a call, actually we run the actual server logic on your client,
+update that and then that does the whole reconciliation. So you automatically get client
+side prediction for free. Really, how far away do you think that is?
+It's a good question. So in a sense, we're already doing it on the,
+what we call space and to be cloud, which is our cloud office. So we have, okay, there are two
+versions of space and to be there's space and to be standalone, which is the open source version
+that's on GitHub. You can take a look at that, everything that'll run like a single node clustered
+as though it were your own personal instance of space and to be, we also have cloud, which is a
+distributed system, which will run many machines in coordinate between them all. And the way we
+replicate from one to the other is sort of the normal way in which you would replicate
+a client. So they're all just clients of each other is an interesting thing. Right.
+And that has a lot of implications for strong consistency, but I don't think we have time to
+get into that. But either way, we're working towards that, I suppose on the server. And then
+we will do that as soon as we can on the client. We're also building an MMORPG. So we're a little
+bit busy. So I'm not sure exactly when that'll be, but it is still useful in the way that it is right
+now that is to say, not automatically doing client side prediction. But we will, we will
+eventually do that. I envision world. So here's the secret. Here's the real secret to what space
+and to be is actually it's not really a database at all. What it really is, is a distributed
+operating system in the spirit of plan nine, which has never sort of taken off. Let me explain. Okay.
+Briefly. So space and to be cloud, as I mentioned, runs over, let's say 100 computers,
+right? So you've got this, this thing that's running from the outside, it looks like just one
+instance of space time to be. So you can't really tell that it is made up of 100 computers.
+And what you're doing is you're taking a program and you're running it
+on that distributed computer. So it looks again, like a single
+computer. And you're running a program on it. And we're abstracting away the hardware. Boy,
+that does sound like an operating system, doesn't it? And so that is really ultimately where we'd
+like to go is a place where the cloud is not this collection of hardware and services that you
+have to piece together in this grotesque fashion. But really, it is just a giant computer. And
+you're going to take your program and you're going to run it on that giant computer. And that's it.
+This is going to be even more blurred when you've got a series of clients connecting
+into that who are themselves similarly programmed.
+Correct. And so what you might say is that you're building a gigantic distributed
+operating system that the whole world runs on top of, right? You could say that if you were so bold.
+And I don't know that we are yet, but one day, perhaps we will. So the idea would be
+that you're all operating on the same protocol to speak with each other and that you can't really
+even tell. I mean, there's a lot of details in this one. And to be quite honest, I haven't thought
+through all of it. But if everybody's speaking the same language, you have all of these modules
+subscribing to each other, it's just the actor model, you know what it is. It's very similar
+to Erlang, right? It's got the same kind of spirit. You've got these actors, and they are
+sending messages to each other, and they're listening to messages that are being sent to them,
+and they're updating their state, and they're moving on. So it's very much in that spirit.
+Okay. Let me ask you this, and you may not like this question, but I'm going to ask it anyway.
+If someone thought this is a great idea, but I'm not waiting for you to do it,
+I'm going to build this on Erlang myself. Sure. What parts would they be missing? What
+parts would they find hard? Yeah, so the whole database part, right? So don't forget about that.
+So I've thought about this in a sense. So let's say you want to build this on Erlang. Cool.
+What is Erlang missing? Well, it's missing the persistence. I know they have persistent actors,
+but the performance of that is key. The size of each actor is key. So within a space on DB actor,
+if you think about them as actors, we also do multi-version concurrency control so that we can
+run as many transactions as possible within one machine as sort of one actor as you might
+possibly be able to do. So you want each actor to be as large as possible before you start going
+into other actors because as soon as you go into distributed systems, it's complicated,
+and you can do a lot with a single machine, it turns out. Although each actor could in principle
+be more than one machine, but I digress. That's another direction to go in down in the future.
+And then there's the whole relational model. So you need to build on top of Erlang the ability
+to do queries on the rows and get the actual row data out, all of the type system stuff.
+You'd want to be able to run in whatever language you would like to because maybe
+your programmers are familiar with C-Sharp because they're Unity developers and all that.
+Let's say also now, what about the subscription? So actors in the Erlang model, as I understand,
+you can send messages to other clients, but that's kind of like the old way of
+doing it with the game servers where I need to know what this other actor wants to know
+or build a subscription system where they send me a message, which is their subscription,
+and then I run the whole query engine and then I send them what they need to know,
+which is what we have done. So you have to build that whole query subscription system up
+from the ground as well. So good luck to you. And I would love to see and use your system
+if you do that because we wanted to make a game. We are doing this because we must.
+Okay. Then perhaps we should wrap it up with the last two questions. If someone decides they
+don't want to do that, what state is SpacetimeDB in for me as a user? Can I go and play with it?
+You absolutely can. So you can go to spacetimedb.com. You can play with a demo. It's right there.
+You can also very quickly go to our quick start guide, install spacetimedb,
+get a local instance of it running, spacetime standalone. You can upload a module to that.
+You can connect to that. You can call functions on that. You can also upload to our testnet.
+So our testnet is a version of spacetimedb cloud, which is relatively nascent,
+but it's meant for you to play around with what the cloud version will be. It's completely free.
+We give you a free amount of energy. Energy is what powers these things. It's not actual energy,
+to be clear. It's just points. You can give it AWS credits. We give you AWS credits.
+You can go to town on that. Then notably for the testnet, we reserve the right monthly to
+wipe the data because we're still updating the ABI and we don't want to be locked in yet.
+Early this year, we're trying for, let's say, April to move into 1.0 and the main net. The main net
+of spacetimedb will be the version of spacetimedb where we guarantee that your data is going to
+be there forever and it will be persisted and replicated and all that good stuff.
+You can begin building your applications now for a launch post-April.
+Okay. Here's another dangerous question because there's only really one right answer.
+Is your game, BitCraft, going to be running on that testnet?
+On that main net?
+It already is.
+So, yes, 100%. We are working on, so a lot of our focus right now is getting the performance
+to where it needs to be. BitCraft used to run on what we called janktimedb,
+which was like spacetimedb, but it was the thing that we built first and it was not its own product.
+And that works quite well, but it actually was more like the traditional old servers where
+the server knew what the client wanted and it was relatively performant. And we're now
+getting back to that point that right around now, we had the same performance of janktimedb
+and now as we gear up for the alpha, which, by the way, signed up for the BitCraft alpha,
+it's happening early this year as well.
+I'll put a link in the show notes.
+Yes. And we are getting to the point where we are at that performance level that we need for
+that alpha. So that's like, well, I don't know how much I can say without upsetting the BitCraft team,
+but it's many more users than we had previously, concurrently, running in the game.
+Right. Cool. Well, you've got a busy year, a busy few years coming up.
+We surely do. We surely do.
+Awesome. Well, good luck with spacetimedb. I hope it takes off.
+Good luck with BitCraft. I hope that takes off. And if they both take off,
+you're going to invite me to your private yacht for a follow-up.
+I don't know that I'll have one of those. I'll be too busy on the next part of spacetimedb.
+So good luck. I need satellite from there.
+You'll be able to afford it if both of those work.
+I guess so. I guess so.
+Tyler, thanks very much for joining us. Cheers.
+Thanks for having me. And that's all from Tyler. Thank you very much.
+You know, in among all the things we discussed in there, I think Tyler must be something like
+our third guest to reference the Plan 9 operating system.
+And I don't know much about Plan 9, except it never took off,
+but it was a huge influence for a lot of people.
+I think we might have to have some kind of retrospective
+what we could have learned as an industry episode on Plan 9 one day.
+So if you're a Plan 9 expert, or if you know one, please get in touch.
+And the way you get in touch is the same way you send us any feedback.
+My contact details are in the show notes.
+If you're on YouTube, there's a comment box just down there.
+Spotify has a Q&A thing for each episode these days, and so on and so on. Check your app.
+On the subject of feedback and the future episodes,
+if you enjoyed this episode, please leave a like or a comment.
+If you think other people should find this podcast,
+please rate it or share it with a friend.
+And make sure you're subscribed because we're going to be back next week
+with more interesting voices from the software development world.
+Until then, I've been your host, Chris Jenkins.
+This has been Developer Voices with Tyler Clute here.
+Thanks for listening.
+you

@@ -1,0 +1,404 @@
+start	end	text
+0	5680	Mamba is a new neural net architecture that is better than Transformers at language modelling.
+5680	11720	Yes, that's right, after reigning supreme for 7 years, the Transformer has finally been
+11720	13200	dethroned.
+13200	16640	Well, maybe.
+16640	22280	So far, Mamba has only been tested at small model sizes, up to a few billion parameters,
+22280	24960	but the results so far are promising.
+24960	28800	In addition, Mamba uses less compute than Transformers.
+28800	34480	For an input sequence of n words, Mamba only uses n log n compute, whereas Transformers
+34480	36160	use n squared.
+36160	42080	So Mamba-based language models should allow for much greater context sizes to be used.
+42080	45960	In this video, we're going to do a deep dive of the Mamba architecture.
+45960	46960	What is it?
+46960	47960	Why does it work so well?
+47960	54200	And how could you have gone about designing such an architecture yourself?
+54200	59000	Unfortunately Mamba is presented as an extension of something called a state space model.
+59000	63120	State space models are another type of sequence model that have been steadily gaining popularity
+63120	68920	over the past few years, but to be honest, the theory behind state space models is massively
+68920	72560	over complicated and uses some pretty advanced mathematics.
+72560	78160	Fortunately, Mamba can also be understood as an extension of recurrent neural networks,
+78160	82480	or RNNs for short, which are much easier to understand.
+82480	88200	So in this video, we will be taking the RNN path to understanding Mamba.
+88200	89840	Now let's get started.
+89840	95840	What is a recurrent neural network?
+95840	100640	Given a sequence of input vectors, a convolutional layer applies a neural net to consecutive
+100640	102880	groups of vectors.
+102880	107760	The key thing is that the neural net only sees a small number of vectors at a time, which
+107760	109840	makes the model easy to train.
+110320	115240	The downside is that information from vectors which are far away can't be combined until
+115240	118320	many convolutional layers have been applied.
+118320	122800	This makes it difficult for convolutional neural nets to understand long range dependencies
+122800	130080	in their input, and such long range dependencies occur all the time in natural language text.
+130080	135120	To remedy this flaw, the transformer architecture was invented, which successfully allows a
+135120	140240	single layer to combine information from vectors no matter how far away they are.
+140240	145280	I previously made a video explaining how and why transformers work in detail, which you
+145280	147680	can find here.
+147680	152440	And while transformers work great, they have a significant limitation, which is that the
+152440	156880	amount of compute they use is quadratic in the input length.
+156880	161120	This isn't a huge deal for small inputs, but if you want to have a million vectors in
+161120	168400	the input, that means you need to do a million times a million operations, which is a lot.
+168400	173320	Recurrent neural nets take a completely different approach to improving convolutional layers.
+173320	175840	The idea is very simple.
+175840	179800	Instead of applying the neural net to two consecutive input vectors, you apply it to
+179800	185160	one input vector and the previous output of the neural net.
+185160	189200	This seems like a small change, but it has profound consequences.
+189200	194640	Each output vector now contains information from all of the input vectors prior to it,
+194640	197720	instead of only one previous vector.
+197720	202600	This final output vector contains information from every vector in the input, no matter how
+202600	204760	many there are.
+204760	208320	And we have not used any more compute than a convolutional layer.
+208320	212920	We've managed to incorporate long range information for free.
+212920	218800	This is exactly what we want, or at least it would be if it weren't for two small problems
+218800	223960	with RNNs, which make them almost impossible to use in practice.
+223960	228760	The first problem is that while a recurrent layer uses the same amount of compute as a
+228760	235720	convolutional layer, that compute cannot be parallelized across multiple processes.
+235720	240400	Even if you have lots of processes available, you can't begin evaluating the neural net
+240400	245520	on an input until all of the previous steps have finished, because you need to feed the
+245520	250600	output from the previous step into the neural net.
+250600	254920	Compare this to a convolutional layer where the neural net only needs to see the original
+254920	256040	input.
+256040	260280	You can run the neural net on all inputs at the same time, so long as you have enough
+260280	263720	processes available.
+263720	268800	And since modern hardware such as GPUs are highly specialized for parallel computation
+268800	277360	with thousands of processes, RNNs are actually a lot slower than CNNs in practice.
+277360	285880	In fact, RNNs are even slower than transformers despite doing less computation.
+285880	290840	And the second problem is that RNNs are incredibly difficult to train.
+290840	295960	While in theory a single recurrent layer can incorporate information from arbitrarily
+295960	299280	many inputs, in practice they don't.
+299280	306200	Instead, they only learn to incorporate information from the previous few dozen inputs at most.
+306200	311600	The idea for RNNs has been around since the 1980s, but because of these two problems,
+311600	316400	RNNs have fallen out of favor with convolutional neural nets and transformers being much more
+316400	318560	successful in practice.
+318560	324240	In fact, RNNs have hardly been used at all in the past decade.
+324360	330840	Well, last year a new paper was published showing that linear RNNs can avoid both of
+330840	337520	these problems, and therefore linear RNNs are highly effective long sequence models.
+337520	341480	So what is a linear recurrent neural network?
+341480	353160	Well, you simply replace the neural net with a linear function.
+353160	358360	This might seem like a bad idea, since linear functions can only perform relatively simple
+358360	363480	transformations of their inputs, but we can make up for it by applying a full neural net
+363480	366800	to each output vector afterwards.
+366800	371120	This is similar to how in transformers you can replace the value neural nets with simple
+371120	376040	linear functions, and then add neural nets in between self-attention layers to make up
+376040	379600	for the lack of non-linear processing power.
+379600	385560	So just like in a transformer, we will alternate linear recurrent layers with element-wise
+385560	388640	neural networks.
+388640	393840	But importantly, by making the recurrent operation purely linear, it becomes possible
+393840	397360	to solve both of the RNN problems.
+397360	402480	To start with, I'll explain how a linear recurrence applied to n vectors can be computed
+402480	406760	in parallel in just log n time.
+406760	412280	And then I'll explain how the training issues that plague regular RNNs can be fixed in linear
+412280	419920	recurrences.
+419920	423040	The linear recurrence operator is given by this formula.
+423040	428920	To get the ith output vector, you multiply the previous i-1th output vector with a matrix
+428920	435400	w-y, and add the ith input vector multiplied by a different matrix w-x.
+435400	440680	The entries in the w matrices are the parameters which will be learned by the model, so they
+440680	445760	start off as random samples from a normal distribution centered at zero, and are then
+445760	448400	updated with gradient descent.
+448400	453600	And since the w-x matrix is just applied to each input independently, we can actually
+453600	457320	just think of it as being part of the previous layer.
+457320	463280	So we can simplify our recurrence operator to just add the input x, assuming that a linear
+463280	468440	function has already been applied to the input in the previous layer.
+468440	473080	A linear recurrence is actually a special case of a more general operation called the
+473080	479880	scan, so let's start with the simplest example of a scan, a cumulative sum.
+479880	484880	Given a list of n numbers as input, the goal is to compute the list of partial sums up
+484880	491280	to each term, so the ith item in the output list should be the sum of the first i-items
+491280	494760	of the input list.
+494760	500040	While it is trivial to compute this by simply adding the numbers together one at a time,
+500040	504800	we want to do it in parallel.
+504800	508240	And it turns out we can do so as follows.
+508240	515920	First add together each consecutive pair of numbers, then from the resulting list add
+515920	527040	together pairs of numbers which are two steps apart, then four steps apart, and eight, and
+527040	529080	so on.
+529080	534560	Each iteration doubling the step size, until the step size is as large as the entire input
+534560	539720	list, which will be after log n steps.
+539720	544920	This algorithm works because at each iteration the ith output element contains the sum of
+544920	548800	the previous step size numbers.
+548800	554600	For example, in the first iteration each output number is the sum of the previous two terms.
+554600	560200	In the next iteration each item contains the sum of the previous two terms plus the previous
+560200	567520	two terms starting two away, that is the sum of the previous four terms, and so on.
+567520	572920	When the step size is the size of the input, each output contains the sum of all previous
+572920	576280	terms as desired.
+576280	581640	It's trivial to see that each iteration can be computed in parallel, however the different
+581640	588540	iterations do still need to be computed sequentially, and there are log n iterations.
+588540	594640	So if you have n processors, the total runtime of this algorithm is log n, down from n of
+594640	597960	the naive sequential version.
+597960	603560	And this same algorithm works for computing lists of cumulative applications of any binary
+603560	611160	operator, not just addition, so long as the binary operator is associative.
+611160	615320	Associative means that you can change the order of application and you'll still end
+615320	617440	up with the same result.
+617440	625160	This is true of addition, which is why our parallel cumulative sum algorithm works.
+625160	630280	And it's also true of a bunch of other operations.
+630280	635640	In particular, this binary operator is associative.
+635640	641520	Note that this operator uses a pair of a matrix and a vector as input and output, instead
+641520	646200	of just a single number, like with addition.
+646200	653240	And remarkably, performing a scan with this operator is equivalent to a linear recurrence.
+653240	658240	We first need to replace our input list of vectors with a list of pairs where the first
+658240	663560	element is the recurrent weight matrix and the second element is the input vector, but
+663560	669600	then we just perform the scan as usual.
+669600	674760	You can check for yourself that this operator is in fact associative by expanding a few
+674760	678760	terms in the other order.
+678760	684400	To summarize, we just need to do our parallel cumulative sum algorithm with this operator
+684400	686600	in place of addition.
+686600	693320	And we get the result of a linear recurrent layer in just log n time.
+693320	695840	Except for one small problem.
+695840	701040	If you look closely at this operation, the way it works is by using the first element
+701040	706760	of the tuples as a cumulative matrix, which contains the product of all of the matrices
+706760	708520	seen so far.
+708520	715160	That's why the first element of the output tuple is the product of the two input matrices.
+715160	721280	But this means we're performing a d by d times d by d matrix multiplication in every
+721280	725900	step, where d is the dimension of the vectors.
+725900	728480	This is really slow.
+728480	733360	Note that in the original sequential RNN, we didn't need to keep track of this cumulative
+733360	738840	matrix, and so we only ever multiply the weight matrix with a length d input vector
+738840	743440	at each step, which is a d squared operation.
+743440	748480	But now we have to do a d cubed operation in every step.
+748480	754160	For standard model sizes, this is easily a thousand fault increase in computation.
+754160	757080	And that's bad.
+757080	760240	Fortunately there is a way around this.
+760240	762880	Matrix diagonalization.
+762880	767920	You see, almost every square matrix can be factored into the product of an invertible
+767920	775360	matrix P, a diagonal matrix D, and that first matrix P inverse, so long as the matrix elements
+775360	778360	are allowed to be complex numbers.
+778360	782680	Here is an example.
+782680	788040	Note that this middle matrix is diagonal, that is, all elements except for the main diagonal
+788040	790040	are zero.
+790040	794800	What's neat about this is when you multiply the matrix by itself in this form, the inner
+794800	801060	P inverse and P terms cancel, and the product of two diagonal matrices is just the diagonal
+801060	804000	matrix with the product of elements.
+804000	809000	That is, in order to compute d squared, all you need to do is square the elements on the
+809000	815560	main diagonal of d, which can be done in just m operations instead of m cubed.
+815560	817360	Much better.
+817360	823160	So then what we can do is represent the recurrent weight matrix in diagonalized form, which
+823160	828560	means we only need to use a complex vector which contains the elements of the main diagonal
+828560	831600	of d.
+831600	837440	That is to say, we first apply a complex matrix P to the input vectors, then perform the linear
+837440	843160	recurrence with a complex weight vector w, using element-wise multiplication, and finally
+843160	847640	apply P inverse to the output.
+847640	852640	The result of this will then be equivalent to a linear recurrence for some real-valued
+852640	854880	matrix w.
+854880	859440	But when computed this way, the recurrence operator only needs to compute element-wise
+859440	866200	multiplication between two vectors to update the cumulative weights instead of matrix multiplication.
+866200	871280	When we plug this operator into our parallel scan algorithm, the total compute is now adjust
+871280	875660	dn log n, and the parallel runtime is log n.
+875660	878160	Much better.
+878160	882680	Note that the parameters of this layer are the complex entries in the recurrent weight
+882680	888480	vector w and the matrix P. In practice, you would just use two separate real numbers to
+888480	893320	represent the real and imaginary components of each parameter, which are initialized by
+893320	897960	sampling from a normal distribution centered at zero, and updated with gradient descent
+897960	901200	as usual.
+902120	907600	Computing matrix inverses is really slow, so in practice we don't bother, and instead
+907600	913560	just use two independent complex matrices before and after the linear recurrence.
+913560	917880	This actually makes the model more expressive than a real-valued linear RNN, and it saves
+917880	923780	computation, but it does mean that the model is no longer equivalent to a real-valued recurrence,
+923780	926400	and the output can now be a complex number.
+926400	930920	So we will need to take the real-valued part of the output before passing it to the next
+931040	933040	layer.
+933040	938960	Okay, we have seen how to make linear RNNs fast for modern hardware, but what about the
+938960	940120	other problem?
+940120	944040	That RNNs are very difficult to train.
+944040	949040	Before we solve this problem, here is a quick recap of why training RNNs is so problematic
+949040	950880	in the first place.
+950880	955000	Neural nets are trained by subtracting the gradient of the loss function from each weight
+955000	956440	in the model.
+956440	957440	What is the gradient?
+957440	964760	Well, imagine evaluating the neural net, then increasing the value of a weight by a very
+964760	969760	small amount, and then evaluating it again.
+969760	974600	The difference in these scores is proportional to the gradient for that weight, and it tells
+974600	979880	you how to change the weight to make the neural net better, so let's evaluate the gradient
+979880	981920	of a linear recurrent layer.
+982800	987280	Actually, to make this a bit easier, let's simplify the model and suppose that every
+987280	993160	input after the first is zero, so we can just ignore them.
+993160	997960	When we evaluate the recurrent layer, at each step the previous output is multiplied by
+997960	1003360	the weight vector, so after n steps, the output vector is equal to the recurrent weight vector
+1003360	1008280	to the power of n times the first vector, x1.
+1008280	1016920	When we increase the weight by a small amount and evaluate it again, we get this.
+1016920	1023040	Taking the difference, we get up to a constant scaling factor, w to the power of n-1 times
+1023040	1024680	x1.
+1024680	1031000	The problem here is that as n becomes large, this term, w to the n-1, either gets very
+1031000	1036840	small or very large, depending on whether the values in w are less than or greater than
+1036840	1039440	1.
+1039440	1041960	In either case, it's a problem.
+1041960	1047000	If the gradient is very large, then the neural net weights change too much, and the existing
+1047000	1051240	functionality already learned by the neural net gets destroyed.
+1051240	1055560	If the gradient is very small, then the weights don't change enough, and the neural net doesn't
+1055560	1058220	learn anything at all.
+1058220	1061500	This is what makes training RNNs difficult.
+1061500	1067660	While in principle, RNNs can use infinitely long context, in practice, with gradient-based
+1067660	1073560	training techniques, the RNN will only learn to use context for as many steps as the gradient
+1073560	1076340	remains the right size for learning.
+1076340	1081580	This is known as the problem of vanishing and exploding gradients.
+1081580	1086700	And when we add back in non-zero inputs, this problem only gets worse, as the additional
+1086740	1091260	inputs make the gradients even more unstable.
+1091260	1096340	And to be clear, the reason why this isn't a problem for regular neural nets is because
+1096340	1100100	they use different weights in each layer.
+1100100	1103780	Some layers can have weights smaller than one, and some layers can have weights larger
+1103780	1108820	than one, so long as the gradient remains about the same size, the neural net will be able
+1108820	1112660	to learn.
+1112740	1117620	There are lots and lots of different configurations of weights that result in stable gradients,
+1117620	1124220	and it's easy to stay in stable configurations all throughout training.
+1124220	1130140	But for RNNs, you're using the same weight in each step, so there is exactly one stable
+1130140	1134180	configuration, which is when the weight is one.
+1134180	1141020	Any deviation from one, and you have exponentially growing or decaying gradients.
+1141020	1145980	Note that when the weights are complex numbers, the same argument applies just using the absolute
+1145980	1149300	value of the weights.
+1149300	1152420	So how can we fix vanishing and exploding gradients?
+1152420	1158580	Well, we saw that the RNN gradients are stable, so long as their current weights are one,
+1158580	1161100	and the inputs are zero.
+1161100	1167580	So in the linear RNN paper, the authors propose to initialize their linear RNNs in this stable
+1167580	1169700	state.
+1169700	1175140	Specifically, they parameterize the weights in complex polar form A times E to the IB,
+1175140	1177820	where A is magnitude and B is angle.
+1177820	1182740	They then restrict the magnitude to be less than one by running A through this E to the
+1182740	1188540	minus E function, which always outputs a number between zero and one.
+1188540	1192780	And instead of randomly sampling A from a normal distribution centered at zero, as we
+1192780	1198620	usually do, they initialize A so that the magnitude of E to the minus E to the A is
+1198620	1203620	uniformly distributed between 0.999 and one.
+1203620	1209060	They initialize the angle B uniformly between zero and pi on 10 radians.
+1209060	1213820	This ensures that, at initialization, the weights are all very close to one.
+1213820	1219620	Finally, they multiply the inputs by delta, which is another learned parameter initialized
+1219620	1226300	to the square root of one minus E to the minus E to the A, which since E to the minus E to
+1226300	1230820	the A is close to one, this is some very small number.
+1230820	1234900	This ensures that, at initialization, the inputs are all close to zero, and so they
+1234900	1237540	don't interfere with the recurrence.
+1237540	1244740	So at initialization, this model is approximately the same as the stable RNN I showed you before.
+1244740	1248700	After the model begins training and the weights change, there's no guarantee that it will
+1248700	1253720	remain stable, but in practice it appears that just initializing the model like this
+1253720	1259220	is sufficient to allow it to learn to remember context for tens of thousands of steps.
+1259220	1264720	And there we have it, with these modifications, we now have a linear RNN that is faster compute
+1264720	1268320	and learns to use extremely long context.
+1268320	1273320	In the linear RNN paper, they evaluate this model on the long range arena benchmark, which
+1273320	1278560	is a collection of six synthetic tasks that evaluate a model's ability to perform long
+1278560	1281720	range reasoning.
+1281720	1286720	For example, in the path X task, the model must classify images as whether or not they
+1286720	1294000	contain a complete dotted path between two circles, except that the images are flattened
+1294000	1301960	into one long sequence of 16,000 pixels.
+1301960	1307720	The linear RNN achieved state of the art performance on the long range arena, outperforming transformers
+1307720	1314480	by about 33% on average across tasks.
+1314480	1319160	So now that we understand the linear RNN, what's with all the talk about state space
+1319160	1320160	models?
+1320160	1326040	Well, it turns out that state space models are just linear RNNs.
+1326040	1330360	State space models were inspired by a control theory and were derived from a totally different
+1330360	1336240	idea of trying to discretize a continuous dynamical system, but the end result is just
+1336240	1340920	a linear RNN with a slightly different initialization scheme.
+1340920	1346680	The most common form of state space model parameterizes each recurrent weight as w equals e to the
+1346680	1352480	delta times a plus bi, where delta is again a learnable parameter, which is initialized
+1352480	1358880	to a very small number, usually between 0.0001 and 0.1.
+1358880	1363080	Multiplying the weight by a small number makes it close to zero, and when you take e to the
+1363080	1366840	power of something close to zero, you get something close to one.
+1366840	1370840	This again ensures that at initialization, the recurrent weights are all approximately
+1370840	1373880	one, so training is stable.
+1373880	1380000	State space models also multiply the inputs by delta times a plus bi inverse times w minus
+1380000	1384720	one, because that's what's prescribed by a control theory, but empirically, you get
+1384720	1391440	the same performance when you just scale the inputs by delta as in the linear RNN setup.
+1391440	1396080	From the long range arena, the control theory inspired state space initialization performs
+1396080	1399360	roughly the same as the linear RNN initialization.
+1399360	1404480	Anyway, whenever you hear state space model, think linear RNN.
+1404480	1406880	And finally, we can talk about Mamba.
+1406880	1412200	You see, while linear RNNs do perform really well on the long range arena benchmark, this
+1412200	1415200	does not mean they are good language models.
+1415200	1420400	For language modeling, linear RNNs perform way worse than transformers.
+1420520	1426160	Whether the performance of various state-of-the-art language models lower is better on this graph.
+1426160	1431200	As you can see, everything including state space models does significantly worse than
+1431200	1433120	transformers.
+1433120	1438120	The reason for this, as identified in the Mamba paper, is that linear RNNs are incapable
+1438120	1442760	of selectively forgetting information from the output vector.
+1442760	1447120	If the weights are close to zero, then the output vector will be set to zero after every
+1447200	1448200	input.
+1448200	1453400	Effectively, the model will always immediately forget whatever came before the current input.
+1453400	1457240	If their current weights are close to one, then the output vector doesn't change when
+1457240	1461520	it's multiplied with the weights, so the output vector will accumulate information
+1461520	1464680	from all inputs observed.
+1464680	1469480	What you want is for the model to be able to decide when to store information and when
+1469480	1474360	to forget information based on what input it sees.
+1474360	1480000	Mamba proposes an elegant solution, instead of using the same weights in each step, use
+1480000	1484280	different weights which depend on the input.
+1484280	1489120	Mamba applies a linear function to each input vector to generate a separate weight vector
+1489120	1492640	for that input.
+1492640	1497520	Then the recurrent scan is performed using these generated weights.
+1497520	1502440	This way, certain inputs can generate weights close to zero and thereby erase information
+1502440	1507920	from the output vector, but other inputs can generate weights close to one, thereby leaving
+1507920	1511880	the output vector unchanged.
+1511880	1516600	And I also suspect that using different weights at each step helps with vanishing and exploiting
+1516600	1522120	gradients, since there should now be many different stable configurations, like in feed-forward
+1522120	1527840	networks, although this wasn't mentioned in the Mamba paper.
+1527840	1533560	Mamba also uses one more trick, which is to increase the size of the output vectors.
+1533560	1539040	In a standard RNN, the output vectors are the same size as the input vectors.
+1539040	1543800	Mamba expands the size of the output vectors by a factor of 16.
+1543800	1548840	This allows it to store much more information from previous inputs.
+1548840	1553400	The output vectors are then projected back down to the original size before being passed
+1553400	1557360	to the next layer.
+1557680	1562560	This would increase the computation time by a factor of 16, but it turns out that the
+1562560	1567880	major bottleneck of a Mamba layer on modern GPUs is the time it takes to read and write
+1567880	1570760	data into high-performance memory.
+1570760	1574880	You see, modern GPUs actually have two different types of memory.
+1574880	1579120	Data is stored in main memory, but in order to do computations, data first needs to be
+1579120	1583480	transferred into high-performance memory.
+1583480	1588520	For the Mamba recurrence operation, it turns out that the time taken to transfer data is
+1588520	1594280	actually much larger than the time it takes to do the computation itself.
+1594280	1599360	Mamba therefore transfers the input vectors and model parameters to high-performance memory,
+1599360	1604600	and then computes the whole Mamba operation in a single block, including projecting outputs
+1604600	1611080	back down to the smaller original size, before writing the results back to main memory.
+1611080	1617400	This way, you only transfer vectors of the original size to and from high-performance memory,
+1617400	1621480	so the transfer time is unchanged.
+1621480	1626840	The actual computation time is 16 times slower, but the computation time was so small compared
+1626840	1630560	to the transfer time that it doesn't really affect the overall time taken.
+1630560	1635400	You essentially get to use 16 times larger vectors for free.
+1635400	1636760	And there we have it.
+1636760	1642520	This, along with the few minor architectural modifications, is Mamba, the dynamic linear
+1642520	1647880	recurrent neural network, which performs better than transformers at language modeling while
+1647880	1653640	using only nlogn compute down from n squared.
+1653640	1660720	Okay, now that we've made it through all of those boring technical details, we can finally
+1660720	1663240	talk about what really matters.
+1663240	1669160	The Mamba Drama
+1669160	1673520	You see, the Mamba paper caused quite a bit of controversy in the machine learning community
+1673520	1675320	this year.
+1675320	1680760	The Mamba paper was submitted to ICLR 2024, which is one of the most prestigious machine
+1680760	1687760	learning conferences in the world, and in January it was rejected by peer reviewers.
+1687760	1689120	But so what?
+1689120	1692920	Papers get rejected from top conferences all the time, right?
+1692920	1698600	Well, to give some context, the Mamba preprint has been publicly available since last year,
+1698600	1703800	and during this time, several different groups have re-implemented Mamba and all successfully
+1703800	1709080	reproduced the results claimed in the Mamba paper, namely that Mamba performs better than
+1709080	1712840	transformers and uses less computation.
+1712840	1717960	And since transformers are all anyone has talked about for the last five years, that's
+1717960	1720040	kind of a big deal.
+1720040	1725240	Because of this, everyone in the community was expecting the Mamba paper to be accepted,
+1725240	1730600	if not win a best paper award.
+1730600	1736160	So then, if the Mamba architecture really works, what glaring flaws are in the paper
+1736160	1738600	that caused it to be rejected?
+1738600	1747520	Well, the ICLR peer review is publicly available for everyone to view, so let's take a look.
+1747520	1753200	According to the meta review, Mamba wasn't tested on the Long Range Arena benchmark.
+1753200	1758480	Remember that benchmark I talked about, where linear RNNs performed way better than transformers?
+1758480	1763400	This reviewer wanted to see how well Mamba performed on that task.
+1763400	1768560	Now this is a really dumb reason to reject a paper, because the Long Range Arena is a
+1768560	1774920	completely different task to language modelling, and Mamba is specifically a language model.
+1774920	1780040	Keep in mind, transformers perform way worse than linear RNNs on the Long Range Arena,
+1780040	1783360	but transformers are still way better language models.
+1783360	1787640	So performance on the Long Range Arena is in no way indicative of language modelling
+1787640	1789640	ability.
+1789640	1792200	Mamba sets a new state of the art for language modelling.
+1792200	1799040	It shouldn't be rejected because it doesn't also solve some other unrelated task.
+1799040	1803840	The only other major criticism in the meta review is that Mamba was only evaluated on
+1803920	1810240	language modelling, that is the accuracy when predicting the next word in a piece of text.
+1810240	1815320	The reviewers argue that this metric isn't indicative of a language model's utility,
+1815320	1820440	and instead Mamba should have been evaluated on downstream tasks that measure a model's
+1820440	1822720	reasoning ability.
+1822720	1826560	Except that this is exactly what they did in the Mamba paper.
+1826560	1831240	They pre-trained Mamba as a language model, and then performed zero shot prompting on
+1831240	1837280	a bunch of standard downstream benchmark tasks, and surprise, surprise, Mamba outperforms
+1837280	1840400	all other language models.
+1840400	1843800	As a bonus, another reviewer said, and I quote,
+1843800	1850360	Mamba has a quadratic memory requirement during training, just like transformers.
+1850360	1853640	Which is just not true.
+1853640	1858680	Neither Mamba nor transformers have quadratic memory costs.
+1858680	1863640	Mambas have a quadratic compute cost, but their memory cost is linear.
+1863640	1864640	So is Mambas.
+1864640	1868960	I'm not sure how it's even possible to come to the conclusion that Mamba has a quadratic
+1868960	1873160	memory cost if you understand how it works at all.
+1873160	1878000	So as you can imagine, this less than ideal peer review sparked some debate in the machine
+1878000	1882280	learning community about peer reviewing practices and whether or not Mamba should have been
+1882280	1883280	rejected.
+1883280	1886240	You can probably guess which side of the debate I fall on.
+1886280	1891520	But let me know your thoughts about how broken academic peer review is in the comments below.
+1891520	1895240	Or thoughts about the actual Mamba architecture itself, I guess that's fine too.

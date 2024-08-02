@@ -1,0 +1,2780 @@
+WEBVTT
+
+00:00.000 --> 00:09.880
+We're very happy to be here and talk a little bit about what we've been up to.
+
+00:09.880 --> 00:12.780
+So we'll start with what is Mojo?
+
+00:12.780 --> 00:18.240
+At a glance, the top-level points of Mojo is that it's a Pythonic systems programming
+
+00:18.240 --> 00:19.600
+language.
+
+00:19.600 --> 00:20.600
+So what does that mean?
+
+00:20.600 --> 00:23.960
+That means we're here to do really cool things with systems and compilers, and it happens
+
+00:23.960 --> 00:28.460
+to look like Python, but forget everything you know about Python, please, please.
+
+00:28.460 --> 00:31.740
+So this thing is about one year old, so it's still pretty early, it's still in development.
+
+00:31.740 --> 00:35.540
+It's still quite interesting and doing some cool stuff, though.
+
+00:35.540 --> 00:36.700
+We also have a vibrant community.
+
+00:36.700 --> 00:38.500
+We have over 150,000 users.
+
+00:38.500 --> 00:42.960
+We have a big community in Discord, and there's a bunch of excitement around this.
+
+00:42.960 --> 00:47.020
+So we'll dive today into why did we do this in the first place?
+
+00:47.020 --> 00:48.940
+That's often something we're asked.
+
+00:48.940 --> 00:51.700
+We'll talk about how we approach designing a new language from scratch.
+
+00:51.700 --> 00:55.020
+We'll talk about internal implementation details, including some of the horrible things we did
+
+00:55.020 --> 00:56.460
+to LLVM.
+
+00:56.460 --> 01:01.100
+Talk about what this means for accelerators and compute, and then wrap things up.
+
+01:01.100 --> 01:03.220
+So first, why?
+
+01:03.220 --> 01:04.500
+Why, why, why, why, why?
+
+01:04.500 --> 01:08.940
+So many of you are working on AI, and if you work on AI, the question I will ask of you
+
+01:08.940 --> 01:15.420
+all is, if AI is so important to the world, why is all this offer so bad?
+
+01:15.420 --> 01:18.900
+This is a huge question, a huge problem, and I think that many of us who have been working
+
+01:18.900 --> 01:22.620
+in this industry for a while have been struggling with solving this problem in many different
+
+01:22.620 --> 01:23.620
+ways.
+
+01:23.980 --> 01:28.620
+And so for me, when I look at this, I think that the challenge is really fragmentation,
+
+01:28.620 --> 01:29.620
+complexity.
+
+01:29.620 --> 01:33.260
+It's all these systems that do not work very well together, that are being built by well
+
+01:33.260 --> 01:38.380
+meaning people in different groups and areas, but they don't really actually work together.
+
+01:38.380 --> 01:41.420
+And so for a user, this is a huge pain point.
+
+01:41.420 --> 01:42.420
+And why is this?
+
+01:42.420 --> 01:43.420
+I'll speak for myself.
+
+01:43.420 --> 01:47.060
+If you're enabling a chip, you're focused on the chip.
+
+01:47.060 --> 01:51.220
+So many of us are paid to solve one specific problem, we're not here to solve an industry
+
+01:51.220 --> 01:53.500
+scale problem, and you can't afford to do it.
+
+01:53.500 --> 01:57.020
+You don't have the time, you don't have the schedule, you don't have the headcount, whatever.
+
+01:57.020 --> 02:00.700
+Often the organization that you're within, in my experience, makes it very difficult
+
+02:00.700 --> 02:02.620
+to solve some of these problems.
+
+02:02.620 --> 02:08.740
+And so our approach at Modular is that we need fewer things that work better.
+
+02:08.740 --> 02:11.380
+And so that's what led us to building Modular in the first place.
+
+02:11.380 --> 02:15.500
+It's really kind of an organization that can span across many different of these problems
+
+02:15.500 --> 02:20.180
+and invest for the long term in building and hopefully lifting the industry over time.
+
+02:20.180 --> 02:21.180
+So how do we do this specifically?
+
+02:21.180 --> 02:23.580
+Well, we're building what we call the AI engine.
+
+02:23.580 --> 02:28.860
+Well, the AI engine, if you look at modern ML stack, a lot of folks are trying to throw
+
+02:28.860 --> 02:32.380
+layers of Python on top of all this AI tech that has been built up.
+
+02:32.380 --> 02:37.380
+We're tackling it at the Herber software boundary, reinvesting, no surprise, and compilers.
+
+02:37.380 --> 02:41.500
+And so what we want to do is we want to unify and integrate all these low level technology
+
+02:41.500 --> 02:45.500
+systems so that innovation can happen up on top with programming models and frameworks
+
+02:45.500 --> 02:47.460
+and all that kind of stuff.
+
+02:47.460 --> 02:49.740
+Our approach is to meet people where they are.
+
+02:49.740 --> 02:52.300
+So people use PyTorch, people use Jax, people use TensorFlow.
+
+02:52.300 --> 02:53.300
+That's awesome.
+
+02:53.300 --> 02:56.660
+These all have pros and cons, and there's other stuff as well.
+
+02:56.660 --> 02:59.420
+And very few people actually want to rewrite all their code.
+
+02:59.420 --> 03:02.860
+And for us, it's very important to be drop and compatible, meet people where they are,
+
+03:02.860 --> 03:05.140
+and work with their existing systems.
+
+03:05.140 --> 03:08.820
+The other thing is that this is not a research project, like there's a lot of really interesting
+
+03:08.820 --> 03:13.060
+and cool things that have been built over the last eight-ish years of AI infrastructure.
+
+03:13.060 --> 03:16.180
+It often gets fragmented out into all these different systems.
+
+03:16.180 --> 03:19.420
+We've learned from many of them, and so what we're doing is we're pulling this back together
+
+03:19.420 --> 03:24.340
+and doing hardcore engineering, not research, to build a production quality system that
+
+03:24.340 --> 03:26.900
+we hope can scale for the world.
+
+03:26.900 --> 03:27.900
+I'll go through this super quickly.
+
+03:27.900 --> 03:28.900
+It was an AI engine.
+
+03:28.900 --> 03:30.700
+Well, it's really two things.
+
+03:30.700 --> 03:33.220
+One is this operator graph.
+
+03:33.220 --> 03:37.660
+The operator graph in the interesting case is heterogeneous.
+
+03:37.660 --> 03:41.580
+So people often focus on, for example, the GPU, and how do I make matrix multiplications
+
+03:41.580 --> 03:42.580
+go fast?
+
+03:42.580 --> 03:44.180
+And that's a super important problem.
+
+03:44.180 --> 03:50.140
+But often folks forget that AI today is a distributed problem, involves the host, involves
+
+03:50.140 --> 03:53.380
+the accelerator, involves pre-processing, data loading, this whole thing.
+
+03:53.380 --> 03:57.100
+And so you can't really solve the AI problem for a user unless you really tackle this whole
+
+03:57.100 --> 03:58.100
+problem.
+
+03:58.100 --> 04:01.260
+And furthermore, this is really heterogeneous.
+
+04:01.260 --> 04:04.180
+As we've seen, there's all kinds of different accelerators, there's all kinds of different
+
+04:04.180 --> 04:05.180
+hardware.
+
+04:05.180 --> 04:09.820
+When you have a cluster, lots of machines, micro-architectures don't always match.
+
+04:09.820 --> 04:12.300
+There's a lot of complexity in this space.
+
+04:12.300 --> 04:15.980
+So many of us have been working on this, again, for a long time.
+
+04:15.980 --> 04:17.860
+And so we've seen the rise of kernel libraries.
+
+04:17.860 --> 04:20.580
+This is how many of these systems were first built.
+
+04:20.580 --> 04:23.900
+And one of the challenges that I won't go into in depth, many of you probably already
+
+04:23.900 --> 04:27.340
+agree, is that kernel libraries don't scale.
+
+04:27.340 --> 04:31.860
+And so many of us, for multiple years now, have been building AI compilers.
+
+04:31.860 --> 04:36.220
+And so there's lots of these, lots of different approaches, online kernel fusion, lots of
+
+04:36.220 --> 04:38.540
+cool algorithms getting vented and used.
+
+04:38.540 --> 04:40.700
+We can talk about all the different pros and cons of trade-offs.
+
+04:41.140 --> 04:46.300
+But the thing I want to claim is that neither of these approaches scale.
+
+04:46.300 --> 04:50.700
+Kernels don't scale, hopefully many people understand that, but neither do ML compilers.
+
+04:50.700 --> 04:55.140
+And to a compiler audience that maybe is more controversial than to a kernel audience.
+
+04:55.140 --> 04:58.940
+So I thought I'd dive a little bit into why this is and the challenges that we see with
+
+04:58.940 --> 05:03.220
+this led us to our approach with Mojo and the system.
+
+05:03.220 --> 05:05.180
+So the first is generality.
+
+05:05.180 --> 05:10.980
+I mean, empirically today, ML compilers are not very general, right?
+
+05:10.980 --> 05:15.260
+Generality includes not just matrix multiplication, again, data loading, preprocessing, all this
+
+05:15.260 --> 05:17.860
+stuff, but also dynamic shapes, varsity.
+
+05:17.860 --> 05:22.980
+There's better and worse systems out there, and there's definitely progress in this area.
+
+05:22.980 --> 05:27.540
+But if you're coming at it from a user's perspective, they want things to just work.
+
+05:27.540 --> 05:34.020
+And if they don't just work, then they'll move on and spend their time something else.
+
+05:34.020 --> 05:39.820
+Generality is also important because if you're, again, coming from a hardware enablement perspective,
+
+05:39.820 --> 05:43.780
+you don't really have time to invest in all the other parts of the problem.
+
+05:43.780 --> 05:47.380
+And so it makes sense that many of us working on bring up the chip don't actually focus
+
+05:47.380 --> 05:50.740
+on the big picture parts of the problem.
+
+05:50.740 --> 05:51.900
+Another one is community.
+
+05:51.900 --> 05:54.220
+So you all are wonderful compiler nerds.
+
+05:54.220 --> 05:56.420
+I love you all, obviously.
+
+05:56.420 --> 05:59.420
+And myself, a pretty big compiler nerd.
+
+05:59.420 --> 06:02.060
+But the problem is that nobody can hire a compiler engineer.
+
+06:02.060 --> 06:03.780
+This is pretty well known.
+
+06:03.780 --> 06:08.420
+And so with AI compilers, this becomes even worse, because how do you hire somebody who
+
+06:08.420 --> 06:13.460
+knows compilers, who knows AI modeling and all the different exotic new model of the
+
+06:13.460 --> 06:16.820
+day, who knows all the numerics and the data types and knows all the specialized hardware,
+
+06:16.820 --> 06:21.380
+and how do you find that unicorn person that knows all of these things together?
+
+06:21.380 --> 06:23.300
+It's very, very difficult out there.
+
+06:23.300 --> 06:28.100
+And if you need a compiler engineer to be in the loop of novel research, there's very
+
+06:28.100 --> 06:32.100
+few companies in the world that can afford or attract to do that.
+
+06:32.100 --> 06:37.420
+And so I believe that you cannot have a compiler-first approach to this problem simply because there's
+
+06:37.420 --> 06:38.580
+enough talent out there.
+
+06:38.580 --> 06:42.580
+I mean, I love you all, and you're all very valuable, but this is very difficult, particularly
+
+06:42.580 --> 06:45.260
+for the scale of what AI research is today.
+
+06:45.260 --> 06:48.500
+Second, if you're a compiler engineer, it seems really weird that we're re-encoding
+
+06:48.500 --> 06:51.900
+all of compute into IR builders and sanding out all this stuff.
+
+06:51.900 --> 06:54.420
+And so you feel like there must be a problem here at some point.
+
+06:54.420 --> 06:57.180
+Finally, there's this fragmentation problem.
+
+06:57.180 --> 07:00.860
+If you want to solve and build a heterogeneous compute system, we have to face the reality
+
+07:00.860 --> 07:05.500
+that AI developers, researchers, are in Python.
+
+07:05.500 --> 07:08.580
+The frameworks, the host-side compute, it's all in C++.
+
+07:08.580 --> 07:12.500
+The device-side is in CUDA, in SQL, and other things.
+
+07:12.500 --> 07:15.540
+And so if you want to build a system that can scale across all these different levels
+
+07:15.540 --> 07:19.900
+of abstraction, there's a huge fragmentation problem here, and we need to be able to unify
+
+07:19.900 --> 07:20.900
+this.
+
+07:20.900 --> 07:23.740
+Otherwise, we can't have one system that can reason about it.
+
+07:23.740 --> 07:26.980
+And so if you want to be able to build this and solve this problem, you have to kind of
+
+07:26.980 --> 07:29.740
+come back and look at the big picture of what's going on here.
+
+07:29.740 --> 07:32.260
+And the nature of compute has changed.
+
+07:32.260 --> 07:35.460
+So this is what has led us to Mojo.
+
+07:35.460 --> 07:37.180
+Now how do we approach building Mojo?
+
+07:37.180 --> 07:40.460
+I mean, you know the outcome, and we'll talk a lot more about how it works, but how do
+
+07:40.460 --> 07:41.460
+we even get here?
+
+07:41.460 --> 07:47.140
+Well, when we started Modular, we started with a thesis, a hypothesis.
+
+07:47.140 --> 07:54.060
+We believed that we could get to state-of-the-art performance against a lot of vendor systems
+
+07:54.060 --> 07:58.220
+and do so with a single source of truth in our code for numerics.
+
+07:58.220 --> 07:59.820
+This hasn't really been done before.
+
+07:59.820 --> 08:02.420
+There's definitely systems that have been around in the space.
+
+08:02.420 --> 08:08.820
+But this thesis, if true, can enable and unlock a huge amount of innovation in the industry.
+
+08:08.820 --> 08:13.420
+And so what we did was we said, okay, let's go invest in some very fancy compiler stuff,
+
+08:13.420 --> 08:18.620
+generalized fusion, and caching integrated distributed compilation, like lots of cool
+
+08:18.620 --> 08:19.620
+stuff.
+
+08:19.620 --> 08:23.300
+Let's figure out what we want to do, and then let's go validate that.
+
+08:23.300 --> 08:27.580
+But for validation, we didn't actually care about syntax.
+
+08:27.580 --> 08:28.580
+So what did we do?
+
+08:28.580 --> 08:30.860
+Well, we went, and we actually went and built the thing.
+
+08:30.860 --> 08:34.100
+We went and built a compiler and completely ignored syntax.
+
+08:34.100 --> 08:35.100
+All right, why?
+
+08:35.100 --> 08:36.600
+Well, MLR is great.
+
+08:36.600 --> 08:37.780
+You can write MLR by hand.
+
+08:37.780 --> 08:39.280
+You don't need a front-end.
+
+08:39.280 --> 08:42.620
+And so what we could do is we could actually go build major kernel libraries and things
+
+08:42.620 --> 08:43.620
+like this and validate.
+
+08:43.620 --> 08:47.540
+Architecturally, we could deliver the performance that we wanted to, show that the compiler
+
+08:47.540 --> 08:52.260
+worked, iterate rapidly on the compiler without having to change a dependency, and go and
+
+08:52.260 --> 08:53.260
+do this.
+
+08:53.260 --> 08:55.580
+And what we found, fortunately, is that it works.
+
+08:55.580 --> 08:57.620
+The technology we built actually is good.
+
+08:57.620 --> 08:58.620
+It worked.
+
+08:58.620 --> 08:59.740
+It was proven out.
+
+08:59.740 --> 09:03.500
+And then immediately, we figured out that writing large amounts of MLR by hand is maddening
+
+09:03.500 --> 09:08.100
+and doesn't scale, and there's no way a real normal user could actually do this.
+
+09:08.100 --> 09:12.460
+And so, but this validation of the algorithms of the compiler tech of the low-level system,
+
+09:12.460 --> 09:17.140
+which is very novel, and Jeff will talk about later, was really important to building our
+
+09:17.140 --> 09:19.660
+system and doing so without being anchored on syntax.
+
+09:19.660 --> 09:25.060
+I think it was very good for both focus, but also for the ability to iterate.
+
+09:25.060 --> 09:28.300
+So once you get that, you get to the point of saying, what about syntax?
+
+09:28.300 --> 09:30.020
+Syntax actually does matter.
+
+09:30.020 --> 09:34.060
+And so the three major approaches we looked at are, do we take an existing language like
+
+09:34.060 --> 09:36.580
+C++ or Swift or something like that?
+
+09:36.580 --> 09:38.180
+Do we do an EDSL?
+
+09:38.180 --> 09:40.020
+Do we do a new language?
+
+09:40.020 --> 09:45.300
+And so when we were talking about this, we came back to our core principles, our values,
+
+09:45.300 --> 09:48.580
+our goals, which is that we wanted to meet people where they are.
+
+09:48.580 --> 09:54.180
+And whether you like it or not, AI developers, but also most software engineers are all in
+
+09:54.180 --> 09:55.180
+Python.
+
+09:55.180 --> 09:56.180
+Right?
+
+09:56.180 --> 10:01.380
+Python is pretty arguably the most popular programming language in the world.
+
+10:01.380 --> 10:05.660
+And so if you're coming from a Python viewpoint, arguing with people, trust me, I've been there,
+
+10:05.660 --> 10:08.780
+to try to get them to switch to a different thing, is a huge amount of work and it doesn't
+
+10:08.780 --> 10:09.900
+really go anywhere.
+
+10:09.900 --> 10:14.340
+And so we realize and believe we had to go with Python, and what that meant is that
+
+10:14.340 --> 10:19.940
+meant that suddenly a bunch of existing systems are just off the table, like C++ is not Python,
+
+10:19.940 --> 10:20.940
+Swift is not Python.
+
+10:20.940 --> 10:22.100
+These things are not Python.
+
+10:22.100 --> 10:27.300
+And so that really allows us to focus our frame.
+
+10:27.300 --> 10:28.300
+What about EDSLs?
+
+10:28.300 --> 10:29.820
+Well, EDSLs are super common.
+
+10:29.820 --> 10:32.380
+They're super popular and they exist for lots of good reasons.
+
+10:32.380 --> 10:33.940
+They're relatively easy to implement.
+
+10:33.940 --> 10:39.180
+We've had several talks at the conference about how to use Python so that you can extract
+
+10:39.180 --> 10:41.980
+and build IR from Python ASTs and things like this.
+
+10:41.980 --> 10:45.060
+It means you don't have to build tooling, you don't have to retrain, you can get to
+
+10:45.060 --> 10:46.860
+market fast.
+
+10:46.860 --> 10:50.060
+The problem is that they provide a really bad developer experience.
+
+10:50.820 --> 10:52.340
+You don't get a debugger.
+
+10:52.340 --> 10:55.340
+This really can't fit into the existing systems.
+
+10:55.340 --> 10:59.980
+If you care about host performance and generality, Python's not there, at least not the level
+
+10:59.980 --> 11:02.020
+of performance that we care about.
+
+11:02.020 --> 11:07.660
+And so what we really want is we want a system that allows us to innovate at all layers of
+
+11:07.660 --> 11:08.660
+this stack.
+
+11:08.660 --> 11:10.660
+Okay, well, how about a new language?
+
+11:10.660 --> 11:14.100
+Again, you know kind of where we're going with this, but a new language has the advantage
+
+11:14.100 --> 11:18.340
+of you get the best quality result, you can control everything, you can invest in things,
+
+11:18.340 --> 11:22.140
+you can target CPUs with high performance, which is quite important to us.
+
+11:22.140 --> 11:25.140
+But what you need is a strong vision for what you're trying to do.
+
+11:25.140 --> 11:28.940
+You need a long-term commitment because the demo is easy, but production quality thing
+
+11:28.940 --> 11:29.940
+is hard.
+
+11:29.940 --> 11:32.340
+You need to be able to pay for it, you need to be able to track people, you need to be
+
+11:32.340 --> 11:37.820
+able to have a big target of developers that makes it worth doing in the first place.
+
+11:37.820 --> 11:44.060
+And so this is actually well known to be ridiculously expensive, like building new programming
+
+11:44.060 --> 11:47.900
+language is not a simple thing that you should reach for as your first outcome.
+
+11:47.900 --> 11:52.420
+But as you know, yes, we want a baby little mojo to be built and what we decide to do
+
+11:52.420 --> 11:54.500
+is actually do this.
+
+11:54.500 --> 11:55.500
+And why?
+
+11:55.500 --> 11:59.300
+Well, it's because it's the only way to achieve our goals, to achieve the best quality of
+
+11:59.300 --> 12:05.380
+result for AI developers and many other developers worldwide and be able to lift the industry.
+
+12:05.380 --> 12:08.700
+There are many point solutions that demonstrate many different capabilities, but we really
+
+12:08.700 --> 12:12.380
+want to go beyond this and integrate and unify the world.
+
+12:12.380 --> 12:16.140
+And so if you come back to what we need to do, we think that we have all the constituent
+
+12:16.140 --> 12:19.540
+ingredients here with a good vision, we think we know what we're doing.
+
+12:19.540 --> 12:21.180
+We also know how hard this is.
+
+12:21.180 --> 12:26.140
+So I personally built several major programming languages that are used in production and
+
+12:26.140 --> 12:29.420
+have seen the entire journey and made many mistakes and have learned from them.
+
+12:29.420 --> 12:35.180
+And so with full knowledge, we step into this and say, okay, let's do this.
+
+12:35.180 --> 12:37.220
+So I'll give you the high level design points of mojo.
+
+12:37.220 --> 12:39.500
+As you know, it's a member of the Python family.
+
+12:39.500 --> 12:43.100
+Over time, it will grow into being a full superset because we don't want to do a Python
+
+12:43.100 --> 12:46.620
+two to three thing anymore to Python programmers.
+
+12:46.620 --> 12:51.260
+As we said before, it's focused on system programming, high performance, working backwards
+
+12:51.260 --> 12:55.260
+from the capability, the speed of light of hardware, definitely not working forwards
+
+12:55.260 --> 12:58.380
+from what Python can do today.
+
+12:58.380 --> 13:02.700
+Also lots of hardware, anything with the program counter can apply.
+
+13:02.700 --> 13:06.100
+But coming back to this also, and we'll talk about this a little bit, it's about unlocking
+
+13:06.100 --> 13:08.380
+the modular compiler stack.
+
+13:08.380 --> 13:12.620
+And so instead of talking about the high level fluffy stuff, I'll introduce Jeff and he can
+
+13:12.620 --> 13:15.500
+tell you a little bit more about how it actually works.
+
+13:15.500 --> 13:18.380
+Thanks Chris for the introduction.
+
+13:18.380 --> 13:23.500
+So we are started off by de-risking the core hypothesis and we have an MLIR based compiler
+
+13:23.500 --> 13:27.220
+that is different a little bit from the systems that predated it.
+
+13:27.220 --> 13:29.420
+And we've proven that we can be state of the art.
+
+13:29.420 --> 13:34.540
+The problem is that we've got like 50,000 lines of handwritten MLIR.
+
+13:34.540 --> 13:38.460
+And handwritten MLIR is like write once, read never.
+
+13:38.460 --> 13:42.260
+It's so verbose, you have to write the types every time you use an SSA value.
+
+13:42.260 --> 13:47.420
+It's pretty hard to actually write incorrect code, but then it's not readable, it's unmaintainable
+
+13:47.420 --> 13:51.420
+and the new people being brought into the company are like, what is this?
+
+13:51.420 --> 13:52.420
+So we need syntax.
+
+13:52.420 --> 13:56.060
+We need a programming language for MLIR.
+
+13:56.060 --> 13:57.540
+Why all MLIR?
+
+13:57.540 --> 14:01.460
+Well it turns out that modern computers are getting really complicated.
+
+14:01.460 --> 14:03.180
+Modern types are getting really complicated.
+
+14:03.180 --> 14:04.740
+Look at just floating points.
+
+14:04.740 --> 14:07.420
+Most languages, give or take, have a flow and a double.
+
+14:07.420 --> 14:12.620
+But MLIR has things like float 8, E4, M3, FNUS.
+
+14:12.620 --> 14:14.860
+I'm sure it's useful, okay?
+
+14:14.860 --> 14:16.740
+And that means that we need to have access to it.
+
+14:16.740 --> 14:19.940
+There's probably a piece of hardware somewhere on it that uses this data type and it's very
+
+14:19.940 --> 14:20.940
+fast.
+
+14:20.940 --> 14:23.140
+That's just the tip of the iceberg.
+
+14:23.140 --> 14:27.940
+MLIR is such a vast ecosystem with many different kinds of hardware targets, domain specific
+
+14:27.940 --> 14:29.460
+dialects and so on.
+
+14:29.460 --> 14:32.420
+And we would like Mojo to be able to take advantage of all of that.
+
+14:32.420 --> 14:36.340
+So we need syntax trigger for MLIR in general.
+
+14:36.340 --> 14:38.700
+And then how do we approach something like that?
+
+14:38.700 --> 14:40.700
+Well we start with the types.
+
+14:40.700 --> 14:44.700
+In a programming language, types tend to be the most load bearing element.
+
+14:44.700 --> 14:47.380
+You need types to do computations on them after all.
+
+14:47.380 --> 14:50.900
+So let's start by focusing on a library-based language.
+
+14:50.900 --> 14:54.860
+That means that we write all the parts of the language in the library.
+
+14:54.860 --> 14:57.740
+And the good news is anybody can write libraries.
+
+14:57.740 --> 15:02.380
+So this scales the effort of engineering to everyone in the world who can write Mojo.
+
+15:02.380 --> 15:04.620
+Not just a couple of people who work on the language.
+
+15:04.620 --> 15:07.660
+And that's really important because we don't want built-in types in the language to be
+
+15:07.660 --> 15:12.180
+special or be more performant than what you can enable in the library because that bottlenecks
+
+15:12.180 --> 15:16.020
+performance and the scalability of the system to the people who work on the language.
+
+15:16.020 --> 15:21.780
+So we need to give people who use the programming language library authors the same power as
+
+15:21.780 --> 15:24.620
+language engineers.
+
+15:24.620 --> 15:29.140
+It turns out actually that Python has a really extensible type system.
+
+15:29.140 --> 15:33.740
+You could argue that user-defined types in Python are actually much more powerful than
+
+15:33.740 --> 15:36.780
+the built-in types like interfloat.
+
+15:36.780 --> 15:42.460
+And the reason is because Python provides this kind of ability to encapsulate type semantics
+
+15:42.460 --> 15:46.060
+behind Dunder methods, which are really syntactic wrappers.
+
+15:46.060 --> 15:48.140
+So let's just use that in Mojo.
+
+15:48.140 --> 15:52.220
+We use a struct, which is like a class, but it's densely packed in performance, to wrap
+
+15:52.220 --> 15:53.220
+an MLR type.
+
+15:53.220 --> 15:58.900
+And then we use Dunder methods as well as class methods to wrap MLR operations.
+
+15:58.900 --> 16:01.660
+And what you get is any MLR type will work.
+
+16:01.660 --> 16:03.620
+Any MLR operation will work.
+
+16:03.620 --> 16:09.580
+And so now we have 1 plus 2, Dsugar is to an MLR op index.add.
+
+16:09.580 --> 16:12.900
+The other important aspect is we need to make sure that these user-defined abstractions
+
+16:12.900 --> 16:15.820
+feel native, that they're zero cost.
+
+16:15.820 --> 16:17.340
+So how does Mojo do that?
+
+16:17.340 --> 16:21.700
+Well, it has a couple of bells and whistles to tell the compiler that treat this type in
+
+16:21.700 --> 16:25.740
+a specific way, effectively giving a built-in-like experience.
+
+16:25.740 --> 16:29.980
+And one of these is they always inline no debug, which will always inline the function,
+
+16:29.980 --> 16:31.460
+no question about it.
+
+16:31.460 --> 16:34.780
+And for a better debugging experience, it nukes out all the debug info, so you don't
+
+16:34.780 --> 16:38.020
+step into a plus of an integer.
+
+16:38.020 --> 16:43.020
+So we put this all together, just these pieces of basic types, so you have a simple while
+
+16:43.020 --> 16:44.020
+loop in Mojo.
+
+16:44.020 --> 16:48.220
+Well, the parser will then spit a bunch of source-level IR, right?
+
+16:48.220 --> 16:52.380
+But then Mojo has guaranteed optimizations that run all the time, such as the always-inliner
+
+16:52.380 --> 16:54.180
+and memtoreg.
+
+16:54.180 --> 16:58.980
+And then this gets desugarred down to IR that is pretty close to what we would have written
+
+16:58.980 --> 16:59.980
+by hand.
+
+16:59.980 --> 17:04.660
+And that's important because it, from the get-go, provides a predictable IR-gen model
+
+17:04.660 --> 17:10.780
+for the programmer, and it helps us get an off-ramp from all the handwritten MLIR.
+
+17:10.780 --> 17:14.980
+But so it turns out we've actually discovered what MLIR really stands for.
+
+17:14.980 --> 17:19.780
+It's Mojo Fire Emoji Language Intermediate Representation.
+
+17:19.780 --> 17:22.700
+And the best part is your dialect works, too.
+
+17:22.700 --> 17:27.340
+So this is zero cost abstraction around any MLIR, so let's say you have a shape dialect
+
+17:27.420 --> 17:34.020
+with a mosh.ape type, and it implements plus to concat and subscript to getDim.
+
+17:34.020 --> 17:37.060
+Well, now you can write shape functions in Mojo.
+
+17:37.060 --> 17:40.660
+It spits out some IR that's been desugarred to, and then you can ingest this IR and do
+
+17:40.660 --> 17:43.620
+cool compiler stuff like shape inference.
+
+17:43.620 --> 17:46.700
+And the best part is all of the language tooling just works.
+
+17:46.700 --> 17:51.940
+So you get code completion, you get doc generation, you get syntax highlighting, and even debugging
+
+17:51.940 --> 17:54.300
+if that's relevant.
+
+17:54.300 --> 17:57.380
+But MLIR just forms the bottom level of the language.
+
+17:57.380 --> 18:01.220
+It's how we talk to the hardware, it's how we talk to the various dialects.
+
+18:01.220 --> 18:04.980
+Building on top of that requires high-level abstractions, and the way you do that in Mojo
+
+18:04.980 --> 18:06.780
+was metaprogramming.
+
+18:06.780 --> 18:11.020
+So Mojo needs to build hardware generality, and the way we do that is with metaprogramming.
+
+18:11.020 --> 18:15.540
+So you can write a kernel without caring about what the vector length is, and then, say,
+
+18:15.540 --> 18:18.740
+in this example, ask the compiler to pick one for you.
+
+18:18.740 --> 18:21.500
+It turns out that metaprogramming is also pretty cool.
+
+18:21.500 --> 18:26.300
+Texts are nice, code reuse is great, and it allows to have scalable development.
+
+18:26.300 --> 18:28.660
+So where can we look at for a metaprogramming system?
+
+18:28.660 --> 18:33.100
+Well, I actually like C++, I don't know about you, and C++ has templates.
+
+18:33.100 --> 18:35.100
+And duct typing in C++ is really powerful.
+
+18:35.100 --> 18:37.620
+Let's see, write some pretty crazy generic code.
+
+18:37.620 --> 18:40.740
+The problem with that is that the usability is poor.
+
+18:40.740 --> 18:44.580
+I think template error messages get better every year, but there's still some room to
+
+18:44.580 --> 18:45.780
+go.
+
+18:45.780 --> 18:51.220
+And it turns out that for the kind of metaprogramming, high-performance programming needs, C++
+
+18:51.420 --> 18:52.940
+just aren't good enough.
+
+18:52.940 --> 18:54.660
+So imagine you have a tensor type.
+
+18:54.660 --> 18:56.900
+It has a static or dynamic rank.
+
+18:56.900 --> 18:58.500
+It has a static or dynamic d-type.
+
+18:58.500 --> 19:01.220
+It has partially dynamic shape, partially dynamic stride.
+
+19:01.220 --> 19:02.940
+It gets ugly pretty quickly.
+
+19:02.940 --> 19:06.220
+So it's not good enough, and let's see if we can build something better.
+
+19:06.220 --> 19:11.780
+So it turns out, once again, Python actually has really powerful metaprogramming.
+
+19:11.780 --> 19:17.620
+Decorators can arbitrarily modify objects and return a function where there is a type.
+
+19:17.700 --> 19:22.260
+And with full AST reflection in Python is what enabled all these crazy libraries, such
+
+19:22.260 --> 19:26.940
+as the ML frameworks like PyTorch, Jaxx, and TensorFlow, as well as things like Numba.
+
+19:26.940 --> 19:30.580
+The problem with the Python metaprogramming is that it happens at runtime, which means
+
+19:30.580 --> 19:35.500
+it's slow, it's not going to run an accelerator, and it gives zero control over the generated
+
+19:35.500 --> 19:36.820
+code.
+
+19:36.820 --> 19:40.220
+So the challenge for us is let's try to do it at compile time.
+
+19:40.220 --> 19:42.020
+So that brings us to mojo parameters.
+
+19:42.020 --> 19:48.260
+Mojo parameters are compile time values that form the backbone of the metaprogramming system.
+
+19:48.260 --> 19:49.740
+So structs can have parameters.
+
+19:49.740 --> 19:51.500
+These are compile time values.
+
+19:51.500 --> 19:55.260
+Functions can have input parameters, and then you can declare name parameter values with
+
+19:55.260 --> 19:56.260
+alias declarations.
+
+19:56.260 --> 20:00.700
+So you can kind of think of them as being like C++ templates, but they're a little bit
+
+20:00.700 --> 20:01.700
+different.
+
+20:01.700 --> 20:06.300
+For example, in C++ you have using declarations for type aliases and constexpr declarations
+
+20:06.300 --> 20:07.820
+for compile time values.
+
+20:07.820 --> 20:13.660
+But in mojo, types are just compile time values, and so aliases and, say, compile time floats
+
+20:13.660 --> 20:17.300
+and compile time ints are the same thing.
+
+20:17.300 --> 20:21.060
+The most important thing that gives is that the meta language is the same as the actual
+
+20:21.060 --> 20:22.060
+language.
+
+20:22.060 --> 20:25.980
+And Zig really blaze the trail here by having no distinction between the metaprogram and
+
+20:25.980 --> 20:27.420
+the actual program.
+
+20:27.420 --> 20:32.460
+In mojo, we strive to ensure that almost any user-defined type and function can be used
+
+20:32.460 --> 20:35.500
+and called in a parameter expression at compile time.
+
+20:35.500 --> 20:41.220
+And the way we do that is with an MLI interpreter that has a full memory model.
+
+20:41.220 --> 20:43.940
+So to really drive this point home, we have an example here.
+
+20:43.940 --> 20:47.660
+It's fill a vector with a bunch of integers, OK, not too bad.
+
+20:47.660 --> 20:50.820
+This function can be called in either compile or runtime.
+
+20:50.820 --> 20:55.220
+And if it was called compile time, you can even return a type instance.
+
+20:55.220 --> 21:00.380
+And this vector has heap allocation that is computed at compile time and then used at
+
+21:00.380 --> 21:02.600
+runtime.
+
+21:02.600 --> 21:03.600
+So when does this happen?
+
+21:03.600 --> 21:08.880
+When do we do, say, instantiation of parameter values, function specialization, and interpreting
+
+21:08.880 --> 21:09.880
+of code?
+
+21:09.880 --> 21:13.000
+Well, it doesn't happen in the parser like in C++.
+
+21:13.000 --> 21:18.040
+So in mojo, we do parameter instantiation in a process called elaboration, and it happens
+
+21:18.040 --> 21:20.080
+later in the compiler pipeline.
+
+21:20.080 --> 21:25.240
+What that means is that now mojo needs a IR representation for parametric code.
+
+21:25.240 --> 21:31.000
+So in this example, we have a piece of IR, and we have a parameter in the IR called value.
+
+21:31.680 --> 21:34.520
+Importantly, this parametric IR is target agnostic.
+
+21:34.520 --> 21:35.520
+It's portable.
+
+21:35.520 --> 21:39.520
+So that means something like size of lives directly in the IR, and it is resolved by the
+
+21:39.520 --> 21:40.680
+elaborator.
+
+21:40.680 --> 21:45.320
+So this enables something like split compilation like CUDA, and perhaps one day separate compilation
+
+21:45.320 --> 21:47.880
+of generics like Swift.
+
+21:47.880 --> 21:54.800
+So the elaboration pass is an MLIR pass that performs function instantiation as an IR transformation.
+
+21:54.800 --> 21:58.640
+So in this piece of IR, we've got two calls to the function print int with two different
+
+21:58.640 --> 21:59.640
+parameters.
+
+21:59.640 --> 22:06.240
+It gets stamped out into two new functions, and the callers are replaced appropriately.
+
+22:06.240 --> 22:12.600
+One consequence of a pass to do elaboration is that the language is late bound by design.
+
+22:12.600 --> 22:16.320
+That poses a couple of language design challenges, but that means that you can do cool stuff
+
+22:16.320 --> 22:21.880
+like autotuning, where any parameter value can be autotuned, i.e., the elaborator says,
+
+22:21.880 --> 22:25.400
+oh, OK, width can be 2, 4, 8, 16, or 32.
+
+22:25.400 --> 22:31.080
+Then we just go have five instantiations of this function, and then use some benchmarking
+
+22:31.080 --> 22:32.600
+to pick the best one for you.
+
+22:32.600 --> 22:36.480
+So this is how we get the very bottom layer of hardware abstraction, where the programmer
+
+22:36.480 --> 22:41.640
+can write an algorithm, and then we let the programming language pick the best parameter
+
+22:41.640 --> 22:44.320
+for you.
+
+22:44.320 --> 22:48.480
+And this also allows us to avoid some of the performance problems of C++ templates.
+
+22:48.480 --> 22:51.760
+For example, let's see, you have a generic function, add.
+
+22:51.760 --> 22:55.360
+And for generality, we pass the arguments by const reference.
+
+22:55.360 --> 22:59.600
+Passing it by const reference is fine for a large struct type thing that doesn't fit
+
+22:59.600 --> 23:02.160
+nicely in registers like a string.
+
+23:02.160 --> 23:06.680
+But then for something like an integer, this ends up becoming const reference to an int,
+
+23:06.680 --> 23:09.280
+which for a trivial type like int is not very performant.
+
+23:09.280 --> 23:12.800
+And so if this function doesn't end up getting inlined, what ends up happening is the ints
+
+23:12.800 --> 23:13.800
+get pinned to the stack.
+
+23:13.800 --> 23:17.000
+This is bad for performance.
+
+23:17.000 --> 23:21.360
+With late elaboration and mojo, we can have late ABI lowering, which basically means that
+
+23:21.360 --> 23:24.200
+the source code is not the same as the ABI.
+
+23:24.200 --> 23:29.080
+And this makes language interop slightly more involved, but it's not that big of a deal.
+
+23:29.080 --> 23:33.640
+But what it means is that for a generic function, like add in mojo, when the elaborator instantiates
+
+23:33.640 --> 23:37.680
+the generic types, it can then change the calling conventions of the types to respect
+
+23:37.680 --> 23:39.680
+the guarantees that it has.
+
+23:39.680 --> 23:44.360
+So for a heavy type like string, it stays in memory, it gets passed around as a pointer,
+
+23:44.360 --> 23:45.360
+it's nice and efficient.
+
+23:45.360 --> 23:49.880
+But for an integer, it gets passed around in registers, in SSA registers, and returned
+
+23:49.880 --> 23:53.200
+out as a function result.
+
+23:53.200 --> 23:56.920
+So that's just an introduction to how mojo metaprogramming works.
+
+23:56.920 --> 24:01.320
+Let's talk now about more how the cogent architecture works and some of the more unique details
+
+24:01.320 --> 24:02.320
+of that.
+
+24:02.320 --> 24:06.760
+One of them is that the entire mojo compiler stack is driven by the ORCJIT from bottom to
+
+24:06.760 --> 24:07.760
+top.
+
+24:07.760 --> 24:11.320
+And this gives us lazy on-demand compilations so you don't compile things you don't have
+
+24:11.320 --> 24:12.320
+to.
+
+24:12.320 --> 24:16.080
+It enables responsive tooling, and it turns out that having a JIT is important for something
+
+24:16.080 --> 24:18.440
+like auto tuning in search.
+
+24:18.440 --> 24:22.440
+And we get compiler caching at each stage of the pipeline, meaning that you don't need
+
+24:22.440 --> 24:29.520
+something like Ccache to get code compilation caching.
+
+24:29.520 --> 24:35.480
+Well we also use ORCJIT not actually as a JIT, we use it to generate static code, like
+
+24:35.480 --> 24:37.840
+static archives and executables.
+
+24:37.840 --> 24:42.240
+And in the ORCJIT, we've built a really dumb but fast linker that just takes a bunch of
+
+24:42.240 --> 24:47.840
+object files, pulls out the symbols, and slams them together into a static archive.
+
+24:47.840 --> 24:51.920
+For a linker, we do call into the system linker.
+
+24:51.920 --> 24:57.600
+As we mentioned before, we have a pre-elaboration portable IR, but that also means that we can
+
+24:57.600 --> 25:02.520
+serialize this into MLR bytecode, and that makes mojo packages architecturally portable.
+
+25:02.520 --> 25:08.200
+A mojo package will contain this parser-level, source-level IR, as well as the pre-elaboration
+
+25:08.200 --> 25:14.080
+IR, and optionally, you have the post-elaboration and pre-compiled code for various targets.
+
+25:14.080 --> 25:18.960
+So what this means is you can ship mojo packages without source code, with just the bytecode.
+
+25:18.960 --> 25:23.480
+The parser is able to take out this source-level IR and reconstruct metadata, like function
+
+25:23.480 --> 25:27.000
+signatures and type members and so on.
+
+25:27.000 --> 25:32.360
+And with optimized and pre-compiled code in the packages, mojo packages become portable
+
+25:32.360 --> 25:33.800
+build caches.
+
+25:33.800 --> 25:38.280
+So if you're on a common system like an M1 Mac and you pull a mojo package, it will probably
+
+25:38.280 --> 25:42.600
+already have the pre-built code for you.
+
+25:42.600 --> 25:44.840
+So what does a compilation with a package look like?
+
+25:44.840 --> 25:49.160
+Well, if you start by importing a function from a package, the parser goes and reads out
+
+25:49.160 --> 25:54.520
+the declarations from the package, it will then lower into the full pre-elaboration IR,
+
+25:54.520 --> 25:58.320
+and the reason why you need the full parametric IR so that you can instantiate the function
+
+25:58.320 --> 26:04.080
+again, and so that the elaborate can call the interpreter on pre-compiled code.
+
+26:04.080 --> 26:08.240
+During elaboration, we don't re-optimize and re-stantiate all the functions, we just drop
+
+26:08.240 --> 26:13.440
+them out with the post-elaboration IR into the MLIR module.
+
+26:13.440 --> 26:18.200
+So that gives us LTO and MLIR, but I mean MLIR is pretty far away from link time, but
+
+26:18.200 --> 26:19.800
+it's a similar idea.
+
+26:19.800 --> 26:24.360
+But we actually trash these pre-compiled functions out of the IR before we go to LLVM,
+
+26:24.360 --> 26:26.120
+and that has some interesting implications.
+
+26:26.120 --> 26:33.520
+So mojo is a bit of an unusual, probably slightly controversial user of LLVM.
+
+26:33.520 --> 26:35.080
+So LLVM is fantastic.
+
+26:35.080 --> 26:37.360
+We love LLVM, we love everyone here.
+
+26:37.360 --> 26:39.280
+But it's got a couple of issues.
+
+26:39.280 --> 26:42.520
+The most standout of these is that it's single-threaded.
+
+26:42.520 --> 26:47.480
+And what that means is on a modern system like an AWS 192 core machine, you get arbitrary
+
+26:47.480 --> 26:49.040
+slowdown for compilation speeds.
+
+26:49.040 --> 26:51.040
+You only use one core.
+
+26:51.040 --> 26:54.520
+The other problem with LLVM is it's got a couple of passes that don't tend to be strong
+
+26:54.520 --> 26:58.320
+enough for our use cases, and they're difficult to control and predict.
+
+26:58.320 --> 27:01.960
+A lot of the stuff in LLVM was built for something like Clang, but in mojo, we'd really love
+
+27:01.960 --> 27:06.000
+to be able to autotune and unroll factor.
+
+27:06.000 --> 27:08.120
+So the good news is that MLIR is a thing.
+
+27:08.120 --> 27:10.520
+So let's focus on the excellent strengths of LLVM.
+
+27:10.520 --> 27:15.320
+LLVM is great at stuff like scalar optimizations from instance to combine, and other function
+
+27:15.320 --> 27:18.440
+level optimizations like loop strength reduction.
+
+27:18.440 --> 27:23.560
+We ended up disabling passes like the vectorizer, the loop unroller, and even the inliner, as
+
+27:23.560 --> 27:25.680
+well as a couple of the other IPO passes.
+
+27:25.680 --> 27:30.200
+And the solution is to replace them in MLIR where we get intrapass parallelism and push
+
+27:30.200 --> 27:33.560
+many of these optimizations out into the library, which is something that Abdul will
+
+27:33.560 --> 27:35.960
+talk about in a bit.
+
+27:35.960 --> 27:40.400
+So what happens when you get rid of all of the IPO passes while you get to use LLVM
+
+27:40.400 --> 27:45.000
+as a perfunction code generator, this gives you full code gen parallelism at a function
+
+27:45.000 --> 27:47.520
+level across the entire stack.
+
+27:47.520 --> 27:51.360
+And what that means is that pretty much the entire mojo compiler pipeline is fully paralyzed
+
+27:51.360 --> 27:53.640
+except for the linker and the parser.
+
+27:53.640 --> 27:56.600
+Parser could be paralyzed one day.
+
+27:56.600 --> 28:00.600
+And that's really just the tip of the iceberg and what we could fit into one presentation.
+
+28:00.600 --> 28:04.400
+There's so much more to mojo, and there'll probably be more talks coming in the future,
+
+28:04.440 --> 28:15.680
+but for now I'll pass it over to Abdul to show you all how to write some fast code in mojo.
+
+28:15.680 --> 28:21.520
+So going back to what Chris said at the very beginning, we had a hypothesis to begin with.
+
+28:21.520 --> 28:22.920
+We want to write fast code.
+
+28:22.920 --> 28:26.120
+That's why mojo was written to begin with.
+
+28:26.120 --> 28:30.440
+We wrote things when MLIR, we've proven a lot of the tech.
+
+28:30.440 --> 28:34.360
+Let's write things in mojo and let's show the performance.
+
+28:34.360 --> 28:35.600
+So let's step back.
+
+28:35.600 --> 28:41.200
+How does existing performance libraries, how are they built today?
+
+28:41.200 --> 28:45.680
+Well, the short answer is whatever it takes to get performance.
+
+28:45.680 --> 28:53.360
+There's no style guide or anything like that that's usually maintained.
+
+28:53.360 --> 28:58.120
+That also means there's a lot of suffering because there's lack of tooling, et cetera.
+
+28:58.120 --> 29:00.680
+So what people do is they write things in assembly.
+
+29:00.680 --> 29:02.320
+Oh, great.
+
+29:02.640 --> 29:03.960
+Please don't.
+
+29:03.960 --> 29:07.960
+It's not a super productive programming language.
+
+29:07.960 --> 29:11.760
+Others build compilers as C++ templates.
+
+29:11.760 --> 29:16.560
+And God forbid, you mess like one of the sevens becomes a six,
+
+29:16.560 --> 29:21.360
+and you get some nasty error message.
+
+29:21.360 --> 29:26.680
+Others build C++ DSLs that generate ASMs.
+
+29:26.680 --> 29:31.560
+Others write Python programs that generate assembly.
+
+29:31.600 --> 29:37.080
+Others write Python templates that generate C++ templates that you feed into client.
+
+29:38.400 --> 29:41.200
+And these are not research projects.
+
+29:41.200 --> 29:44.120
+These are production libraries that are used today.
+
+29:44.120 --> 29:46.280
+You probably used one already.
+
+29:46.280 --> 29:48.800
+These are by the big companies.
+
+29:51.080 --> 29:53.800
+And as a result, you're kind of losing a lot of things.
+
+29:53.800 --> 29:57.560
+You lose on maintainability, debugging, tooling, and
+
+29:57.560 --> 30:01.040
+becomes hard to develop and iterates on these performance libraries.
+
+30:01.040 --> 30:03.560
+And that's why they call them performance ninjas, right?
+
+30:03.560 --> 30:08.080
+You lock them in a room, give them some coffee, and then they give you speed up.
+
+30:09.280 --> 30:10.360
+And we don't want to do that.
+
+30:10.360 --> 30:11.520
+We want to reduce suffering.
+
+30:12.800 --> 30:16.760
+The other thing is what happens is these performance libraries are pre-built and
+
+30:16.760 --> 30:21.120
+shipped as kind of black box binaries.
+
+30:21.120 --> 30:25.400
+And what that means is you've encoded, when you built ahead of time,
+
+30:25.400 --> 30:30.080
+you've encoded all the hardware semantics, tile factors, etc.
+
+30:30.120 --> 30:33.440
+In the library, you've made it into a black box, so
+
+30:33.440 --> 30:37.800
+other higher level things in the stack, like a graph compiler,
+
+30:37.800 --> 30:41.200
+cannot reason about what the library is doing.
+
+30:42.200 --> 30:47.480
+You've also encoded specialized patterns, popular things like a resonant block or
+
+30:47.480 --> 30:49.960
+a transformer block into your library.
+
+30:49.960 --> 30:56.000
+And what happens if there's a transformer version two or a resonant 53?
+
+30:56.000 --> 30:57.760
+You're kind of screwed in that domain.
+
+30:58.120 --> 31:01.440
+There's other things, like there's no consistent API.
+
+31:01.440 --> 31:06.440
+There's BLOSS, there's BLIS, there's 1DNN, etc.
+
+31:06.440 --> 31:08.680
+And the distribution store is even worse.
+
+31:08.680 --> 31:11.120
+There's a 1DNN and there's a ZNDNN.
+
+31:11.120 --> 31:15.760
+But then if you are on ARM, you have to use something else as well.
+
+31:15.760 --> 31:17.960
+So we want to solve all of these things.
+
+31:17.960 --> 31:20.200
+And that's the reason why we built Mojo.
+
+31:20.200 --> 31:24.240
+We built it to solve our problem of writing high performance libraries.
+
+31:24.800 --> 31:30.000
+And the first thing we want to make sure is the developer is happy.
+
+31:31.440 --> 31:34.960
+And they have all the tools that they need to be productive.
+
+31:34.960 --> 31:38.120
+So rather than, as kind of Chris mentioned,
+
+31:38.120 --> 31:41.080
+a lot of developers are not compiler engineers.
+
+31:41.080 --> 31:47.240
+They can write libraries, they probably cannot go and write a pass and so on.
+
+31:47.240 --> 31:49.160
+So let's put optimizations in the library and
+
+31:49.160 --> 31:51.440
+I'll have some examples later on.
+
+31:51.440 --> 31:54.440
+Let's also leverage what computers are good at.
+
+31:54.440 --> 32:00.160
+So when I was in grad school, a lot of grad students were essentially
+
+32:00.160 --> 32:01.600
+grid searchers.
+
+32:01.600 --> 32:04.640
+They would just enumerate everything, try 50 things.
+
+32:04.640 --> 32:07.520
+You lock them again in a room for a month and
+
+32:07.520 --> 32:10.920
+they say, oh, the best tile factor is six and four and so on.
+
+32:11.960 --> 32:13.760
+Let's not do that, let's use computers.
+
+32:13.760 --> 32:15.800
+Computers are great at these sort of things.
+
+32:15.800 --> 32:19.160
+They can scan things, you can do smart searches and so on.
+
+32:19.160 --> 32:20.640
+So let's use auto tuning.
+
+32:20.640 --> 32:23.880
+Let's use algorithmic selection and let's build that in the language.
+
+32:25.000 --> 32:29.800
+And let's make sure that we have tooling to make these people productive.
+
+32:29.800 --> 32:35.600
+Debuggers, how do you debug the Python template that generates C++
+
+32:35.600 --> 32:38.560
+template that does something else?
+
+32:38.560 --> 32:41.960
+It's hard to begin with to debug C++ templates.
+
+32:45.000 --> 32:49.760
+Let's also build a language that's aware of the 21st century.
+
+32:49.760 --> 32:53.240
+So SIMDs are a thing.
+
+32:53.240 --> 32:55.280
+So let's be SIMD first.
+
+32:55.280 --> 33:00.320
+Let's have scalars to be a degenerate form of SIMD, a SIMD of length one.
+
+33:00.320 --> 33:01.760
+And make the SIMD parametric.
+
+33:01.760 --> 33:06.360
+Let's also make the library, the one we ship, the standard library.
+
+33:06.360 --> 33:09.520
+Have first class support for SIMD types.
+
+33:09.520 --> 33:11.680
+Also multi-core is a thing.
+
+33:11.680 --> 33:13.440
+So let's build parallelism and
+
+33:13.440 --> 33:15.200
+asynchronous into the language as well.
+
+33:15.200 --> 33:21.280
+And finally, we can have these nice things.
+
+33:21.280 --> 33:25.880
+But sometimes people are like, I want my assembly back.
+
+33:25.880 --> 33:28.000
+Or I want to use the LLVM intrinsic.
+
+33:28.000 --> 33:31.800
+Well, all of this is built on top of MLIR and LLVM.
+
+33:31.800 --> 33:35.840
+So you can get any of the intrinsics that you want.
+
+33:35.840 --> 33:37.800
+You can reach into them.
+
+33:37.800 --> 33:42.360
+You can also write inline assembly, which is kind of interesting given that
+
+33:42.360 --> 33:45.640
+you're in a Python syntax language.
+
+33:47.240 --> 33:49.040
+And you can target any LLVM back end.
+
+33:49.040 --> 33:52.000
+So we're not like, we're standing on the shoulders of giants.
+
+33:52.000 --> 33:57.280
+So we're leveraging all LLVM and MLIR back end infra to do that.
+
+33:57.280 --> 33:58.720
+Let's also not build a DSL.
+
+33:58.720 --> 34:02.320
+So even though some of our use cases is AI,
+
+34:02.320 --> 34:04.240
+the programming language should be general.
+
+34:04.240 --> 34:08.560
+I should be able to do some operations in Mojo, but
+
+34:08.560 --> 34:13.360
+then do the plotting through our Python integration.
+
+34:13.360 --> 34:15.640
+And that requires a general purpose programming language.
+
+34:17.840 --> 34:22.040
+So one of the things that we made a decision on is let's make the kind of
+
+34:22.040 --> 34:26.280
+compiler lean and let's move a lot of the optimizations and
+
+34:26.280 --> 34:32.360
+the infra to be kind of functions in the Mojo library.
+
+34:33.480 --> 34:37.280
+So we use very limited number of dialects in MLIR core.
+
+34:37.280 --> 34:39.640
+And I know this might be controversial.
+
+34:39.640 --> 34:43.960
+So we're not using vector, arith, lin-alg, or any of these dialects.
+
+34:43.960 --> 34:46.240
+MVVM, any of these dialects.
+
+34:46.240 --> 34:48.360
+We're only using the LLVM and index dialect.
+
+34:49.640 --> 34:51.600
+And there's a bunch of reasons for them.
+
+34:51.600 --> 34:53.680
+Sometimes they're not general enough.
+
+34:53.680 --> 34:56.400
+Sometimes they don't fit in our use case.
+
+34:56.400 --> 34:58.560
+They bring in a lot of code that we don't care about.
+
+34:58.560 --> 35:02.720
+And there's like, for the lack of better terms, sometimes like cyclic
+
+35:02.720 --> 35:03.680
+dependencies and so on.
+
+35:04.640 --> 35:08.960
+And we, having a lot of the functionality in Mojo code means you
+
+35:08.960 --> 35:10.400
+could iterate a lot more quickly.
+
+35:11.440 --> 35:16.760
+So let's implement something like a vector dialect type of thing in Mojo.
+
+35:16.760 --> 35:21.440
+So we have the simd type and we have a function called reduce max.
+
+35:21.440 --> 35:25.120
+And if the size of the width of the simd vector is one,
+
+35:25.120 --> 35:26.640
+we're just gonna return the scalar directly.
+
+35:27.760 --> 35:32.280
+If we're on x86, it ends up like there's a LVM has an instruction for
+
+35:32.280 --> 35:35.240
+horizontal addition or horizontal max.
+
+35:35.240 --> 35:37.960
+That's not great for Intel.
+
+35:37.960 --> 35:40.040
+So we could do a kind of a tree reduction thing.
+
+35:41.360 --> 35:44.320
+But if it's floating points, we use a different algorithm and
+
+35:44.320 --> 35:46.120
+we call it directly to an LLVM intrinsic.
+
+35:47.640 --> 35:51.520
+This is compared to how the vector dialect lowers.
+
+35:51.520 --> 35:55.240
+You're writing essentially the same stuff minus the special case for
+
+35:55.240 --> 35:58.560
+x86 in essentially C++ code.
+
+35:58.560 --> 36:00.360
+So we'll lower our directory to the LLVM dialect.
+
+36:00.760 --> 36:05.560
+We could also do similar things like transforms.
+
+36:05.560 --> 36:09.160
+So as Jeff mentioned, we disabled the LLVM vectorizer.
+
+36:09.160 --> 36:14.080
+And instead, we have folks be kind of opt in to the vectorizer.
+
+36:14.080 --> 36:18.240
+And we've implemented a vectorizer in these five lines of code.
+
+36:19.240 --> 36:25.120
+So in one case, we've parameterized the function on the simd width.
+
+36:25.120 --> 36:28.880
+And we're gonna call it for the specific simd width.
+
+36:28.880 --> 36:32.680
+And in the leftovers, we're gonna call the function with a value of one.
+
+36:35.960 --> 36:38.320
+So what does this mean to the developers?
+
+36:38.320 --> 36:41.000
+It means that when you're trying to do an optimization,
+
+36:41.000 --> 36:44.440
+when you're trying to add a new feature or target a new hardware,
+
+36:44.440 --> 36:47.280
+the first thing is not, I'm gonna need to write a dialect or
+
+36:47.280 --> 36:48.960
+I'm gonna reach into TableGen.
+
+36:48.960 --> 36:51.400
+The first thing is, I'm gonna reach into Mojo and
+
+36:51.400 --> 36:53.360
+I'm gonna do experiments and so on.
+
+36:53.360 --> 36:57.200
+You can invent new optimizations, weird ones, incorrect ones.
+
+36:57.200 --> 37:00.880
+Or maybe even point to optimizations that only works in this function,
+
+37:00.880 --> 37:02.320
+in this domain, in this context.
+
+37:04.600 --> 37:08.320
+This is all fine, but I care about performance.
+
+37:08.320 --> 37:11.760
+I'm also a compiler engineer, but I ultimately care about performance.
+
+37:11.760 --> 37:13.320
+So let's look at the performance of Mojo.
+
+37:14.960 --> 37:18.160
+So one thing that people anchor on is the Mandelbrot set.
+
+37:18.160 --> 37:23.160
+The Mandelbrot set, we have a blog post that was recently published.
+
+37:23.160 --> 37:25.240
+But essentially, at the end of the blog post,
+
+37:25.240 --> 37:28.320
+you end up with this 10 lines of code.
+
+37:28.320 --> 37:34.200
+And if you run this 10 lines of code, you get 68,000 times faster than Python.
+
+37:36.120 --> 37:38.200
+And you can kind of see the progression.
+
+37:38.200 --> 37:42.880
+You can look at the blog post after this presentation.
+
+37:42.880 --> 37:50.720
+There's a progression how to go to 90x faster all the way to 68,000 faster.
+
+37:50.720 --> 37:53.600
+But at the end of the day, this is the code that you're gonna see.
+
+37:55.320 --> 37:57.640
+But nobody cares about Mandelbrot.
+
+37:57.640 --> 37:59.880
+You can just waste a cheat in Mandelbrot.
+
+37:59.880 --> 38:02.760
+We're not cheating here, but nobody cares about Mandelbrot.
+
+38:02.760 --> 38:04.480
+So let's solve a hard problem.
+
+38:05.680 --> 38:07.840
+So let's look at matrix multiplication.
+
+38:07.840 --> 38:12.600
+So matrix multiplication has been studied since a lot of us have been born.
+
+38:12.600 --> 38:19.240
+There's also a lot more papers that were published this year about matrix multiplication.
+
+38:19.240 --> 38:20.400
+It's also difficult.
+
+38:20.400 --> 38:25.720
+The problem is dependent on the cache size and micro-architecture.
+
+38:25.720 --> 38:30.520
+It's also a core part of LA-PAC and the ML system,
+
+38:30.520 --> 38:34.600
+which means hardware companies to go in the top 500 supercomputers,
+
+38:34.600 --> 38:36.320
+they have to optimize MathMol.
+
+38:36.320 --> 38:40.600
+Or to be on the top of the ML perf, they need to optimize MathMol.
+
+38:40.600 --> 38:45.680
+So a lot of effort goes into optimizing MathMol.
+
+38:46.240 --> 38:52.520
+And these libraries have been developed for decades before some of us were born as well.
+
+38:52.520 --> 38:59.960
+But we also don't want to write the Python template that generates C++ template that
+
+38:59.960 --> 39:02.600
+maybe goes to Python again and so on.
+
+39:02.600 --> 39:05.120
+Let's be principled.
+
+39:05.120 --> 39:09.000
+So let's have a few kind of core things that we want from our MathMol.
+
+39:09.000 --> 39:11.040
+We want a single source of truth.
+
+39:11.040 --> 39:14.240
+We don't want to have multiple files.
+
+39:14.800 --> 39:18.040
+We want to have one implementation.
+
+39:18.040 --> 39:23.080
+We want it to be as fast or compete with state of the art.
+
+39:23.080 --> 39:27.320
+Even though we can read assembly and we can program C++, let's not do that.
+
+39:27.320 --> 39:29.320
+Let's write everything in mojo.
+
+39:29.320 --> 39:34.440
+Let's make it fusible and do fancy stuff, support dynamic shape,
+
+39:34.440 --> 39:36.720
+and work on multiple architectures, et cetera.
+
+39:36.720 --> 39:40.160
+Our core hypothesis from the very beginning.
+
+39:40.160 --> 39:42.640
+And here's what we ended up with.
+
+39:42.640 --> 39:45.800
+So this is, again, a blog post from a few months ago.
+
+39:45.800 --> 39:47.320
+We're actually faster than this now.
+
+39:47.320 --> 39:52.920
+But we can compare against the best in class on their hardware.
+
+39:52.920 --> 39:59.320
+So we're 1.4x faster than Intel on Skylake systems.
+
+39:59.320 --> 40:00.800
+And this is fully dynamic.
+
+40:00.800 --> 40:02.240
+We're not specializing on shape.
+
+40:02.240 --> 40:04.560
+We're not doing prepacking.
+
+40:04.560 --> 40:08.000
+I wish we were doing tricks.
+
+40:08.000 --> 40:10.400
+It's easy to get these results if we were doing tricks.
+
+40:10.400 --> 40:12.080
+But that's what we're doing.
+
+40:12.080 --> 40:14.000
+And we have no inline assembly.
+
+40:14.000 --> 40:18.680
+Unless we run the same code, but now on Intel, or sorry, on AMD,
+
+40:18.680 --> 40:20.560
+we're 1.6x faster.
+
+40:20.560 --> 40:26.280
+Do the same thing, but on ARM, we're 1.2x faster.
+
+40:26.280 --> 40:31.040
+In fact, our implementation is about 2,000 lines of code.
+
+40:31.040 --> 40:34.800
+This is a toy implementation, but this is putting everything together.
+
+40:34.800 --> 40:37.320
+The interesting thing about this toy implementation
+
+40:37.320 --> 40:41.280
+is this is what the llama.mojo, there's a public GitHub
+
+40:41.320 --> 40:43.840
+repo that's using this.
+
+40:43.840 --> 40:46.280
+And this implementation, using this,
+
+40:46.280 --> 40:50.880
+they are beating the llama.cpp implementation that's public.
+
+40:50.880 --> 40:55.080
+So with that, we've validated our hypothesis.
+
+40:55.080 --> 41:02.160
+You can build portable performance libraries with less suffering.
+
+41:02.160 --> 41:05.960
+And with that, I'm going to hand it off to Chris.
+
+41:05.960 --> 41:06.460
+Right.
+
+41:06.460 --> 41:08.160
+Give it to him.
+
+41:08.160 --> 41:09.160
+Awesome.
+
+41:09.160 --> 41:12.960
+So to wrap things up, Mojo is still early in development,
+
+41:12.960 --> 41:13.760
+as we talked about.
+
+41:13.760 --> 41:16.280
+There's still a lot more that is yet to be done.
+
+41:16.280 --> 41:18.480
+One of the things we're doing that's, I think, pretty cool
+
+41:18.480 --> 41:20.120
+is we're developing this all in public.
+
+41:20.120 --> 41:21.120
+And so we have a roadmap.
+
+41:21.120 --> 41:22.800
+You can go see what we're doing.
+
+41:22.800 --> 41:25.280
+We have new releases that come out very frequently.
+
+41:25.280 --> 41:27.240
+Now, one of the questions we get asked all the time
+
+41:27.240 --> 41:30.760
+is, does a modular open source anything, right?
+
+41:30.760 --> 41:32.960
+And so the answer comes in twofold.
+
+41:32.960 --> 41:34.040
+One is yes.
+
+41:34.040 --> 41:36.000
+We have upstream stuff all of the time,
+
+41:36.000 --> 41:39.000
+including tons of core improvements to MLR.
+
+41:39.000 --> 41:41.960
+Apparently, the interpreter that Jeff was talking about on Tuesday
+
+41:41.960 --> 41:44.200
+is very popular, and so we can work on that.
+
+41:44.200 --> 41:49.360
+And so we're very good open source systems from that respect.
+
+41:49.360 --> 41:52.400
+Mojo itself, I think we'll take a little bit longer,
+
+41:52.400 --> 41:55.120
+but we want to start the open source process later this year.
+
+41:55.120 --> 41:56.440
+And so we'll start working on that.
+
+41:56.440 --> 41:58.200
+And I expect that to take some time,
+
+41:58.200 --> 42:00.400
+because we want to make sure that we get the core design really
+
+42:00.400 --> 42:00.760
+right.
+
+42:00.760 --> 42:03.560
+And not everything is best done with design by committee,
+
+42:03.560 --> 42:05.520
+but we really want to see this thing scale and go
+
+42:05.520 --> 42:08.360
+and have a big impact for the world.
+
+42:08.400 --> 42:10.080
+So coming back all the way to the beginning,
+
+42:10.080 --> 42:12.920
+we talked about AI and the AI engine and this kind of stuff.
+
+42:12.920 --> 42:14.880
+Now, we don't have time to talk about it today,
+
+42:14.880 --> 42:18.040
+but the cool thing about what Mojo means for the AI engine
+
+42:18.040 --> 42:20.240
+is that you can actually tackle these heterogeneous compute
+
+42:20.240 --> 42:22.520
+problems, because you can finally scale across lots
+
+42:22.520 --> 42:24.080
+of different hardware.
+
+42:24.080 --> 42:26.000
+And this is really cool.
+
+42:26.000 --> 42:27.640
+We don't have time to talk about it today.
+
+42:27.640 --> 42:30.320
+If you're interested, we have a keynote at the NURPS conference
+
+42:30.320 --> 42:34.040
+later this year, where we'll talk about more about this in detail.
+
+42:34.040 --> 42:35.760
+So with that, I think that's the end of our talk,
+
+42:35.760 --> 42:37.720
+and we're very happy to take any questions.
+
+42:37.720 --> 42:39.720
+If you'd like to check out Mojo, you can go to the web page,
+
+42:39.720 --> 42:42.160
+read about it, download it, and use it today.
+
+42:42.160 --> 42:42.660
+Thank you.
+
+42:42.660 --> 42:43.160
+Thank you.
+
+42:49.880 --> 42:52.200
+Thank you, Chris, Abdul, and Jeff.
+
+42:52.200 --> 42:53.200
+Are there any questions?
+
+42:53.200 --> 42:55.720
+Do you have mics in the alleys?
+
+42:55.720 --> 42:56.720
+Good timing.
+
+42:56.720 --> 42:59.200
+Yeah, thanks.
+
+42:59.200 --> 43:04.480
+Thanks for the great talk.
+
+43:04.480 --> 43:07.160
+My question is, I haven't seen anything
+
+43:07.160 --> 43:09.880
+about GPU offloading in your slide.
+
+43:09.880 --> 43:15.480
+Is that in plan, or what are you intent to do with it?
+
+43:15.480 --> 43:17.600
+So there is one bullet point, actually,
+
+43:17.600 --> 43:19.320
+on that there's so much more.
+
+43:19.320 --> 43:23.160
+And yeah, Mojo does actually support GPU offloading
+
+43:23.160 --> 43:25.480
+and split compilation like CUDA, but it's something
+
+43:25.480 --> 43:27.480
+that we did not talk about in the presentation,
+
+43:27.480 --> 43:29.760
+which we'd like to talk about in the future.
+
+43:29.760 --> 43:30.260
+Yeah.
+
+43:30.260 --> 43:32.880
+Thank you.
+
+43:32.920 --> 43:33.760
+Hi.
+
+43:33.760 --> 43:36.360
+You mentioned that you don't need to use Ccache,
+
+43:36.360 --> 43:38.880
+because you kind of mentioned that.
+
+43:38.880 --> 43:40.440
+Can you elaborate that a little bit?
+
+43:40.440 --> 43:42.520
+How are you guys dealing with caching?
+
+43:42.520 --> 43:45.560
+So it turns out that MLIR has a nice serializable format
+
+43:45.560 --> 43:47.560
+called bytecode.
+
+43:47.560 --> 43:49.880
+But bytecode provides a predictable hashing.
+
+43:49.880 --> 43:52.000
+And so we can use MLIR bytecode as the form
+
+43:52.000 --> 43:56.040
+to hash and cache compiler transformations across the stack.
+
+43:56.040 --> 43:56.540
+OK.
+
+43:56.540 --> 43:57.040
+Thank you.
+
+43:57.040 --> 43:59.600
+We also didn't have time to talk about this whole distributed
+
+43:59.600 --> 44:01.520
+cache backing this thing.
+
+44:01.520 --> 44:04.360
+And there's a whole bunch of fancy stuff put into it.
+
+44:08.320 --> 44:10.480
+How are you doing the autotuning?
+
+44:10.480 --> 44:13.360
+Is it offline, or is it dynamically online?
+
+44:13.360 --> 44:18.160
+And how do you define the objective function for the search?
+
+44:18.160 --> 44:19.880
+Yeah, so you have a choice.
+
+44:19.880 --> 44:21.640
+You could do it offline or online.
+
+44:21.640 --> 44:25.560
+If you compile to that O file, you've done it offline.
+
+44:25.560 --> 44:28.680
+The objective function right now is something
+
+44:28.720 --> 44:32.720
+that the user provides, because it's data size,
+
+44:32.720 --> 44:36.080
+dependent, hardware dependent, and so on.
+
+44:36.080 --> 44:37.960
+So it's up to you to define that.
+
+44:37.960 --> 44:41.240
+We do provide a benchmark module so that it
+
+44:41.240 --> 44:44.360
+makes benchmarking a lot simpler.
+
+44:44.360 --> 44:46.800
+And that allows you to do that.
+
+44:46.800 --> 44:50.360
+If you're doing it online, how do you control for variation
+
+44:50.360 --> 44:51.760
+in data, or do you rely on?
+
+44:51.760 --> 44:54.200
+So the benchmark library that we provide
+
+44:54.200 --> 45:00.000
+has a good number of iterations and so on
+
+45:00.000 --> 45:02.120
+until you get stability and so on.
+
+45:02.120 --> 45:03.720
+So it handles that.
+
+45:03.720 --> 45:07.400
+Oh, so it's not actually in production autotuning?
+
+45:07.400 --> 45:11.800
+We use autotuning today, so I don't know what.
+
+45:11.800 --> 45:14.880
+So there's core capabilities, then there's future stuff also.
+
+45:14.880 --> 45:16.680
+I mean, one of the things that it's designed for,
+
+45:16.680 --> 45:20.280
+but we haven't actually done, is send the IR to an FPGA
+
+45:20.280 --> 45:22.680
+and do evaluation remotely, and then pull it back,
+
+45:22.680 --> 45:23.560
+and things like this.
+
+45:23.840 --> 45:25.520
+Or a simulator.
+
+45:25.520 --> 45:26.520
+Exactly.
+
+45:30.520 --> 45:34.640
+There was a point in the slide about optimization in the,
+
+45:34.640 --> 45:36.600
+providing optimization in the library,
+
+45:36.600 --> 45:38.480
+as opposed to the compiler.
+
+45:38.480 --> 45:43.000
+Are there any, maybe I misunderstood this,
+
+45:43.000 --> 45:46.560
+but from my understanding, it's possible
+
+45:46.560 --> 45:48.440
+to come into performance pitfalls,
+
+45:48.440 --> 45:52.200
+because C++ has built in likely, built in unlikely,
+
+45:52.200 --> 45:55.800
+and then you can, it's really easy to misuse those
+
+45:55.800 --> 45:58.240
+and end up in a situation where your code is slower
+
+45:58.240 --> 46:01.080
+than without these kinds of annotations.
+
+46:01.080 --> 46:03.200
+So my question would be, what happens
+
+46:03.200 --> 46:06.360
+if a user-provided annotation conflicts
+
+46:06.360 --> 46:07.840
+with something that the compiler
+
+46:07.840 --> 46:10.000
+would also have done at the same time?
+
+46:10.000 --> 46:12.400
+Well, so from a compiler design perspective,
+
+46:12.400 --> 46:13.520
+one of the things Jeff was talking about
+
+46:13.520 --> 46:16.000
+is we've removed, not all, but a lot
+
+46:16.000 --> 46:19.760
+of the super unpredictable things in the LVM optimizer.
+
+46:19.800 --> 46:21.720
+So our goal is to give full control
+
+46:21.720 --> 46:23.600
+and predictability to the programmer,
+
+46:23.600 --> 46:26.600
+which is very different from the make-spec-go-fast
+
+46:26.600 --> 46:28.360
+kind of approach to compiler design.
+
+46:28.360 --> 46:30.040
+And what that does is that gives you the ability
+
+46:30.040 --> 46:31.960
+to then go and design library features
+
+46:31.960 --> 46:34.440
+that do things like, you know, you can,
+
+46:34.440 --> 46:35.280
+Julian, you can talk about
+
+46:35.280 --> 46:37.480
+some of the crazy stuff you've done.
+
+46:37.480 --> 46:41.360
+What's also important is that we have these abilities
+
+46:41.360 --> 46:42.680
+to say, please vectorize this loop,
+
+46:42.680 --> 46:44.440
+please unroll this loop, and so on.
+
+46:44.440 --> 46:46.920
+But not everyone who's writing, say, application code
+
+46:46.920 --> 46:49.040
+is going to think about vectorizing every single loop
+
+46:49.040 --> 46:50.520
+and auto-tuning every other loop.
+
+46:50.520 --> 46:52.640
+So what's important is that we provide control
+
+46:52.640 --> 46:55.040
+to the users who care, but also provide
+
+46:55.040 --> 46:58.840
+a default experience that is good and optimal
+
+46:58.840 --> 47:00.360
+and the compiler does its best.
+
+47:00.360 --> 47:01.880
+But the important thing is what the user says
+
+47:01.880 --> 47:03.080
+will always take precedent.
+
+47:03.080 --> 47:04.600
+And that's how you get control.
+
+47:04.600 --> 47:06.240
+Sometimes a compiler does things
+
+47:06.240 --> 47:08.920
+and you end up with code that says, you know,
+
+47:08.920 --> 47:12.600
+optimize, compile the section of code with dash O zero
+
+47:12.600 --> 47:13.440
+type of stuff.
+
+47:13.440 --> 47:17.080
+And you kind of want to opt out of compiler optimization
+
+47:17.080 --> 47:20.040
+because it's interfering with how you laid out your code.
+
+47:22.520 --> 47:24.240
+Are there any plans?
+
+47:24.240 --> 47:25.560
+I have a follow-up question.
+
+47:25.560 --> 47:26.400
+Sure.
+
+47:26.400 --> 47:27.600
+Okay, come afterwards.
+
+47:27.600 --> 47:28.800
+Last question, please.
+
+47:28.800 --> 47:32.560
+Hi, so you mentioned that you only use two dialects
+
+47:32.560 --> 47:35.960
+in Mojo, LLVM and index dialect.
+
+47:35.960 --> 47:37.680
+Two upstream dialects.
+
+47:37.680 --> 47:38.520
+Two upstream.
+
+47:38.520 --> 47:40.280
+Okay, so you don't use other things
+
+47:40.280 --> 47:42.520
+like affine and stuff, which means that
+
+47:42.520 --> 47:46.520
+if you want to use hardware specialized libraries,
+
+47:46.520 --> 47:48.880
+then the programmer has to do different tiling
+
+47:48.880 --> 47:53.160
+for ampere versus hopper versus Volta and so on.
+
+47:53.160 --> 47:55.080
+So isn't that just pushing the burden out
+
+47:55.080 --> 47:57.400
+from the compiler and high level stuff
+
+47:57.400 --> 47:59.640
+into the programmer?
+
+47:59.640 --> 48:03.480
+Because you're going to now have very hardware specialized
+
+48:03.480 --> 48:06.640
+performance libraries and then people who write this thing
+
+48:06.640 --> 48:08.360
+would have to understand the architecture really,
+
+48:08.360 --> 48:09.880
+really well.
+
+48:09.880 --> 48:13.120
+I think the thing is that they're more likely
+
+48:13.120 --> 48:15.000
+to understand the architecture really well
+
+48:15.000 --> 48:17.720
+than the compiler engineer, right?
+
+48:17.720 --> 48:20.720
+The compiler engineer has to have two things,
+
+48:20.720 --> 48:25.240
+writing C++ on CPUs that target GPUs.
+
+48:25.240 --> 48:29.360
+This is like, I'm a CUDA programmer, I'm laser focused,
+
+48:29.360 --> 48:30.680
+let me target hopper.
+
+48:30.680 --> 48:32.880
+So that means that the people writing high performance libraries
+
+48:32.880 --> 48:34.840
+for very specialized accelerators,
+
+48:34.840 --> 48:37.680
+they need to be experts at those accelerators, right?
+
+48:37.680 --> 48:39.880
+Right, so they need to be expert in one area,
+
+48:39.880 --> 48:40.920
+not two areas.
+
+48:40.920 --> 48:44.360
+So the goal is give the current programmer superpowers.
+
+48:44.920 --> 48:48.200
+But that's our approach to it.
+
+48:48.200 --> 48:50.280
+As Jeff talked about, Mojo can talk to any dialect
+
+48:50.280 --> 48:51.240
+if you want to.
+
+48:51.240 --> 48:53.360
+You can use that find in Mojo.
+
+48:53.360 --> 48:55.600
+We can plug and extend the system with dialects as well.
+
+48:55.600 --> 48:56.800
+So that's always an option.
+
+48:56.800 --> 48:58.920
+So that is a conscious decision.
+
+48:58.920 --> 49:00.960
+That's really the conscious decision you're making
+
+49:00.960 --> 49:04.040
+is that you're going to get experts to do the performance
+
+49:04.040 --> 49:07.440
+library and they will just work.
+
+49:07.440 --> 49:10.200
+Well, so this is the thing.
+
+49:10.200 --> 49:12.800
+Current libraries don't scale because of the magnitude
+
+49:12.840 --> 49:15.120
+of the problem and the cross product
+
+49:15.120 --> 49:17.360
+of all the different integrations and all of the stuff
+
+49:17.360 --> 49:19.320
+that current libraries struggle with.
+
+49:19.320 --> 49:21.160
+But there are more current programmers
+
+49:21.160 --> 49:23.520
+and performance engineers than there are compiler engineers
+
+49:23.520 --> 49:24.960
+by far, right?
+
+49:24.960 --> 49:28.120
+And so it's really about enabling the talent
+
+49:28.120 --> 49:29.680
+that actually knows how to do all this kind of stuff
+
+49:29.680 --> 49:31.640
+versus having a compiler engineer in the loop
+
+49:31.640 --> 49:33.040
+that becomes a bottleneck.
+
+49:33.040 --> 49:34.440
+Thanks.
+
+49:34.440 --> 49:37.240
+We'll be around as well throughout the conference,
+
+49:37.240 --> 49:41.000
+so feel free to yank any of us.
+
+49:41.000 --> 49:42.400
+Thank you, Chris, Abul and Jeff.
+
+49:42.520 --> 49:43.920
+So let's thank the speaker again.
+
+49:43.920 --> 49:44.920
+Thank you.
+
+49:44.920 --> 49:45.920
+Thank you.
+
+49:45.920 --> 49:46.920
+Thank you.
+
+49:46.920 --> 49:47.420
+Thank you.
+

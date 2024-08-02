@@ -1,0 +1,401 @@
+start	end	text
+0	8000	Okay, hello everyone. Welcome to this session of deep learning for art, aesthetics and creativity.
+8000	24000	Today, we have our specialist speaker, Junion Ju, and he is an assistant professor at CMU, School of Computer Science.
+24000	41000	He is going to talk about efficient GANS, and Junion is such a great researcher and scientist who has been working on many, many interesting generative models, including he was in peaks to peaks,
+41000	56000	and cycle consistency scans, and Gauguin, and many other interesting and intriguing work, and I hope that we can see a gist of some of his work here today.
+56000	62000	So, please, Junion, go ahead.
+62000	77000	Yes, thanks for the nice introduction. I'm very happy to be here and talk about some of our recent work on how to make GANS more efficient.
+77000	89000	Maybe some background that you probably already knew about it. Yes, GANS has been used for various content creation and creativity tasks.
+89000	101000	For example, you can draw a sketch of a handbag or edge of a handbag and you can get an output image from the GANS.
+101000	112000	And one recent model we have been working on is this Gauguin model, led by Thaisong Park and other people.
+112000	122000	Here, our artist is creating a semantic label that basically says this is a mountain, this is also a log, this is the sea.
+122000	131000	And when the mountain, he can add some sand, and we can generate an image in real time.
+131000	136000	And he can add some more details like logs.
+136000	144000	Yeah, and you can create a pretty nice image very quickly.
+144000	159000	That's a very cool demonstration of the GANS and you can also, sorry about that, you can also apply a particular like a style image from a truly set and then apply it to stylize this image.
+160000	168000	So these all look very nice and kind of perfect, right, those cool demo in front of so many people.
+168000	180000	But if we close the door and the story here is, it's really very expensive, at least for this Gauguin project.
+180000	198000	And to develop Gauguin project, Thaisong has about hundreds of GPUs, in the summer in turn, and for six or nine months he has access to several hundreds of GPUs, very high end, the media GPUs, which you cannot sometimes you cannot even buy it on the market,
+198000	204000	but he has access to internal GPUs, we are not allowed to share the information.
+204000	212000	But he has access to lots of GPUs during training, and the training also requires lots of data, like tens of thousands of data.
+213000	234000	After almost a year's development, to learn this model, to do this demo, we actually bought a very expensive desktop, like 6,000, 7,000 laptop with actually a high end GPU, but that's still a laptop, not a desktop, so we want to carry this laptop around and do the demo, right.
+234000	250000	So in conclusion, from this particular project I realized games are very expensive, perhaps not for everyone now at this moment.
+250000	255000	I think it's expensive in three ways.
+255000	275000	So for learning a game model, if you train a game model to learn the game model on a device, you need a high end GPUs, like for real time performance, otherwise it will be very laggy, you cannot have any real time demo without a high end GPU.
+275000	285000	So in order to develop the algorithm, to develop a new algorithm, you require hundreds of GPUs to train the model.
+285000	305000	So I think it's very, it's huge, or maybe right now only the deep end of the media can afford this kind of computation. You will for university lab, MIT or CMU, maybe you don't have so many GPUs, it's very hard to compete with big companies.
+305000	310000	And third, to train a game model, it often requires lots of data.
+310000	332000	And I will go through it one by one. The connection wise is very, it's very slow to learn on a CPU and mobile device, right, maybe take 10 seconds or several seconds to learn on models like CPU and even slower to learn on mobile device like a tablet or like a phone.
+333000	343000	To train a single model for a single training session, it takes several days, maybe one or two weeks, maybe sometimes for a big game, maybe take amounts.
+343000	354000	And, but it's not like you just train one model and publish a paper as model training might take at least a dozen of training sessions, you have hundreds of training sessions.
+355000	361000	So each training session takes, each training session takes a month, you need lots of GPUs to parallelize your experiments.
+361000	368000	So it's not like you have an idea, you train a model and you go through all the public paper, that's not the case.
+368000	377000	You have an idea, you try something to work, you try something to modify the idea slightly, you have lots of iteration over the months.
+377000	394000	So each iteration takes one week or one month on each GPUs. So if you, if you put these numbers together, if you want to actually do the research very as quickly as possible, it requires lots of GPUs.
+394000	406000	Sometimes it's even like a top university like top lab in MIT or CMU Berkeley cannot afford it, not saying other labs.
+406000	412000	So what people do realize is to treat this model like require tens of thousands of millions of images.
+412000	416000	You treat a model of faces, it requires 70,000 faces.
+416000	423000	These faces are very high quality images, and you need to align the face before you treat the model.
+423000	433000	So there are lots of pre-processing steps to get an image, to treat an image that's model, you need labels, and you need to limit the data sets first.
+433000	439000	So there are three things that can be used for more users, right?
+439000	447000	If you are a content creator, if you are an artist, you may not have access to the computation, to the algorithm and data, right?
+447000	452000	So in this talk, I would like to focus on computation and the data.
+452000	463000	But while working on the algorithm, in this talk, we have some results on how to make data faster, how to make you can treat a game model on maybe only hundreds of images.
+463000	478000	By that, we can maybe help more users, content creators and artists to treat and test their own game models without having access to lots of data, without having access to very high-end GPUs.
+478000	484000	So I will talk about the first part, which is the model.
+484000	489000	GANS are very, very computational expensive to run.
+489000	507000	If you compare GANS, or conditional GANS, like Psychogalgan to the typical image classification model, this is the computation, right?
+507000	513000	Maybe some people like to use Macs, some people like to use Flops, but the story is the same.
+513000	518000	It's quite cheap to run a mobile internet for image classification purpose.
+518000	527000	It's very relatively cheap to run a restats network for classifying caster versus dogs versus other categories.
+527000	536000	But somehow it's very expensive to run a Psychogalgan model.
+536000	539000	This gap is almost 500 times.
+539000	550000	If you compare the latest generative model versus the latest classifiers.
+550000	555000	And that's a general trend.
+555000	558000	I think you may ask why, right?
+558000	562000	Why is so much more expensive?
+562000	571000	The reason for that is, like in Psychogalgan, you take an image and you produce the image with the same resolution.
+571000	578000	So the spatial dimension of the tensor remains the same more or less through the process.
+578000	583000	When you classify, you take an image and you produce a number.
+583000	590000	So the spatial resolution of this tensor becomes smaller and smaller.
+590000	595000	I think that's part of the reason, but also to generate the image, maybe you need more features.
+595000	598000	That's the second reason.
+598000	607000	Anyways, it's quite expensive for GANs that compare to the image classifiers.
+607000	611000	In this work, I will briefly go through this work.
+611000	616000	If we try to solve this problem, we propose a method called GAN compression.
+616000	626000	GAN compression is a general purpose framework based on the distillation channel protein and neural active search.
+626000	637000	So the idea here is, so given a teacher model, teacher model is the original model for the psychogalgan model we like to compress.
+637000	642000	It has lots of channels.
+642000	650000	So you take a horse image as input in psychogalgan case, you output a zebra.
+650000	660000	And we also have a student, so the goal of this project is to try to find a student model, which with fewer filters,
+660000	665000	and it can produce the same kind of zebra as the teacher model.
+665000	678000	So we have a loss function to try to make sure the output, the student output zebra looks very similar to the teacher's output zebra.
+678000	680000	That's what loss we have.
+680000	689000	We also try to make sure that the student's intermediate feature representation is very similar to teacher's representation.
+689000	692000	And lastly, we would like to make sure we have a GAN loss here.
+692000	700000	We would like to make sure the student's output zebra looks like a zebra according to adversary loss.
+700000	702000	So we have three losses.
+702000	704000	We have the pixel loss.
+704000	711000	We try to make sure the student zebra looks like a teacher zebra.
+711000	721000	And we have a feature loss which makes sure the student's feature looks like student's feature looks like a teacher's feature.
+721000	727000	We have a third loss, which is GAN loss, just like a typical GAN loss you apply to any GAN.
+727000	730000	Yes, you want to make sure the zebra looks like a zebra.
+730000	732000	Okay.
+732000	734000	So this is our distillation part.
+734000	750000	In our channel protein part we would like to, so our goal is to search for each layer, the optimal number of channels which can, we want to find a smaller number of channels,
+750000	755000	but can still satisfy all these loss functions constraints.
+755000	767000	So we have a bunch of channels here, for example, we have 60 channels, you can choose 32 channels, and you can choose maybe 48, 64 if you like.
+767000	770000	And I can choose 24 if you like.
+770000	772000	So we have channel protein.
+772000	781000	So the idea is if you have fewer channels for each layer, your model will be smaller and faster to run.
+782000	790000	Let's say if you reduce the channel by half for every single layer, of course the model will be faster to run.
+790000	802000	But here, the search means we try to, we're not trying to reduce the channel uniformly, we try to maybe, for some layer we try to reduce it to 16 channels.
+802000	806000	For some layer maybe 24 channels are necessary, or 32 channels are necessary.
+806000	817000	So we try to, it's kind of like a search problem, the search space is just like channels per layer, you have eight layers, you have eight numbers you would like to search for.
+817000	821000	If you have 11 layers, you have 11 numbers you would like to search for.
+821000	831000	So the idea is we try to find this combination so that we can still reproduce a zebra which looks like teacher zebra.
+831000	833000	Okay.
+833000	835000	So how to do this search problem?
+835000	840000	The search seems very hard because for each configuration you need to train the model.
+840000	843000	And this is a combinatorial number, right?
+843000	850000	There are lots of combinations, you can, if there are four combinations, four choices per layer, that's lots of combinations.
+850000	860000	You don't like a naive way is you can train a model for each configuration and then compare which model works best.
+860000	863000	But that will take lots and lots of training time.
+863000	871000	So the idea here is we would like to have all the network to share the ways.
+871000	881000	The idea is if you have 32 channels, share the same first 60 channels with the 60 channel model.
+881000	884000	So by doing that, we don't have to train them all.
+884000	890000	Each individual configuration, every single time, we can share the ways across different configurations.
+890000	892000	So we still have only one model training.
+892000	901000	But each time we sample a configuration, it's like this configuration, that configuration, and we try to train this configuration with the loss.
+901000	904000	But we only have one training session.
+904000	913000	So by each training iteration, we sample a different configuration and try to train the model with the loss function I just described.
+913000	930000	Okay, so once we are done with the training, we can, then we can, then we can, for every single configuration, we can try to evaluate these models based on a matrix such as FID,
+930000	938000	and then there's other metrics you have and choose the best one, and then we can fine tune that model.
+938000	948000	Yeah, so there are a bunch of loss function, we kind of, so there are several ideas, one idea is there are several loss functions, we try to mimic the teacher model.
+948000	959000	But it's actually such ideas, we try to share the ways across different configurations, so that we can avoid treating each configuration multiple times.
+960000	962000	Every single time.
+962000	965000	Okay, so that's the idea of the method.
+965000	969000	I would like to share some results with you.
+969000	977000	So here we are so for the house to zero, we can reduce the model size for 57.
+977000	986000	The model size, the competition cost for 57 max to 2.7.
+986000	991000	7 to edge to shows, 7 to Gauguin.
+991000	1001000	So we can achieve nine times to 24, 20 times compression ratio in terms of the model computational cost.
+1001000	1013000	Here is a demo is you will learn the original cycle again on this mobile device, Jason Javier GPU, and we can measure the FPS.
+1013000	1020000	Here is the, here's how it looks like you want to transform a house to a zebra.
+1020000	1032000	And here is we learn the same more compressed model on on this hardware. So I should see four times kind of speed up and it gets real time performance on this.
+1032000	1042000	This is a kind of like like on device chip you will use for like robots or cars.
+1043000	1046000	But here model is out here the input image.
+1046000	1051000	Got a cycle get output.
+1051000	1054000	Here is a baseline.
+1054000	1060000	You wish you just reduce the will cause 0.25 cycle guy.
+1060000	1066000	In this setting you basically just reduce them all channels.
+1067000	1070000	Per layer.
+1070000	1081000	And you lose them a channel to like by by force, by four times, but we do it for every single layer so there are no, no, no, no, no search happenings.
+1081000	1097000	You're very nice baseline. And you can see if you just reduce the demo channels uniformly every for every single layer, you will lose lots of details like zebras stripes which is something you would like to have.
+1097000	1098000	Okay.
+1098000	1101000	And here is the compressed model.
+1101000	1105000	20 times compressed model with the albaster.
+1105000	1112000	And you can preserve the output of the original teacher model.
+1112000	1120000	But why be 20 times faster.
+1120000	1130000	So recently we apply this idea to not only to cycle game but also to style get to this is ongoing submission.
+1130000	1136000	So, so the idea here is, we would like to have a teacher model.
+1136000	1142000	I would like to have, we will obtain a student model just like what we did before.
+1143000	1155000	And during the, the idea is doing the image projection will try to try to the ideas will project this image into the latent space of the gains.
+1155000	1163000	And then we add some different like directions like smiling directions like glasses directions, maybe different hair color.
+1163000	1179000	And here's we can do the interacting editing, we can use this low cost model, 10 times fast model, which only takes three seconds each time you adjust the slider.
+1179000	1181000	I will show a demo in a minute.
+1181000	1190000	But, but when was we the user, for example, you use someone to change the hair from black to to to to white.
+1190000	1194000	You can do that right and you can change this one to this one.
+1194000	1203000	But once you, once you, the user is done with the entity, you can use the original model to get the final output.
+1203000	1217000	The idea is that you want to like to make sure the smaller models output is consistent with the big models output through this editing process.
+1217000	1226000	You will get, you learn a smaller model and you get something what you want, but, but once you press the button off, you're writing a big model.
+1226000	1229000	If you get something completely different.
+1229000	1233000	So this preview is not informative anymore.
+1233000	1239000	I will show you a demo as an animation in this video.
+1239000	1250000	So here is an import image right to project it and ought to do to we like to look, look and see it again.
+1250000	1256000	And we try to find the best lately called which going to produce this input image.
+1256000	1266000	And so we have what we have done that we can like move this code around maybe we find this smiling call smiling directions.
+1266000	1274240	all I might have already mentioned is how you can find the directions. You can find that,
+1274240	1278640	like you move here, maybe you make your face smiling and you move to a different direction,
+1278640	1286160	make your hair a different color. And then the idea is we can generate an image
+1287760	1293920	after you change the directions. And here is the original image.
+1296320	1302880	Here we used GANs to reconstruct this image, to represent this image. This is the image
+1302880	1308400	generated by GAN. This is the image of original image. And here are a few sliders.
+1311840	1316960	And we would like to modify this image in various attributes.
+1317520	1328480	And we'll run it on these CPUs, like just Intel CPUs. But if you click
+1328480	1334960	smiling, here we click smiling, it took about three seconds to produce image with smiling face.
+1337040	1341840	So you cannot drag the slider anymore, you can only click. And then you make younger or older.
+1342080	1352880	It's just very laggy, right? And the idea is you would like to, if you click something or drag
+1352880	1361360	the slider, it should get the results immediately. And here is our idea.
+1361600	1371120	And you would like to choose our monocleidic cost GANs. And you can click something.
+1371680	1374080	You only took 3.3, 3.4 seconds.
+1378320	1382400	That's very, so you get very fast interactive feedback.
+1382960	1387440	Okay, change it here.
+1392000	1395920	And once you download the editing, you can still learn your original model
+1395920	1400320	and finalize the output. So you get very fast
+1401280	1408080	and interactive feedback when you are editing the photo. And you get a high quality output
+1408640	1410240	where after you finalize your edits.
+1414240	1415280	Here's another example.
+1422880	1424960	I'll make this look older.
+1431840	1436320	And we'll try to remove the gossips because sometimes you mix some more, it will add gossips.
+1436800	1439040	So there's some correlation between these attributes.
+1440320	1443680	But it's very interactive. But once we finalize the edits, we can
+1443680	1448800	generate the final rendering, a very high quality, high resolution image.
+1454800	1456560	Here's the last example.
+1466800	1476960	Yeah, again, once you finalize the edits, you can click the button and learn the original model.
+1478000	1479280	Yeah, so here is the one.
+1482720	1489760	Yeah, so this is actually quite similar to how people is using regular, non-deplaning
+1490720	1497360	content creation software either in rendering software like Blender or Maya.
+1498000	1504480	You can choose to render an image with low quality preview.
+1505600	1510000	It's very easy to do it in rendering algorithm. You just sample field arrays,
+1510000	1512880	or maybe you have fewer bounces if you know the rendering algorithm.
+1514320	1519600	It's also in a bunch of Adobe software, you can also generate a preview
+1519600	1524640	of your videos and there are a bunch of ways to make rendering faster.
+1526640	1531840	So that's just for your preview. And once you are done with your editing, you can export model,
+1531840	1537920	export the export results to a much higher quality rendering, much higher quality
+1540240	1545360	just output results. So we're trying to separate the preview and the final rendering.
+1545440	1548160	We're trying to make sure the preview looks similar to final rendering.
+1549040	1553760	Otherwise, the preview does not provide enough information for editing.
+1557280	1564320	So far, what we have been talking about is how we can make it faster to run on CPU.
+1564320	1568320	For example, maybe we instead of three seconds, we can make sure it runs
+1568320	1576800	about three or four seconds. Maybe we can make sure it can run on a smartphone
+1578080	1584080	maybe within one second. Next, I would like to talk about data, which also prevents many of the
+1584080	1592080	users and the content creators to choose their own models. So the idea here is to choose these models.
+1592400	1601920	It requires lots of selects like choosing images, right? We have seven thousand faces,
+1601920	1608160	you need to be high quality faces, and people actually align the face, crop the face from
+1608160	1614560	the original photo and align them. The same idea here, if you choose a big game model,
+1615520	1620480	the model from DeepBand, the big game model requires an image net model,
+1621200	1624880	and it requires millions of images from some of the categories.
+1625680	1631680	Or you can choose a model like a bunch of people have seen the car model, the bedrooms model requires
+1631680	1637600	one or two million images to choose a car model, just to learn a model about cars and bedrooms.
+1638240	1643120	So it's not very easy. So if you have a new idea, oh, I would like to have a
+1644160	1649760	have a model of something. It's not like you can just train the model, like it takes a lot of
+1649760	1654960	time to collect the data right in the first step, before you even train the model.
+1655840	1662400	Okay, so it takes months or even years to collect the data set. Some training might
+1662400	1668080	require annotation if you train a big game model which condition all the class labels.
+1669600	1675680	So for the here, how about I just train a model about myself, about my collaborator here is
+1676320	1682480	actually professor Sohan, assistant professor at MIT. So often I just, I don't just try to
+1682480	1688720	try to train a model on his portraits, right? But of course, I don't have, the thing I don't have
+1688720	1697840	is I don't have 70,000 faces of professor Sohan. I don't, I probably don't have to allocate them,
+1698560	1704480	but maybe I have 100 faces, maybe I have 50, maybe I have 200, but there are no way I have a million
+1704480	1714320	faces. So first, I mean, maybe if you are like, celebrate your petition, maybe you have, maybe
+1714880	1720560	I'm not sure if you use that case, you have a million faces. But for your friend, for your family
+1720560	1727520	members, you probably have like 50, 100, so several hundred of them faces. And here,
+1728160	1736560	but the ideal case is we want to train a model of my, myself, my friends, my collaborators,
+1736560	1742880	but I don't have so many images. So I would like to, so you know, I hear what I would like to
+1742880	1748880	train a model and try to produce some new samples. And maybe I can use this model to edit Sohan's
+1748880	1755760	photo, right? Instead of using a generic face model, I would like to have a customized face model
+1756480	1764880	for face editing. But in reality, if you just train a model of Stalgant 2, we get very distorted
+1764880	1770560	images. If you would train a Stalgant 2 on the dataset, I just mentioned like hundreds of 50
+1770960	1780640	faces. And so there are the huge gap between, if you train a model with 50 faces versus you
+1780640	1787520	train a model with 70,000, a million faces. The gain is really requires a lot of data to get good
+1787520	1796320	performance. And this holds for a bunch of cases, not only for a professor. Sohan's face, but also
+1796400	1803360	for Obama's faces, if you train a model on 100 Obama images, it does not work very well. Okay.
+1803920	1809280	If you, let's say, maybe not, maybe we have a very high standard for face, right? Maybe for other
+1809280	1816880	objects, it's okay. That's not the case. If you train a model on cats, 160 cats, you get some
+1816880	1822880	distorted cats. How about your dog friend? You train a model on dogs, you still get distorted dogs,
+1822880	1831440	even you have 390 images. So that's highlights the issue is, if you want to use again,
+1832480	1838640	for your own purpose, for your own dataset, maybe for some paintings, you don't have, if you're
+1838640	1845120	training a model on paintings of a particular painter or artist, you cannot ask the artist to
+1845120	1849760	produce millions of paintings in the first place, right? You would like to train a model
+1850480	1854880	of 101,000 paintings of a particular style or a particular painter.
+1857680	1864480	So we can, we can do this kind of experimental control setting. So we can look at CIFA-10,
+1864480	1872640	which is a standard dataset for gains of competitiveness. We can measure it by FIT,
+1874240	1877120	which is the lower and the better, which measures the distance between
+1877920	1883120	the jerry hippies distribution versus the original training distribution. And if you
+1883120	1888240	train a model on FID, sorry, you train a model on CIFA-10, you get a very low FID
+1889120	1895520	for 100% training data, but you get a much higher FID if you reduce the data by five times.
+1896560	1904160	And if you only train a model on 10% of CIFA images, you get a much higher FID.
+1907440	1912240	That's why the gains have really rely on the number of images you are training set.
+1915040	1921360	But why is that? Why, why, what happened in the CIFA-36 case,
+1922720	1928160	if you only have 10% of the data, right? Something happens if you, if you, for any kind
+1928160	1934560	of opportunity model, if you don't have enough data, your model might start overfitting. In this case,
+1934560	1943040	we can look at the discriminator that's overfitting if you don't have enough data. So here are the
+1943040	1950400	cases, the discriminator, we can, we have two plots. We have discriminators training accuracy.
+1951440	1961360	Yes, how this is, how discriminator can classify real versus fake images for the training set
+1961360	1968880	the model has been trained on. We can look at the discriminator's accuracy, our holdout test,
+1968880	1974320	our variation training, our variation real, real images, which discriminator hasn't seen
+1975120	1983440	in the training set. So you can see that for 100% of data, the model, the discriminator starts over
+1983440	1988320	kind of classify the images more and more accurately. But that's not necessarily me,
+1989040	1998400	it can classify the test images as accurate as training images. So that's happens a lot if you
+1998960	2005360	just change the classifier, right? But the thing which makes this worse is if you only have 20%
+2005360	2014080	of training images, this kind of overfitting is much more severe. If you only have 20% of training
+2014080	2024400	data, the discriminator will classify the training images very accurately, very quickly,
+2025760	2032800	but it will, it cannot work for the test images anymore, the test real images, it will
+2033600	2040080	drop the percentage, right? Reminding this is a binary classification task, so the accuracy below
+2040080	2050960	0.5 is pretty bad. And if you have 10% of data, it's even worse. It can classify this 10% of
+2050960	2057760	data very quickly, real or fake, but it cannot classify any kind of test images very quickly.
+2057760	2063680	And if you look at this model, this is when the gains start collapsing, the models start generating
+2063680	2072720	lots of garbage images. So the issue here which we identify is that if you don't have enough images,
+2072720	2079920	or if you only have 100 images, it's very easy for discriminator to just simply memorize
+2080720	2086960	every single image of your training set. As a discriminator, it does not generalize well
+2087680	2092960	to other real images. So if you treat a generator with overfitting discriminator,
+2093760	2098960	of course, a generator cannot get all the signals about what makes Obama look like Obama,
+2099680	2104720	what makes Professor Sohan look like Professor Sohan, right? If you're discriminating overfitting.
+2106160	2115280	So one idea to come back, the overfitting in computer machine, machine is called data
+2115280	2124160	augmentation. It's for single real image, we can create multiple versions of this image.
+2126560	2130880	If I create 10 versions of images, I kind of increase my data by 10 times.
+2131920	2137280	Of course, this information is redundant, but it's better than this one version, right?
+2137280	2144160	So the idea is try to enlarge the data sets without collecting the new samples.
+2145840	2150160	As there are a bunch of things you can do, you can, for example, this cat, you can rotate the cat,
+2150960	2158560	you can flip the cat, you can maybe change the color a little bit, or you make, maybe you can
+2158560	2165600	translate the cat, like make it shift left, shift right, shift up, shift down, so you can,
+2165600	2171760	you can move the cat around. But in computer machine test, there's still a cat, right?
+2172480	2178240	So if you train a model to classify a cat and a dog, if you move the cat around and rotate the cat
+2178240	2183440	by 30 degrees, it's still a cat, right? It doesn't become a dog. So you also do the labels.
+2184160	2188800	So the idea is you don't want to change the label by what we request your data.
+2191520	2197280	Right? But how to, how can we apply this idea to GANs training?
+2197520	2204160	How can we stay augmentation for GANs to combat the overfitting issue when we train a model on very
+2204160	2210880	few images? So we have tried several ideas. And the first idea, which is very straightforward, is we
+2210880	2224320	can, we can just apply the transformation or augmentation on the real images, right? Just like
+2225280	2233280	we did for the training image net classifier. And we can, we can train a model on the augmented
+2233280	2241520	images. That's, so that's very straightforward. But the, but the thing we're following is if you
+2241520	2251520	train a model in this way, the GERA image will also has the effect of this transformation. If you,
+2251520	2256880	if you, your transformation, if you change the color or you translate image around,
+2258000	2267440	or if you crop some patches, your GAN will replicate these kind of artifacts, will mimic
+2267440	2274160	these artifacts because your GAN does not know what is the original image look like. If you only
+2274160	2280880	feed the translate, transform the images, augment the images, try to mimic the augmentation as well.
+2284400	2290880	Why is that? Why, why is not an issue in the classifier? Because if you train a classifier for
+2290880	2298960	cats versus dogs, your label of cat and dog is the output, right? You want to output a cat or dog,
+2298960	2305840	but this label is, is, is, is the same before after augmentation. So you can still produce the cat.
+2306560	2311920	But here the output of the generator is the image. If you change the output, your dataset,
+2312480	2318080	your, your output of your generator will change. So you see the difference, the difference is
+2318080	2323360	whether you augment the input or output. So here we had augmented output while in the classifier
+2323840	2329840	case, people try to augment the input image, why keep the output the same? So if you cannot just
+2330480	2335840	augment the output directly, it will mimic that augmentation. That's, we don't want to generate
+2335840	2344480	these kind of images, right? And so second idea is how about we augment both real and fake images?
+2345760	2351600	I hope we can cancel each other and we'll only do it for the discriminator training.
+2352560	2358640	So the generator is, the training is the same. And we still train it versus the generator of
+2358640	2365280	g of z. By discriminator training, we augment both the real images x and generate images g of z.
+2365280	2373120	So z is a latent code, we simple from this Gaussian distribution. So, but, but the one thing
+2373120	2377120	we found is since you are doing slightly different things for, for the discriminator training,
+2378080	2382320	in which case you augment the x and g of z, but if you don't augment the
+2383520	2390640	data for, for a generator, you will see a gap. That is your classifier discriminator works pretty
+2390640	2399360	well for the transform, for, for, for, for the augmented images, t, t is augmentation,
+2400320	2406080	but it does not work very well for the generating, for, for the images without augmentation,
+2406080	2411520	for the g of z, which is original images. Also, which is original generate images
+2412160	2420800	without augmentation. Okay. So there's a gap between the generator's objective
+2421680	2427280	and discriminator's objective. And we, we found it does not work very well in practice because
+2427280	2433200	of this gap. So our approach is called differential augmentation. The idea is we,
+2434160	2441360	we can augment the both the, the fake images and the real images and both treating and, and,
+2441360	2447680	sorry, in both generate training and discriminator training. And here I will call it differential
+2447680	2455440	because if you, if you augment the data here and if you want to get gradients from the discriminator
+2456160	2462960	to the generator, this transformation t needs to be differentiable. Otherwise, you will stop
+2462960	2467120	the gradients from the discriminator to the generator. So we implement a bunch of
+2467760	2473920	differential augmentations and apply it to here. So the single impermanence we apply
+2475600	2481520	color transformation, our transient image alone, we apply something kind of cut out or kind of like
+2481520	2491280	augmentation. There are three kinds of operations. And the idea is once we apply the augmentation,
+2491280	2498000	we can, we can back up against the gradients from the discriminator all the way to the generator,
+2498000	2501600	all the way to the generator. So that's how we can treat the generator.
+2503440	2510000	And here are some results. So here's the original FID with respect to different amount of training
+2510000	2517920	data. And here's our results. So we, we get slightly better for 100% training data, but we'll
+2517920	2527360	get much, much better if you only have 10% or 20% of training data. So this allows us to maybe
+2527360	2534800	instead of treating a model of 50,000 images, you only need 5,000 images. And here are more examples.
+2536400	2543120	Yes, yes, if you only have 20% of the training data for image net, our model achieves much better
+2543120	2550560	results compared to the baseline begin. We will use the same begin loss and same begin architecture,
+2550560	2553920	but just add this augmentation to produce the FID by half.
+2556480	2561760	And now we can try to generate some Obama or cats or dogs. And here are our results we can
+2562480	2567840	produce much higher quality results when you only have 100 images.
+2568080	2576720	And now we can try to generate professor's face. It's not perfect, but much better than,
+2576720	2584240	than, than a baseline. And only requires 100 faces of your friends, your family member or yourself.
+2586720	2590480	And compare with fun tuning methods. There are a bunch of methods which you treat a model on
+2591360	2594240	a large scale data set and a fine tune it on a smaller data set.
+2595440	2602320	And our method is, is, is comparable performance wise, even when we don't require these kind of
+2602320	2612480	protruding images. Here we compare with transfer again, which the idea is you treat a model on
+2612480	2621920	FFTQ faces and a fine tune it on one of our faces. And all methods are still slightly better than
+2621920	2626480	since there are results. But of course, you can combine the best of the two words, like you can
+2627040	2633200	get your model on FFTQ and fine tune it with our differentiable augmentation.
+2634080	2640240	And, and you can get slightly more better results, you combine these two methods, they are complementary.
+2640960	2649520	And here are one results we treat a model and we try to traverse latent, latent in the latent
+2649520	2654000	space for different kind of, you can treat a model for a particular person, you can treat a model
+2654000	2661200	for particular landmarks or cities or animals, just, just very download some images and, and, and
+2661200	2667360	just hundreds of images you can do the job. Yeah, anyway, so, so there are not so much take home
+2667360	2673200	messages, take home messages. If you only have your fortune again, do not forget
+2674000	2676960	the documentation, that's the message. Okay, thank you for your attention.
+2679600	2686960	Thank you so much, Junion. And it was such a great talk and a lot of interesting
+2687600	2695440	directions and things to think about. I'm wondering if students have questions.
+2705360	2714000	I would like to ask how some of the students can, you know, get these models and work with them and
+2714080	2724240	can you please explain if what are the steps for them to get working with these models and the code?
+2729920	2732960	I think you are me. Yeah, yes, yes, I try to
+2733680	2739120	crit my dual monitor setup. So, yeah, yeah, I see that all the code are available on the
+2739120	2745040	GitHub. I will send you the slides later. All the code are available on GitHub.
+2745920	2750240	We have, we have step by step instruction on how to learn the model on
+2751360	2754800	C file and how to learn the model on image data, how to learn the model on your own
+2755840	2763120	data, like if you just have an image directly of hundreds of images, you can, we have a command
+2763360	2770000	line and you can learn the model directly. It took like four hours to learn a model on like hundreds
+2770000	2778400	of, 100 photos for a lot of your offices. It should be pretty straightforward. Yeah, yeah.
+2779440	2789680	And then are there, are there tools that one could use for making some of these things more
+2789680	2796400	interactive and use as a, just at the beginning you describe how it is interesting for designers
+2797040	2800960	and, you know, art practitioners to use these models.
+2804320	2811120	Yeah, I, I think, I think David Bao, my, my will, will talk about it. We have a bunch of tools on
+2811120	2818480	visualizing and monitoring the internal, internal units of this model, if you would like to understand
+2818480	2824800	it better. I'll have, I think David has a bunch of online tools he will talk about maybe tomorrow
+2824800	2834880	or later. Yeah, I think in general, it's, it's also hard to use. It takes like four hours on 100
+2834880	2844080	photos. So if you have 20, 80 time GPUs, yeah, so it's much faster than you know, big game model
+2844080	2851520	for four months or several weeks. Yeah, I think we're also working on maybe faster training,
+2851520	2856000	we are still working on that. So hopefully you can reduce the training time to several minutes
+2856000	2863920	or maybe half an hour. So more people can, can, can use it, right. So oftentimes you may not have
+2863920	2869200	the GPU resources, you may not have so many images. So we are working on that and try to,
+2870160	2874560	yeah, but it's also good for us because we also have limited resources compared to big companies.
+2875680	2880480	It's not like you're MIT and you have lots of resources, but compared to big companies,
+2880480	2887280	we don't have so much resources in academia. And then also David is asking, how long does it take
+2887280	2897840	to compress a model? Yeah, compress a model, it takes as long as much as time as training a model,
+2897920	2905120	maybe, maybe, maybe 50 times more. It's slower because you want to,
+2907360	2912320	you are training up all kinds of configuration at the same time, so it takes longer to train.
+2912320	2915680	Maybe it takes 50% more time. And while we are working on
+2916880	2924240	improvement of that, try to make the training faster. And it works for a bunch of models as well.
+2924560	2932400	Yeah, the compressing model is slower because the idea is you can, you have a bunch of
+2932400	2935760	models with different configurations. They all work pretty well. So you can use
+2936560	2940960	configuration A for your CPU, you can use a different configuration for your,
+2942160	2948560	for your mobile device. So you can have different models for different devices.
+2948560	2952000	Once you train the model, you can, you have this kind of flexibility.
+2952640	2957120	The idea is once you train the model, you only need to train once and you can deploy to 10 or
+2957120	2963360	20 devices. That's, that's quite essential for critical, for practical purpose because
+2963360	2968400	if you develop a product, you would like, you don't want to compress a model for
+2969760	2973840	iPhone. And then next time you'll compress for older iPhone or Pixel to a Pixel 3, right?
+2973840	2981520	So you would like to have this kind of versatile ability to train once and
+2982000	2989440	deploy to multiple devices. Yeah. I think that this is very important because
+2991040	2998080	you can put the time for the developer and then when the user wants to use it,
+2999040	3007520	the hope is that they spend very much less time to get what they want, which is a very good idea.
+3008080	3010560	Thank you so much, Junion. I appreciate that.
+3013680	3016480	It was such a pleasure for us.

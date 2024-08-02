@@ -1,0 +1,534 @@
+We're here to talk about this great quote up there by Jaron Minsky, make legal states
+unrepresentable. And although it sounds quite simple, I find that the consequences of it are
+quite profound. But before we actually begin and dive in, let's start with kind of a short story
+as an introduction. So it's the middle of the night and you're sleeping peacefully.
+And suddenly you get a call and you're being informed that the production system is crashing.
+And after a few minutes of furious debugging, you find this exception that happens. Someone
+accessed an empty optional value. And how can that be? You ask yourself. And so you dig a little
+deeper and you find this wonderful code. So someone unwrapped an empty option value. And
+you read this comment. This is safe. Registered users always have email. And it's a very nice
+comment. And the old caps are stressing the right points. And it's a very reasonable assumption
+because registered users should have emails and the product manager also required that as well.
+So what went wrong? And basically what happened is that we entered an illegal state of our system
+and doesn't really matter how we got there. But these sorts of situations happened all the time.
+I'm sure most of you had some experience seeing some error of this kind happening to you.
+And those things can be avoided. And I would say they must be avoided because all would like to
+have a good night's sleep. But this is what we're here to talk about. How to make these illegal
+states unrepresentable. How to make it impossible to create software that enters those illegal states.
+So today we're going to discuss this quote. What it actually means. We'll break it down into
+smaller parts. Then I'll show some simple techniques to try to achieve this ideal of making
+illegal states unrepresentable. And we'll conclude with seeing what are the sort of benefits that
+you might expect to reap in case you actually follow this principle. So this is mostly a beginner
+friendly talk. So don't expect some mind blowing techniques. But I do hope that the
+perspective I am about to show is useful even for more experienced developers.
+So as far as I know this quote was created in the context of working on a financial system.
+So Jaron Minsky is, was working on Jane Street. And I can imagine that making illegal states
+unrepresentable in the financial system is very, very important because you probably don't want
+to lose transactions or money or whatever. So let's dive in and figure out what it means to
+that an illegal state is unrepresentable and how do we define it. So we start with the state.
+So what is the state of a program? So imagine your whole application running and take like a
+single, single snapshot in time with all the variables and all your variables, threads,
+function calls, whatever. So single snapshot of your program. So this is an example of such
+states. So you have some variable assignments. You have maybe registers,
+heap allocations, whatever. Threads are running. Functions are about to be called.
+So this is a single state of the system. So obviously a real system will have many, many,
+many states. But for the purposes of this talk, we're going to kind of zoom out and from the
+details of registers and threads and like, and just have like a conceptual picture of the different
+states of the system. So this is our program's state space. All the different states, it can find
+itself in. So, but some states are illegal. That means that if you enter that state, something
+bad will happen. The program will crash. An exception will be thrown. Maybe a business rule
+will be violated. But something, whatever it is, it's something that's bad for your system and
+something that you would like to avoid. So of course, what's considered illegal is very context
+dependent and it depends on what you care about at the moment and the various tradeoffs. But let's
+assume that we can recognize an illegal state once we see it. And so the picture I'm showing here
+is that we have like a huge state space and have a few legal states. But usually the reality is much
+worse. Usually you have a lot, a lot of states that are actually illegal. And so hitting them
+and usually by accident is just a matter of time. You walk around your kind of state space and,
+and just accidentally stumble on something illegal. And that's, that's quite likely to happen just
+like the registered user in the previous example. So let's zoom in a bit and enter this diagram. So
+a typical program will probably be moving between lots of states. Hopefully, and, and we can assume
+usually between legal states, which are okay for a system. But sometimes you'll probably by accident
+hit an illegal state and your system might crash or violate some rule or do something bad. And
+usually if you got one illegal state, you probably will get another illegal state.
+And this is not good. And this is what the sort of things that we would like to avoid
+in the context of this quote and probably just in general in programming. So let's zoom in a little
+more. So, so as high level programmers, we typically don't think about registers and threads and,
+and, and the heap and the like. And as functional programmers, we typically want to represent as
+much as possible of our application as functions. So imagine that this is this function signature
+here is some part of your system. You have some inputs, you have some output, and, and, and you,
+you would like to analyze what's possible and impossible here. So what do I mean that an illegal
+state is representable? It's that there is some combination of the inputs ABC that would, that
+would get you into an illegal state. Okay, that would mean that the state is representable. You
+can find such inputs and you'll, and you'll get an illegal state directly in your system.
+And what we want, what we strive to achieve is to make it impossible for to find such inputs
+that would get us into this illegal state. So imagine that it's, it's literally impossible
+to write down such inputs that would get you into a legal state that you cannot get there at all.
+And all you can do is kind of walk around the legal states and just never worry about
+entering the illegal, the illegal red dots here. And so this should be possible not because you
+checked and double-checked your inputs and not because you covered everything with tests, but
+because you make it strictly impossible to write down those inputs that would, would get you into
+an illegal state. So that's at least the ideal that we want to, want to reach. And question is
+whether it's a reachable idea, ideal, can you, can you actually do that? And probably the answer
+is generally no. You probably can't avoid all illegal states, but I would claim that every step
+you make in that direction is, is a good step and probably is improving your software in some,
+in some way or dimension. Also, question is whether it's worth it. I'm going to show you some,
+some techniques that you have to apply to your code and then maybe there's some, some costs and
+it might, might not be worth it. And that's, again, can be, can be true that's maybe too
+expensive, but the, the sort of techniques I'm about to show you now are quite, quite lightweight
+and hopefully the cost-benefit ratio is, may, would make them worth it. And although it's
+possible to, to avoid illegal states in pretty much every paradigm and language, but strongly,
+strongly typed functional programming is, is very good at it. So because types makes it easier to
+define, define our state, state space and, and functional techniques make, makes it, once you
+define and recognize an illegal state, they, they, they make it easier to avoid various illegal
+states. Okay, so now that we, we know what are illegal states, so slide, slide the gray,
+digression into something else. So I'm not sure what is or so, but empirical evidence shows that,
+that people really, really like coffee. I myself don't drink coffee, so I can't really relate,
+but apparently making coffee is very, very complicated. And here's a, a diagram that's,
+that's obviously has lots of different states and I'm sure some of them are illegal. And since I
+don't know much about coffee, I thought maybe it will be a good idea to use it as kind of an example
+domain to, to, for, for this talk that we can explore and try to kind of make more, more legible
+for, for our purposes. So, so imagine that you're tasked with programming this, this coffee making
+robot. So lots of things can go wrong when you program a robot, I imagine, especially one that
+does something as complicated as creating coffee, because coffee drinkers are, are very, very specific
+about what and how they are willing to drink. So there's a huge state space here and lots of
+things that can, can go wrong. And we'll just try to tackle like small sub-problems from this
+domain and see, see how we can improve what we see. So we start with, with the simplest part I,
+I could possibly imagine here, ordering coffee. So again, imagine that you are, you are doing
+this kind of proof of concept of your, of your robot. You want to show that it can actually do
+something useful. So you want to specify the, how to order a cappuccino, which is, so I hear a popular
+drink. So your users have to specify what kind of milk they want in the cappuccino. And apparently
+milk choice is also a complicated topic. So milk is not some trivial type, but, but in the
+enumeration of various, various, various options. So after successfully making cappuccino, you think,
+okay, let's, let's see. It kind of works. Let's, let's do something more, add something to, to a
+repertoire to make it more interesting. So since you already know how to do cappuccino espresso,
+apparently according to this picture there is, is pretty much the same thing, but minus the milk.
+So you make your milk an optional, optional argument in this case. So, so that you don't
+require it anymore. And now if you don't have milk, you make an espresso espresso. If you have milk,
+you, you do cappuccino. And now let's set another one, latte. So latte is basically, apparently
+again, by this diagram is just the same as cappuccino, but with more milk. And so we have a
+problem. We have an ambiguity. Both cappuccino and latte require, require milk. So we have to
+somehow tell them apart which, which order are we talking about. So in order to make it easier
+to figure out what's going on, we were going to add another enumeration, the drink type,
+which will actually tell us what kind of order are we dealing with here. And so we have kind of
+three cases for cappuccino espresso and latte. And that's a nice way to kind of future proof
+ourselves from future, future drinks that we might want to add, because now we could easily add them
+to our enumeration. So, so that's, that's a nice, nice bonus. And so now that you, you have some
+basic drinks and, and you know how to make them, you want to show off how your robot can actually do
+cause something more complicated. So you want to do two fancy drinks in this case. So want to
+try and do affogato and Irish coffee. Fortunately, botanary require more, more ingredients. So we
+need to add gelato and, for the affogato and the cream and whiskey for, for Irish coffee. And that's
+a good place to stop for a moment and take a look at what we have. So we support, support five different,
+different types of drinks, which is nice, but we have lots of various optional values. It's
+completely non-obvious, which, which combinations are actually legal here. So can, can I mix milk
+into my Irish coffee or some, some such. It's not obvious from the type sense.
+And it's easy to get confused. So let's, let's try to step back for a moment. So what is the
+issue here? So this is again kind of a simplified state diagram of what, what we want to achieve. So
+we have five legal states, five states that we actually want, want to support. So which one
+corresponding to some drink that we have in our system. But we also have various combinations
+that, that are illegal in some sense. So for example, espresso, espresso with gelato is just
+redundant because we're just rediscovered affogato, but though some drinkers might be offended.
+But Irish coffee without whiskey is obviously an illegal state if I ever seen one. So it makes no
+sense at all. And there are many other states here that, that many combinations of various
+inputs that we can get here that are completely illegal and make no sense. So let's, let's think
+more concretely why, why this is a problem. So suppose we have some low level function that
+actually tells the robot how to prepare the Irish coffee. And it has to take two arguments,
+cream and whiskey, because that's, that those are the parameters that we need to specify for,
+for this drink. And imagine that you were trying to actually take an order and prepare the Irish
+coffee. So in case you are in the Irish coffee, Irish coffee order, you access the cream and whiskey
+and then, and then prepare Irish coffee. Now notice that we are accessing optional values
+and we are very careful here. We have a comment that says this is safe. That's probably okay,
+right? I mean, what, what could possibly go wrong? So, because it makes no sense to have empty
+values on, of cream and whiskey in case someone ordered an Irish coffee. So maybe just in case,
+because we don't want to be too troubled with debugging late at night, we will make it even
+more explicit. So we will throw a nice exception that has more, more information. So it might,
+might be nicer to debug, but it's really, really isn't possible. I mean, you can't have Irish coffee
+without cream and whiskey. And, and, and this is sort of an invariant that we're assuming over
+our code. In this case, the invariant is quite simple. Irish coffee always has cream and whiskey,
+but nothing is enforcing this invariant. We're kind of writing comment and have,
+have suffered from a wishful thinking that may, hopefully nobody will ever break this,
+this thing apart. But imagine that in the future, you're supporting reading orders from JSON files
+and someone messed up the format and then something is missing. Who knows? Something can
+happen and you can't write tests, tests to cover all of your flows in your system probably. And
+even less so, you can't write tests for future flows that someone might define, that are not
+defined right now. How, how can you protect against something that you don't even know that will
+exist in your system? And so, so, and you might be actually thinking that, okay, I'm very bad at
+designing data types and that's why I have this kind of bad, bad definition of, of an order. But
+that may be so. But the thing I'm trying to assert here is not something that happens in a single,
+in a single step. Usually, it kind of creeps up on you. You start with something small and
+gradually it increases, grows, and then becomes this huge thing full of illegal states that you
+can, you're really dependent on and can't, can't really disentangle from, from your system. And,
+and then you again enter this, this space where you have lots of illegal states and nothing to do
+about it. But we can, can do better, a lot better. So, sorry. So, so our problem here is that our
+type is in a sense too big for a problem. We have, we define some schema for possible, possible
+combinations of inputs and it's too big. Our state space contains lots of things that shouldn't
+be there. And algebraic data types are a really good way and methodology to, to create types of,
+of the right size, types that can actually fit our domain in a way that, that really is exactly
+what we want and nothing else. So, let's rewrite our data type as, as an algebraic data type in
+this case and some type or in enumeration in Scala syntax now. So, we're going, instead of writing
+coffee order where everything is placed to kind of in the top level with all the options, everything
+possible, we're going to split, split it up into various cases. So, we have a first case with
+Cappuccino. Cappuccino requires milk, so it's no longer optional. We have a case for espresso,
+which doesn't have any, any requirements. So, this, so it's just espresso. We have the case of
+Latte, which also requires milk, but there's no ambiguity anymore because now it's a separate
+case and there's no way to confuse one Cappuccino with the other. So, so, and again, the argument is
+no longer, no, no longer optional. And Afogato requires Gelato. So, this is again a required
+dependency and we cannot avoid it. And Irish and coffee, which is the, which was our stumbling block
+now has a required dependency on cream and whiskey and there's no ambiguity anymore.
+So, not only that it's now much, much clearer what is going on and what, what, what sort of states
+are legal here and what, what is the actionable data that we have and how to access it. It's
+literally now impossible to express the legal state I, I, I just described previously. So,
+the legal states in the previous slide are, are literally unrepresentable. You can't write down
+the code that, that actually enters those states. So, now we can, for example, in the,
+when preparing the Irish coffee, we can now safely better match our, on our order. And, and if it's
+Irish coffee, we know and the compiler provides us with access to both cream and whiskey. And
+it's definitely there and can be gone and, and can be missing. So, we don't need to assume any
+invariant about a call or code. Don't have to lie about it in comments. And no, no exceptions can
+be, can be thrown here or, or any other illegal states. And if we got to this point where it
+better matched than we have Irish coffee, we know for a fact that all requirements were met
+and nothing can go wrong in this, in this respect. And this is enforced by the compiler
+for every possible floor of our program. So, we don't have to try to cover, cover everything
+with tests. And it's also there, enforced there for the future as well, because the compiler does
+the same thing for all future flows as well. So, we don't have to worry about it again with tests
+that we cannot write even. So, the illegal state that I showed before is truly unrepresentable
+now. You cannot write it down. It cannot exist in the system. So, algebraic data types are, are a
+great, a great tool you can use to reduce the state space of your, of your problem domain. So,
+leading to fewer legal states and making the code generally more, more comprehensible. And this is
+done by making every assumption about your inputs completely explicit. So, in our case, we made
+every case to correspond to the assumptions about coffee orders that we have at the moment. And
+the values are now correct by construction. So, you cannot build an illegal order anymore because,
+because you made it impossible in the type to represent what, what is not supposed to be there.
+And so, once you do that, you're basically turning your flow into data. So, notice how we no longer
+have any conditionals. After, after pattern matching and figuring out that we are in the Irish
+coffee case, that's it. We don't have to do anything else. We don't have to ask, ask and be
+hopeful that the cream whiskey are present. It's there. It's accessible. And, and so, and so you,
+you don't have to worry about defensively programming against it. And, and nice bonus in
+statically type of programming language is where you, for pattern matches, you also have
+exhaustivity checking. So, in case someone adds another case or something else is changing,
+changing the compiler will have your back and help you figure out what's missing and what,
+what you have to add there to be able to handle everything correctly. So, you can't forget anything
+that you need and don't, can't forget to handle everything. And what's important, the compiler
+is not providing you with safe access to all the data that you need. You don't have to assume
+that it will be present when it might be not. It will definitely be there and you can't work
+around it. So, now that you, and you're basically free from thinking about illegal states and you
+don't have to engage in defensive programming all throughout your application. It's not a
+magical solution. You still have to kind of get the, the, the size of your algebraic data type,
+right? Because my initial example, the first coffee order is also an algebraic data type,
+but that one was too big for our state space. So, you still have to think, nobody is, is
+getting away from, from thinking, but still having this perspective and having algebraic
+data types as, as a tool that you can use to shape your state space is, is very, very useful.
+And so, this is, I think that algebraic data type, data types of all the features of functional
+programming are, is probably the, the best cost, cost benefit ratio out there. And if you're using
+them consistently all over your system, I think that, that will be a great improvement to, to the
+possible illegal states that you can or cannot represent. And if I were to start on, start on
+a deserted island or something or programming Java, that probably would be the one feature that I,
+I would like to have from functional programming. They're that, that useful.
+So, now we're back to our robot. So, let's try to tackle another scenario. So, successfully
+defeated the issue of coffee ordering. So, again, apparently that coffee drinkers have lots and
+lots of neat picks. For example, you can't just pour any amount of water on any amount of coffee,
+apparently. I don't know why. That would be wrong. So, imagine you have some, some function that
+does the pouring. So, take some waters, take some grounds and, and does, and pours water over the
+grounds. So, this function can easily lead us to an illegal state. So, you can just choose the wrong
+ratio of water and grounds. And there you go. You have a wrong, a wrong state and a coffee that was,
+that was spoiled by too much water or too little water or whatever. And so, we can do something
+like this. So, we define a new type called tasty ratio. And we only want to allow tasty ratios
+in our, in our function. And this seems that, like, that would be kind of better, because
+here we're explicit about what, what we actually want to achieve. But not really, because the
+definition of tasty ratio is pretty much the same thing. You just moved, sorry, you just shuffled
+around your problem into another place. You still can create tasty ratio instances with the wrong
+proportion of water and grounds. And so, although we claim that tasty ratio is a valid input,
+we do not enforce it in any way. So, it's, again, another illegal state that's waiting to happen.
+And since it can be represented in our system, most likely someone at some point will create an
+illegal instance of tasty ratio and something will be broken. And, and so, in this case, though,
+we have so many illegal states, because most, most combinations of water and grounds will
+probably be illegal. So, our state space is just full of illegal, illegal, illegal states. And just
+a few small number of possible, comparatively small number of, of combinations of, of water and
+grounds are actually legal. And what we want to achieve is to only be able to write down the
+legal combinations and making, writing all other combinations completely impossible. That's, that's
+our goal. So, so basically what we want is some kind of invariant on tasty ratio and invariant
+that, that tells us that water and grounds are in the right proportion, proportion. And we don't
+want to be checking it all over, over the place. We don't want to do defensive programming and
+kind of sprinkle our code with e-falses and exceptions and the like. So, so ideally, so
+whenever we have an instance of tasty ratio, it has to be, has to be correct and nothing else
+should be impossible. But unlike the invariant of coffee, of the coffee order, which was kind of
+simple, is that Irish, Irish coffee must have cream and whiskey. This invariant is, is a bit
+trickier to get right. And just using algebraic data types, you probably won't be able to easily
+enforce it in the types. Correct me if I'm wrong if you have a way of doing that, but probably
+not likely and won't be worth it. So instead we're going to use smart constructor. So smart
+constructor basically limits the way we can, we can build instances of our, of our values. So this
+is just called a specific way, but most languages have some equivalent of this. So first of all,
+we, we mark our constructor as private. So we can no longer instantiate instances of tasty
+ratio without directly from the constructor. And then we create our own legal, our own smart
+constructor that, that requires that everything is legal. So the contract of the make function is
+that it can take any inputs, but it will only produce a tasty ratio only if the inputs are
+actually valid. And nothing else is possible. And this will be the only way to construct tasty
+ratios in our, in our program. And so the logic itself is probably not that complicated. So we
+just verify the, verify the right amounts. But it is crucial to get this right. So this is kind of
+the safe kernel that you have in your program that users will now assume is correct and can
+rely on in all other places. So if you got this right, people can, can rely on this invariant
+now for every place where they stumble upon tasty ratio. So now after, after making the smart
+constructor and, and forbidding the creation of tasty ratio without, without calling the smart
+constructor, now the, the, this function is, is safe. It actually does what, what it promises.
+You cannot call it with an illegal tasty ratio because there are no tasty ratios that are
+illegal in our system. It's just not possible anymore. So more generally, generally smart
+constructors are a great way of enforcing diverse invariants. So we can find many examples. So in
+this case, our signature is, is kind of, again, we have a wishful comment about something about age
+and, and, and alcohol restrictions, but, but it's not really an invariant that's enforced
+anywhere. Just wishful thinking. But if you apply the correct smart constructor, you can probably
+get it, get this, this type that will enforce it. It's not possible anymore to, to do the illegal
+action of, in this case, pouring whiskey into Irish coffee. And you can have more examples. So again,
+the first, the, the first, the top signature is always some wishful thinking and a type that
+doesn't really, really represent well what, what we want. And the second is, is a corrected version
+where we enforce something in our, on our type and, and usually we close it off with a smart
+constructor so that nobody can access the, the illegal states. And notice that we didn't make
+tasty ratio any smaller by, by creating the, the, the smart constructor. But we can, we have an
+illusion that tasty ratio is now a smaller value that doesn't have illegal states just because we
+made it impossible to create them. So we can program as if the state space really is now smaller and
+illegal states are unrepresentable. And again, it's very important to get the smart constructors
+right. So it's a one-time effort, which is probably worth it because you just cover it in one space,
+and then all of your flows can, can rely on the fact that the invariant, all the invariance you
+want are actually enforced. So smart constructors are a great way to enforce diverse invariance
+and with compiler assistance. So, assistance. So the moment you got it right from there on,
+you know that the compiler won't let anyone bypass this invariant that you're trying to enforce.
+And as a bonus, our type signatures are becoming, becoming kind of self-documenting because our
+types are now representing actual invariance that we care directly, directly in our code. And it's
+better than comments because they will never go out of date. The compiler is there to keep everything
+in check. But we do have to be careful when defining smart constructors because, as I said,
+you have to get that function right. And so unlike algebraic data types where you are kind of correct
+by construction, smart, smart constructors are usually have to do some unsafe work to make
+sure that everything else is safe. And so when possible, if you can represent something with
+an algebraic data type, that's probably the preferred way. But when, when they work, smart
+constructors are a great tool for excluding illegal states. So one, one last, last problem to
+tackle with a robot. So brewing coffee is, again, no surprise, a complicated process as well.
+And let's try to model a small part of brewing coffee. So here's one, one way to kind of
+model this, this process. So we have this, this kind of imperative interface that you might,
+you might expect for operating a robot with a bunch of kind of low-level commands that,
+that can be used for, for the brewing stage. And assuming that someone actually implemented
+this at the robot level, we can write the code for, for preparing for brewing, not the actual
+brewing, but just the preparation. And so this looks pretty informative. We just call, call the
+various actions in order. Anyone sees a bug here? So, disgustingly, we forgot to rinse the filter,
+and now our users are going to drink this paper-tasting coffee, and, and probably we'll just
+throw our, quit our robot and, and, and we will lose customers. So, so the reputation of the
+robot depends on it, and we'll, we just messed up a good cup of coffee. But, but more seriously,
+this, this code is very, very open to, to potential bugs, bugs that, that is illegal states.
+So you can, you can forget action just like, just like I did right now with the filter answering.
+You can mix up the order. You can, you can duplicate actions. Everything can happen here. It's,
+it's full of possible legal states. And if it's, if it's possible, we're most likely to hit it at
+some point. Maybe a refactoring gone, gone wrong or something, something else will can go wrong.
+And the problem is here that even if, if we do, do mix something up, the compiler won't help us.
+It doesn't know anything about it. So just compile fine and, and just be wrong. So again,
+this is our desired state space. It's quite simple. It doesn't really have many, many things that,
+that it has to do. But again, our actual code is open to various illegal state transitions that
+we can, we can make that we would like to avoid and make them compile time and possible to actually
+write down. So we can improve as well. So a big part of the problem here of the issue is that,
+is the imperative interface. It's, it's, it just tells us the actions we, we want to perform.
+It doesn't have any information, very little information about the intent of this action
+and the consequences of it. So, so if, if we have a unit return time of something, it doesn't
+really tell us much about what did we want to achieve or what actually happened. So, and so,
+since so little is reflected in the types, it's, it's not, it's not a surprise that the compiler
+can't really help us because the compiler works usually with types and that's, that's its way to
+support us. And so the solution will be to become more declarative. So we're leaving the
+imperative, imperative interface behind and, and trying to make it more declarative. So we start
+by just adding, adding expectations. So what, what, what we aim to achieve on every action. So,
+for example, the place filter function now, once invoked, will return a filter placed value,
+which will correspond to the fact that the filter was indeed placed. And so on for all the other
+functions. And we're not done yet. So we have another, we do have some various prerequisites. So
+we, there's some ordering that, that has to go on here that, that is otherwise illegal. And so
+we're going to define prerequisites as function arguments. So placing a filter cannot occur
+unless the filter was folded before. So we make the explicit in our function by requiring an
+argument that the filter was actually folded. And the same thing goes for rinsing the filter,
+which can't happen unless the filter was placed and the water was heated. And the same thing for
+grounds that you, if you want to add them, they must be actually ground. And the filter must be
+rinsed to prevent the bug from, from before. And so basically what we were doing here is we're
+encoding kind of business rules directly in our signatures. And once we do that, in turn, it
+means that code that violates those rules won't even compile. It becomes literally unrepresentable.
+And so we can now implement our prep flow from before. So instead of having our implementation
+returning unit, we now have a more informative, more informative signature that tells us what
+actually was achieved during that process. So after we finished the prep, water was heated
+and grounds were actually added. So there's no avoiding that now. Every implementation of this
+code has to, to do something about it. And so since our types are so, so descriptive, now again,
+again, this ability to kind of follow the types to implement our flow. So this is very similar to
+the code that we had before. But now we have to press around various outputs from our actions. So
+this code is still incomplete. But the nice thing here is that the compiler now helps us. It tells
+us, well, you forgot to make sure that you followed the filter before you placed it. And so we can
+fix that. And now the compiler tells us, okay, but if you want to add grounds, you have to, you
+have some prerequisites. So let's fix that. We have to have the coffee ground and the coffee
+ground and filter placed. And now we still have the same bug from before. We still, we forgot to
+rinse the filter. But this time, the compiler will tell us, you forgot to rinse the filter. So you
+have to do that before you can actually add your grounds. And so we fix that. And now the compiler
+is happy. And we are happy because our clients are happy. So because we shared our business rules,
+business knowledge with the compiler, the compiler was very helpful in actually enforcing this
+for us and making it impossible to stray from the right path. Also notice, so by making everything
+more declarative, it's now much easier to figure out what flows where and what goes in which way.
+And so in essence, our function dependencies are defining requirements and making the flow much
+more limited in what can or can't happen. And so this, for example, opens up opportunities for
+parallelization. So if you see that two functions are independent, you might be able to parallelize
+them. And the nice thing here is that the compiler will help you get it right because it knows what
+can or cannot be parallelized. But there is something that I didn't specify for the moment. And
+what are those types? The water heated and grounds added types and all the rest I just used here.
+So I just assumed that they are there, but I didn't actually specify them. And the answer is I don't
+care. I literally don't care about those types. So much so that I can actually represent it in our
+type signature. So brewing prep doesn't really depend on the specific values of all the types of
+coffee ground, water heated, and the like. Why? Because it just passes them around. It doesn't
+inspect them in any way. It just passes them around as kind of tokens of security, but it
+doesn't do anything else with them. And to make this explicit, we made our brewing prep function
+parametric. So now it takes six type arguments, although sounds scary. But since we don't care
+about the actual values, we can do that. And everything will just work the same way as before.
+So we explicitly declare the fact that we are invariant and don't care about how those types
+are specified. Now, in order for this to work out, the brewing actions interface has to be
+adapted as well. It has to be parametric in the same way. But because slide space is kind of
+limited, I'll abbreviate for a moment. And so now brewing actions is going to take the same
+six type parameters. And so now we are kind of consistently, the code looks exactly the same,
+but now we have type parameters. You might ask, why would you do that? And the answer is if you
+don't care about the inputs and outputs, if you make them parametric, it leaves you very little
+space to actually cheat. So in case I want to pass the water-heated value and have to return it
+for my signature, there's no way to obtain a water-heated value because from anywhere else,
+other than calling heat to water, because I have no idea what the type really is. It's parametric,
+so I have no information on how to obtain it. I don't know what it is, so it's just impossible.
+And so in this case, we're just forced to do the right thing because there's no way to cheat. If
+it was a unit or some other kind of simple value, we just could return that. But in this case,
+we can't because it's type parameter. And as a nice bonus, this approach actually gives us,
+although it limits the implementation, which is a good thing, it does give us
+various flexibility degrees of freedom when creating brewing actions because the type
+parameters can be set to whatever we actually want in brewing actions and still use unit, and
+maybe we can use something more informative in tests. And so this gives us actual, the limitation
+on this side actually gives us more flexibility in other places, which is a nice bonus, but
+it's not directly related to what we're doing here. But the point is that the brewing prep
+doesn't care about how those inputs work, and so we can limit it completely to using them correctly.
+And so I will point out that this code doesn't prevent every legal state possible. So for example,
+nothing stops us from calling fold filter twice. That might be, might be illegal. And in general,
+it's not always possible to limit every possible, every possible illegal state, but it's better to
+get something right than nothing. So I do think it's an improvement. So being declarative is a
+great way to encode your business rules directly in your types. That way the compiler can help you
+enforce those rules and making every breakage of the encoded rules impossible at compile time,
+and thus it's unrepresentable. And the good first step when trying to do things more declaratively
+is figure out where you have those redundant units that don't communicate any information
+about what the function does, and then try to see how you can solve it. And by making everything
+parametric, our code is becoming ignorant of the actual types that we use, which limits the
+number of possible illegal states that we can enter. So the less the code can do, the more we
+know about what it actually does. So ignorance is strength, like the famous quote. Okay, so we're
+done with the various techniques. It might not be obvious from those two examples, like why would
+that be useful? Because they're all small examples and kind of hard to see how they work out in a
+large code base that you have to maintain for a long time. My point is that all of this kind of
+adds up, and eventually it does make your code better in the long run, even if it's not obvious
+from the first small steps. But in this section we'll just kind of quickly review what sort of
+benefits you can expect to reap from being consistent and making illegal states as
+unrepresentable as you can in your code base. So the first point is that code becomes easier to
+comprehend. So as I just mentioned, the fewer things the code can do, the easier it is to
+understand what it actually does. But more concretely, for example, if you use algebraic
+data types consistently across your code base, the compiler can help you figure out what's
+happening now. You do a better match. Some editors would actually autocomplete all the cases, and
+you can now figure out what's going on, what information you have, what can you use and
+the like, and the compiler got your back. Not only that, it can also, as I mentioned,
+automatically do accessibility checking, so you're sure to not forget anything in case anything
+changes. And so this is definitely an improvement on your ability to figure out what's going on.
+And also a common theme throughout the examples is that our type signatures are becoming more
+informative. They encode more and more information about what's going on. So just by reading the
+signatures, it becomes easier to figure out what are the limitations, what is allowed, what is
+disallowed, and the like. Fewer bugs. So every legal state that you precluded and made unrepresentable
+is a potential bug that you avoided. So, for example, creating an Irish coffee order without
+whiskey is no longer possible. It's not a state that you can write. This is a compilation error.
+Nor this, like serving coffee and to an empty list of cups. Again, this is no longer possible
+because you enforced it at compile time, and this is a bug again that cannot happen anymore.
+And since they are unrepresentable, you don't have to test for them a lot. So this is our next
+point, is that you can do fewer, if you make as many legal states unrepresentable as possible,
+this leads to fewer tests that you actually have to write. For example, this test can't be
+expressed. Again, testing whether Irish coffee order has whiskey is no longer relevant because,
+again, even the test can't even compile. So that's a test that you don't have to write,
+and some tests, for example, are still possible to write but maybe more redundant because you
+don't really need, if your interface is sufficiently declarative, it might be kind of obvious on
+its own that you don't have to check whether water was heated or not when you done the brewing
+prep because the types are requiring that. And the last point is safer refactoring. So your
+code becomes much easier to refactor. For example, this code, the get calls on the optional values
+are only safe somewhat in the case that you're ordering Irish coffee. But imagine that you're
+doing refactor and now the prepare Irish coffee call moves to another place. Now it's in some
+other place and nothing is actually checking whether we're in the right case. So this is no
+longer safe. On the other hand, this code with the pattern match is safe by construction. If you
+try to move the call to prepare Irish coffee, the code will fail to compile because it will no
+longer have the references to the right information that it needs. And another refactoring is if you
+add something, for example, again, the compiler will verify that you matched all the various
+types, all the various cases that you have and will enforce again that you don't forget anything.
+Another example of refactoring is I mentioned in the previous section that we can paralyze
+some actions here. So we can, for example, heat water, grind coffee, and the rest can be
+paralyzed because they have no dependencies. So this is a refactoring that's easy to get wrong
+because if you mess something up, things will run in parallel when they shouldn't. And in the
+bad example, that would be just broken. But here we can write this code. And if we mess something
+up, the compiler will tell us you're missing some dependencies. You can't run this in parallel.
+So as people work and maintain large code bases, I think those benefits kind of add up and investment
+that you're making on making legal states unrepresentable is definitely, definitely worth
+the effort. So to conclude, almost done. So whenever you tackle a new domain, try to think
+about the state space of your problem, the various states that the system can arrive at and what
+can happen. Find the legal states in your system and define them to match your requirements or
+whatever other error conditions that you might care about. And all the other states are illegal.
+Now, if all you do is just think, just sit there and think about your state space in the legal
+and illegal state, that's already a great first step. You don't have to do anything else.
+That's already a good way of getting your code to be better just by knowing
+what's possible and impossible. But if you actually want to reap the benefits from this
+talk, make those states unrepresentable. And the benefits are fewer bugs, fewer tests,
+easier to comprehend code. And you don't have to worry anymore about states that are illegal
+because you made them unrepresentable. So you don't have to think about them anymore. That's
+a great thing to do. When you don't have to think about something, you can think about something
+else, which might be useful. And so we saw a number of techniques to achieve this goal.
+So algebraic data types help us reduce the state space into something smaller and more
+manageable. Smart constructors let us enforce various invariants and declarative signatures
+make various business rules kind of apparent in our code. And parametric polyphysm is like a nice
+cherry on top if you want to really kind of go at it even more limited. So there's a slide about
+where to go next. So I covered some very basic techniques. There are other approaches that
+you can take, which probably have a steeper cost-benefit ratio. So it might be not worth it.
+But these are some ideas of what you can think of, especially various type systems. So a lot of the
+things we've done are kind of bound by the type system that we're using. And so maybe trying
+other more advanced type systems or type system features can help you make things easier.
+If you're taking a photo, you can do that. I'll post the link to the slide so everything is there.
+And there's some inspiration for various resources that I think are kind of useful in thinking about
+problems. And again, I'll post the link for the presentation. All the links will be available.
+So it's my time to wrap up. So remember our poor little user that was trying to register and didn't
+have an email. So somewhere someone is trying to introduce another bug in our system. But luckily
+we applied all the techniques that we studied right now. And it no longer compiles. The illegal
+states is unrepresentable. The compiler tells us that and we can sleep quietly tonight. So hopefully
+I managed to convince you that making illegal states unrepresentable is actually worth the effort.
+And this is linked to the presentation. And if I have time for questions, I'm not sure.
+Yes, we can try to take one online question first, maybe.
+Can you please read it out for our audience? I guess you're in favor of using something like
+refined to express even more constraints in types instead of custom smart constructors. Yes,
+the one of the last slides, I used refined as there's a link to the refined library here in
+the end. So yes, refined is a nice library that can help you automate the process of creating
+smart constructors. Instead of writing them manually by hand, you can use a library that
+helps with that. All right. Thank you. We have also one question here on site.
+Hi. So thanks for the great talk. In the example about algebraic data types.
+It was the example of ordering different types of coffee. But what happens if the coffee shop
+owners have a business requirement that at any point of time, she wants to be able to add a
+new type of the coffee? So what happens to our algebraic data types with such a requirement?
+So there's often kind of people debating whether types are useful or not, or kind of this conception
+that you have to go all in or nothing. So either you specify everything and everything is fixed
+in types or not. This is not the case. If you want some flexibility, you can live that measure
+of flexibility as your requirements desire. So in the case of maybe having another case which is
+more dynamically defined, maybe have another case which is dynamic. And then you'll be extra
+careful around that case. But still, you now have a small island of sanity where you know what's
+going on and another section of the code which is not as pleasant and safe. But still, you can
+separate the parts. What you know, you can encode. What you don't, leave it as an unknown and handle
+it appropriately. Okay. Thank you. We have one more online question. If you could again, please read
+it out. So only recently I started learning Haskell and Idris from the perspective of making
+illegal states not representable. It seems to me that type-driven development
+advocated by Idris is more suitable. Then again, I'm a beginner. So yes, Haskell and Idris both
+have various advanced type-level features and things you can do that make it possible to exclude
+even more illegal states. And as I mentioned, using more advanced type systems is a good way
+to enforce more invariance. But the question is kind of the cost, whether it's worth it,
+especially as a beginner, because if you play something very, very kind of a heavy tool that
+does something very sophisticated, it might be more difficult to maintain. So I think you
+should kind of gradually ramp up there and eventually maybe use it, but have a good way
+to judge whether it's worth it or not. So start simple and then gradually improve.
+All the things I did mention now are available in both Haskell and Idris. So that's not
+actually a problem. And you can start there and move on to something more advanced. Okay. We
+have time for one last onsite question here. Thanks for a great talk. I'm wondering if any
+of the techniques that you mentioned are applicable in dynamically checked languages?
+And if you have an experience in doing so, maybe? So in dynamically typed languages, everything's
+applicable. You can write anything. The question is whether who enforces things for you. So in
+a statically typed language, the compiler is much more your friend than people usually think.
+And then in dynamically typed language, first of all, just thinking about the state space,
+you can do it in any language on a piece of paper. It doesn't really matter. And it's already an
+improvement. And then if you are explicit about what's illegal, at least you can force your
+invariance even in a dynamic context. For example, your smart constructor won't return an optional
+value, but will throw an exception. But at least you limited the scope of where things can go
+wrong, for example. And pattern matching is available in various languages. Although there are no,
+the guarantees might be somewhat looser, but still it's better than nothing. So those approaches
+can help you, but they won't gain you as much benefit as they are in a statically typed language,
+I think. All right. Thank you very much, Daniel. Please help me thank him.

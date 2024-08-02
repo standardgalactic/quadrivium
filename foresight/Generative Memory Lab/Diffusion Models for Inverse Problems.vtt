@@ -1,0 +1,1061 @@
+WEBVTT
+
+00:00.000 --> 00:07.520
+Great. Yeah, so hi, I'm Hyunjin Chung. I'm a PhD student at bio-imaging and signal
+
+00:07.520 --> 00:13.200
+processing and learning lab at KAIST Korea. I'm honored to give a talk in such a prestigious
+
+00:13.200 --> 00:19.040
+group in Netherlands. And so thank you very much for having me here. So today I'll give a talk
+
+00:19.040 --> 00:23.520
+mostly about diffusion models and how to use them to solve inverse problems in imaging,
+
+00:24.080 --> 00:30.080
+focusing on a few recent papers that I wrote. So specifically it will be focused on base and
+
+00:30.080 --> 00:35.440
+inference in the context of inverse problem solving. So I believe it will be of quite a
+
+00:35.440 --> 00:40.800
+relevance to you. And I'm pretty sure that most of you are already familiar with diffusion models,
+
+00:40.800 --> 00:47.360
+but some of you may not be familiar with inverse problems. So and since we have a rather small
+
+00:47.440 --> 00:54.880
+group, I feel free to speak up with your microphone. I'm very sure that I'm going to miss
+
+00:54.880 --> 00:59.520
+some chats. So I hope the talk will be as interactive as possible.
+
+01:02.720 --> 01:08.880
+Yeah, so the talk will be structured in a bit of an odd way because we're going to first talk about
+
+01:08.880 --> 01:14.960
+two closely related work in a reverse order. So the first part of the talk will be about a paper
+
+01:14.960 --> 01:21.200
+named DPS, accepted to iClear recently. Then we will move backwards and talk about MCG,
+
+01:21.200 --> 01:25.920
+which was supposed to be the main content of the talk today. And finally, if time allows,
+
+01:25.920 --> 01:31.440
+I would also like to briefly touch the most recent work that applies these methods to more
+
+01:31.440 --> 01:39.440
+advanced problems called blind inverse problems. So I'll just briefly cover the basic concepts
+
+01:39.440 --> 01:44.960
+of diffusion models. I don't want to bore you too much, but I'll just speak in a briefly in
+
+01:44.960 --> 01:50.880
+a score perspective. So what we do in diffusion models is we try to estimate the gradient of
+
+01:50.880 --> 01:55.440
+the lock density with the neural network S of theta, which points to the high density most of the
+
+01:55.440 --> 02:03.120
+distribution. In order to circumvent the intractable explicit score matching, you train your network
+
+02:03.120 --> 02:08.800
+with denoising score matching, which boils down to essentially training a residual denoiser.
+
+02:10.400 --> 02:16.720
+Once that is done, you can use the train score functions to sample from the distribution p of x
+
+02:16.720 --> 02:24.240
+with, for example, Langevin MCMC. And another interesting view is that one can view the data
+
+02:24.240 --> 02:30.240
+noising process as some linear forward SE, and the data generating process as the corresponding
+
+02:30.240 --> 02:36.160
+reverse stochastic differential equation, where the drift function is governed by the score function.
+
+02:36.720 --> 02:42.080
+Hence, when we want to sample data, you can discretize the reverse SDE and numerically
+
+02:42.080 --> 02:49.520
+solve it using the pre-trained score function. On the other hand, here we are interested in
+
+02:49.520 --> 02:54.560
+solving inverse problems. In the inverse problem setting, our aim is to recover the ground truth
+
+02:54.560 --> 02:59.040
+x from the noisy measurements y obtained through some integral imaging system A.
+
+03:00.000 --> 03:06.560
+And there will be some pollution of noise, and here, A, sorry, and the problem is naturally
+
+03:06.560 --> 03:10.880
+opposed, which means that there exist infinitely many solutions to this problem,
+
+03:12.080 --> 03:19.280
+meaning that given this noisy image, noisy blurred image of the leopard, there could exist
+
+03:19.280 --> 03:27.680
+a lot of different feasible answers to the actual clean image. So in order to correctly specify
+
+03:27.680 --> 03:33.840
+which one of the solutions is the one that we want, we need to specify the prior of the data
+
+03:33.840 --> 03:39.600
+distribution, and in other words, how the images would actually look like in real world.
+
+03:42.160 --> 03:48.160
+Examples of such inverse problems include in-painting and deep learning in the context
+
+03:48.160 --> 03:52.640
+of low-level vision. They're also called image restoration problems. And in the context of
+
+03:52.640 --> 03:57.760
+biomedical imaging, there could be compressing MRI, sparsive CT, and so on.
+
+04:00.400 --> 04:04.640
+So we'll go over how we can solve such inverse problems with diffusion models.
+
+04:06.960 --> 04:13.840
+So let's first consider the following measurements model. Now, given y, what we want is to sample
+
+04:13.840 --> 04:21.360
+from the posterior distribution p of x given y. And using Bayes' rule, it's straightforward to see
+
+04:21.360 --> 04:27.520
+that the gradient of the log posterior is the sum of gradient of the log likelihood
+
+04:27.520 --> 04:34.080
+plus the score function. Here, gradient of the log likelihood in red gives us the information
+
+04:34.080 --> 04:39.680
+about the measurement process. And the score function is what we've already estimated with
+
+04:39.680 --> 04:46.240
+the neural network. So one should note that the likelihood function p of y given x is in most cases
+
+04:46.320 --> 04:51.600
+known. And in 95% of the cases, it can be modeled relatively well with the Gaussian.
+
+04:52.240 --> 04:58.720
+And among the rest of the 5%, 4% is Poisson, meaning that the likelihood function is often known
+
+04:58.720 --> 05:04.080
+a priority. So hence, in the perspective of Bayesian reconstruction, all we have to do when
+
+05:04.080 --> 05:09.920
+posterior sampling is desirable is to specify the correct prior distribution. Then the measurement
+
+05:09.920 --> 05:18.560
+process is hand wavy, it's known so we can sample from the posterior. So let's consider the case
+
+05:18.560 --> 05:25.040
+where we modeled the data distribution with the diffusion model. From the score or the SDE perspective,
+
+05:25.040 --> 05:30.880
+recall that the generative process is defined by this general form of reverse SDE. So in order
+
+05:30.880 --> 05:36.240
+to do unconditional sampling from the prior distribution, we can use the following discretization
+
+05:36.320 --> 05:42.960
+steps of the reverse SDE. So for simplicity, I denoted Euler-Maruyama discretization here,
+
+05:42.960 --> 05:48.000
+but other forms of sampling can of course be used, such as ancestral sampling of DDPMs
+
+05:48.560 --> 05:53.600
+or hybrid methods that incorporate MCMC chains within the numerical integration solvers.
+
+05:54.480 --> 05:59.520
+They're called predictor-corrector solvers in score SDE paper.
+
+06:00.160 --> 06:08.000
+Moreover, when we want to do posterior sampling, we can use what we've derived from the Bayes rule
+
+06:08.960 --> 06:15.760
+and incorporate the gradient of the walk likelihood. So here comes the problem.
+
+06:15.760 --> 06:21.840
+Can I ask a question? I'm sorry, I'm decently new to the diffusion model, so maybe there is
+
+06:21.840 --> 06:26.160
+something I didn't understand. I don't understand the sign, why there is a minus sign in front of
+
+06:26.240 --> 06:29.680
+the even the original paper, why there is a minus sign in front of the gradient of the
+
+06:31.600 --> 06:39.440
+score. Oh, so you're asking, how did the reverse SDE come along here, right?
+
+06:40.000 --> 06:48.320
+Well, I'm saying that with that minus sign, it will do the opposite of going to the high
+
+06:48.320 --> 06:52.880
+probability regions. It will go away from it. So am I missing something?
+
+06:53.840 --> 07:00.080
+Oh, yeah. So intuitively, if you want to sample from the high density modes of the
+
+07:00.080 --> 07:07.680
+distribution, you would kind of do gradient ascent with it. And yeah, there's a caveat here,
+
+07:07.680 --> 07:15.600
+because the differential dt here is a time running backwards. So you have to show the minus sign.
+
+07:15.680 --> 07:22.960
+Yeah. But then the sign of f is wrong, because the sign of f should have the same
+
+07:22.960 --> 07:33.120
+sign of g, doesn't it? Actually, no. So the derivation process of this reverse SDE comes from
+
+07:34.160 --> 07:40.480
+the thing called Anderson's theorem. So if you plug in this general form of forward SDE,
+
+07:40.480 --> 07:44.960
+then there's a theorem that states that this reverse SDE is the correct form.
+
+07:44.960 --> 07:49.840
+I understand. But so if there isn't, let's say that there is no score, so there is no goal,
+
+07:49.840 --> 07:55.200
+then if you have a, let's say, a Oldston-Ulenbach process, the forward and reverse dynamics are the
+
+07:55.200 --> 08:10.000
+same. So you're saying that f dt is running backwards, then f should be negative. If you
+
+08:10.000 --> 08:14.320
+have a stationary process like an Oldston-Ulenbach, regardless whether you run it forward or
+
+08:14.320 --> 08:19.440
+backward, you have the same dynamics. Therefore, you are not going to flip the sign of f if you
+
+08:19.440 --> 08:35.440
+change the time. Let's say, in an Oldston-Ulenbach process, f induces the mean reversion. So if
+
+08:35.440 --> 08:39.520
+you actually flip the sign, you will have the process going away from the mean, which is not
+
+08:39.520 --> 08:44.880
+the reverse time process. The reverse time process wants to go back to the mean exactly like the
+
+08:44.880 --> 08:50.640
+forward process. Right, right. I'm also a bit confused myself.
+
+08:54.080 --> 09:00.480
+Because everything works, I think, I don't know. So again, I could be misinterpreting something.
+
+09:01.440 --> 09:08.640
+Because I do see this in papers, but I just,
+
+09:13.680 --> 09:18.800
+it's, again, if it's an Oldston-Ulenbach process, the forward and reverse dynamics,
+
+09:19.840 --> 09:23.360
+assuming score zero, should be the same. So you cannot flip the sign. Otherwise,
+
+09:23.440 --> 09:31.840
+you get the opposite, you get the diverging process. And if you assume the generative
+
+09:31.840 --> 09:35.920
+direction to be forward, then the sign of the score should be plus, not minus. But of course,
+
+09:35.920 --> 09:40.720
+it would become minus if you are actually considering that going backward. But okay,
+
+09:40.720 --> 09:45.680
+but maybe we can discuss this offline. And also, I mean, again, it could be that I'm missing some
+
+09:45.680 --> 09:52.400
+details of the notation that for which things will match up. I'm not sure if, especially in the case
+
+09:52.400 --> 09:59.680
+of Ornstein-Ulenbach process, is there, is the score function zero there? Well, so the,
+
+10:01.200 --> 10:08.560
+well, so the, if the forward process is Oldston-Ulenbach, then f of x of t is just minus alpha x.
+
+10:09.200 --> 10:13.920
+Right. And that would be true both in the forward and in the backward,
+
+10:13.920 --> 10:17.280
+because again, it's time invariant. If you flip, you don't change anything.
+
+10:18.240 --> 10:23.280
+The score happened in order to enforce the terminal condition that the process has to fit the data.
+
+10:26.160 --> 10:30.480
+So it, in this sense, it's nothing to do with the Ornstein-Ulenbach process. It's just a
+
+10:32.080 --> 10:37.520
+starting point of the process, which if then, if you want to reverse, it will actually go back to
+
+10:37.520 --> 10:43.200
+there. Yeah, I think we should come back to this later. I think it's better to discuss
+
+10:48.160 --> 10:56.480
+So coming back to where we were, I think it was right here. So I was talking about how we could
+
+10:57.040 --> 11:02.640
+switch from prior sampling to posterior sampling by, by just plugging, plugging in this base rule.
+
+11:03.680 --> 11:10.160
+And here I said that care must be taken here because the gradient of the log likelihood
+
+11:10.160 --> 11:16.640
+is in fact intractable. And note that this is different from my claim earlier that the
+
+11:16.640 --> 11:22.320
+likelihood function is in most cases known. And this is, this arises from the fact that
+
+11:22.320 --> 11:29.200
+there are noisy x i's here rather than x zero. So let us dive into closely examine what I mean by this.
+
+11:30.400 --> 11:37.120
+To see why this is the case, I'm sorry that I'm switching notations with i and t. For i's,
+
+11:37.120 --> 11:46.480
+I'm denoting discretized things and t. I'm just pointing at some general continuous time.
+
+11:46.880 --> 11:53.840
+and instantiations. So here, consider the following probabilistic graph in the context of diffusion
+
+11:53.840 --> 12:00.480
+models. So we know two conditional distributions p of y given x zero and p of x t given x zero.
+
+12:01.200 --> 12:06.000
+And for now, let's assume that the first one is the measurement distribution is given as typically
+
+12:06.000 --> 12:12.480
+Gaussian. So, and the second word, the four distribution of the diffusion is also Gaussian.
+
+12:13.440 --> 12:19.360
+However, the reverse distribution p of x zero given x t shown with blue dotted line is intractable
+
+12:19.360 --> 12:26.000
+in general. So hence p of y given x t is intractable because we have no information about this blue
+
+12:26.000 --> 12:33.600
+dotted line. So in our work, we aim to approximate the intractable distribution.
+
+12:35.200 --> 12:41.760
+The first key comes from the factorization. Since x zero is conditionally independent on y
+
+12:41.760 --> 12:48.400
+and x t, we can factor the integrand as follows. Where the former term is what we know and the
+
+12:48.400 --> 12:54.560
+latter term is what we partially know. And by partially known, I mean that we know how to obtain
+
+12:54.560 --> 13:01.360
+the posterior mean of the distribution, which is given by the 3ds formula. Note that 3ds formula
+
+13:01.360 --> 13:07.440
+is used widely in diffusion model context, as it states that the posterior mean, or the denoised
+
+13:07.440 --> 13:13.200
+estimate, can always be achieved when we know the so-called blurred score function. That is,
+
+13:13.920 --> 13:17.520
+the score function of the intermediate noisy variables x t.
+
+13:21.840 --> 13:29.520
+Here we see that we can plug in 3d denoising to achieve some posterior mean of the
+
+13:30.160 --> 13:38.320
+distribution in the context of the dpms. And to fully enjoy the effectiveness of 3ds formula,
+
+13:38.320 --> 13:44.240
+and because leaving the expectation outside is intractable, let us push the expectation inside
+
+13:44.240 --> 13:52.800
+for now. When we do that, by the 3ds formula proposition, we have a fully tractable distribution
+
+13:52.800 --> 13:57.840
+where the condition is now given by x zero hat, the denoised estimate from x t.
+
+14:00.480 --> 14:05.920
+Now, since we proposed an approximation here, it is important that we quantify the approximation
+
+14:05.920 --> 14:10.480
+bound. And for that, we have a theorem that states the approximation error,
+
+14:10.480 --> 14:15.200
+or the so-called Jensen gap, and used by pushing the expectation inside the function.
+
+14:16.720 --> 14:23.520
+And we show that this approximation error is upper bounded by this constant with 3 constituents.
+
+14:24.480 --> 14:28.880
+So, the latter two parts are usually bounded in most practical situation.
+
+14:29.680 --> 14:37.200
+And the interesting part here is the first one, where we see that when sigma goes to zero,
+
+14:37.200 --> 14:42.960
+the entire constant goes to zero. This is useful because it states that in cases where we have
+
+14:42.960 --> 14:48.480
+negligible measurement noise, the approximation will be tight. However, in practice, even when
+
+14:48.480 --> 14:57.760
+we have high measurement noise, the method also works very well. So, just summing everything up,
+
+14:57.760 --> 15:02.000
+thanks to theorem one, we can achieve what we call diffusion posterior sampling,
+
+15:02.000 --> 15:07.520
+or DPS in short. We start with standard Bayes rule in the context of diffusion models.
+
+15:08.800 --> 15:11.200
+We can apply theorem one to get the approximation.
+
+15:18.480 --> 15:38.800
+I lost him. I don't hear anything anymore. Do you hear me now?
+
+15:38.960 --> 15:42.960
+Yeah. Yeah. Yeah. Sorry. Where did the...
+
+15:50.960 --> 15:53.120
+I don't have any sound anymore.
+
+15:57.200 --> 16:01.520
+Yeah, now we're here. Yeah, now it's back. But we cannot see the screen.
+
+16:01.520 --> 16:10.880
+Can you try to share the screen again? I can see a screen. I can see the screen,
+
+16:10.880 --> 16:21.520
+the Gaussian and Poisson. Yeah, me too. Yeah. Can you try to just stop sharing again?
+
+16:21.520 --> 16:24.480
+We'll share it again. Yeah, sure. Thanks.
+
+16:30.240 --> 16:34.400
+So, is this where the connection was disconnected?
+
+16:36.080 --> 16:39.600
+Yeah, you were just starting about the Gaussian and Poisson. Yeah.
+
+16:41.200 --> 16:46.000
+So, I was saying that these gradients can be analytically computed because these
+
+16:46.000 --> 16:51.360
+functional forms are already known. So, we see that for Gaussian, we're essentially
+
+16:51.360 --> 16:56.480
+performing gradient descent that minimizes the squared L2 norm of the residual.
+
+16:58.320 --> 17:03.760
+I cannot see the slides, but I cannot see the screen. Yeah, neither. No.
+
+17:05.040 --> 17:10.560
+They just dropped away in the halfway through your sentence.
+
+17:11.360 --> 17:14.320
+Okay. So, let's try to reshare...
+
+17:21.360 --> 17:26.320
+Yeah, now I can see them. Yeah, me too. Thanks. So, does this work?
+
+17:28.560 --> 17:37.760
+Yes. It seems like... Yeah. So, yeah, I was saying that for Gaussian measurement models,
+
+17:37.760 --> 17:44.160
+we're trying to do gradient descent that minimizes the squared L2 norm of the residual,
+
+17:44.160 --> 17:48.560
+and for Poisson measurements, we're minimizing the squared weighted norm of the residual.
+
+17:51.200 --> 17:57.760
+So, incorporating ancestral sampling for DDPMs, we have our algorithm of DPS where we can derive
+
+17:57.760 --> 18:04.880
+separate algorithms according to the measurement model in hand. Note that line seven is where DPS
+
+18:04.880 --> 18:10.800
+takes place. If we were to remove line seven, we would simply be sampling from the prior distribution,
+
+18:11.840 --> 18:16.960
+the usual diffusion models, what they do. And hence, our algorithm is just very simple
+
+18:16.960 --> 18:24.000
+modification of the usual DDPM sampling. When we do that, we achieve these results.
+
+18:24.880 --> 18:29.840
+So, since our method is not dependent on the measurement model, we can apply the same score
+
+18:29.840 --> 18:34.880
+function to various problems. For example, this is the result of applying our method to super
+
+18:34.880 --> 18:42.080
+resolution that are contaminated with Gaussian noise. We can also apply our method to noisy in
+
+18:42.080 --> 18:49.920
+painting, and this is the case where 92% of the pixels are blocked out in a 256x256 image.
+
+18:52.000 --> 18:56.720
+This is noisy Gaussian deep blurring. We can do noisy motion deep blurring.
+
+18:57.120 --> 19:02.880
+And what's even more, since we're not restricted to the choice of the forward operator A,
+
+19:03.920 --> 19:07.760
+for the first time in the context of inverse problem solving with diffusion models,
+
+19:07.760 --> 19:14.240
+we show that we can also solve nonlinear inverse problems, such as phase retrieval presented here.
+
+19:14.960 --> 19:21.760
+And for those of you who do not know what phase retrieval is, it's a problem that tries to estimate
+
+19:22.400 --> 19:28.000
+the phase and the Fourier domain, and this is a notoriously hard problem because most of the
+
+19:28.000 --> 19:33.840
+information of the image is actually concentrated on the Fourier phase rather than the Fourier
+
+19:33.840 --> 19:42.000
+magnitude of an image. And we can also solve problems like non-uniform deep blurring, which
+
+19:42.000 --> 19:47.280
+is another nonlinear inverse problem, given that the forward measurement model is actually
+
+19:47.280 --> 19:53.680
+differentiable. This is one application that I want to highlight because we actually used
+
+19:53.680 --> 20:00.160
+a complex neural network that emulates the nonlinear blurring here. And neural network is one
+
+20:00.160 --> 20:05.760
+of the most nonlinear forward models that you can imagine. So even when the forward operator is
+
+20:05.760 --> 20:10.640
+highly nonlinear, we can see that DPS is capable of recovering the image with high fidelity.
+
+20:11.440 --> 20:24.720
+So that was it for DPS. I think we can briefly stop to see if any of you have any questions.
+
+20:24.720 --> 20:33.200
+I have a question. So basically, did you also show, because you can have, due to the stochasticity,
+
+20:33.200 --> 20:40.000
+you can have posterior distribution of the denoid samples, right? So do you notice a difference
+
+20:40.080 --> 20:46.080
+compared for the one you, the blur, for example, this image, do you get some deviations that are
+
+20:46.720 --> 20:52.960
+meaningful in one sense? Yeah, so I'm sorry that I don't have examples here, but
+
+20:54.240 --> 21:01.120
+yeah, you do see quite a bit of stochasticity, especially when the degradation is heavy as,
+
+21:02.160 --> 21:08.320
+for example, the example here, blurring is heavy. So the posterior samples have high
+
+21:08.320 --> 21:18.160
+standard deviation in terms of reconstructions. Yeah, that's another question. I don't know if
+
+21:18.160 --> 21:22.720
+you're going to explain it and maybe let me study that, but you also mentioned that reconstruction
+
+21:22.720 --> 21:28.400
+is possible if you have a prior, right? Right. But how do you choose the prior? Do you learn
+
+21:28.400 --> 21:36.000
+it or is it something that you'd have to? Oh yeah. So the thing that we're proposing here is that
+
+21:36.080 --> 21:40.240
+we're using the diffusion prior, right? So we're using this generative prior,
+
+21:40.240 --> 21:46.400
+and the prior is learned through the usual training process of diffusion models. So
+
+21:46.400 --> 21:51.440
+whether it be score matching or epsilon matching or whatever, we only, what we only need in the
+
+21:51.440 --> 21:59.920
+sampling process is the pre-trained score function s theta here. So all the examples that I show you
+
+21:59.920 --> 22:08.640
+here are generated by pre-trained models available online. So specifically, we use the
+
+22:08.640 --> 22:13.840
+open AI model, and we don't need any fine-tuning for any of these problems. We can just plug it
+
+22:13.840 --> 22:22.240
+into the solver and that will act as the prior of the distribution. Okay, so the prior is trained
+
+22:22.240 --> 22:27.200
+on the data that you use it on. So you use the simulation of the model pre-trained on different
+
+22:27.200 --> 22:37.680
+data. Yeah. Thanks. So how this method would differ from the paper also from song et al for
+
+22:37.680 --> 22:45.520
+inverse problems in medical imaging? So is there a likely difference? They are different and that
+
+22:45.520 --> 22:52.800
+will be covered more in detail in the second section where I explain the nearest paper.
+
+22:53.040 --> 23:00.800
+Yeah. So if you could summarize, for example, in a few words, because the main paper from song et al,
+
+23:00.800 --> 23:05.760
+you can also do inverse problems straightforward. I mean, you can do the painting. What would be
+
+23:05.760 --> 23:14.400
+like the main contribution is this non-linear approach to inverse problems, or what would
+
+23:14.400 --> 23:21.040
+be the main difference? So it's two things. I guess I'll try to explain it later. So you're
+
+23:21.040 --> 23:27.840
+mentioning the original paper of song et al at iClear 2021 and there was a paper that you mentioned
+
+23:27.840 --> 23:36.880
+that tackled medical imaging in the next year of the same author. They solved inverse problems by
+
+23:37.520 --> 23:43.360
+using a so-called projection approach, which means that you're directly replacing what you have as
+
+23:43.360 --> 23:48.480
+the measurements and you're keeping only the rest of it. So this is the visualization of such
+
+23:48.480 --> 23:56.000
+projection process. And this projection process works for certain inverse problems, for example,
+
+23:56.000 --> 24:04.000
+in painting. And for in painting, when you have a small degradation, for example, the mask is small
+
+24:04.000 --> 24:10.960
+or the blocked out pixels are not dominant. In those cases, projection approaches work fine.
+
+24:11.680 --> 24:19.840
+But for example, when you have a large mask, for example, a 128 by 128 mask cure, when you
+
+24:19.840 --> 24:27.200
+apply song's method, projection type approaches tend to fail dramatically. This is also relevant
+
+24:27.200 --> 24:33.520
+to the case of medical imaging, where you have high degradations. These projection-based approaches
+
+24:33.520 --> 24:46.240
+will typically fail. Whereas DPS that I proposed in the last section and the MCG that I will explain
+
+24:46.240 --> 24:55.760
+soon after does not have this property. And the methodological main difference is that
+
+24:56.640 --> 25:03.680
+you song and all use projection type approaches, whereas MCG or DPS uses gradient type approaches.
+
+25:03.680 --> 25:10.880
+So it's a smoother transition towards the that adapts to the measurement process.
+
+25:15.760 --> 25:18.800
+Yeah, that's pretty nice. Yeah, that's pretty clear. Thanks.
+
+25:19.520 --> 25:28.080
+Yeah. Okay. Should I move on to the next section?
+
+25:31.040 --> 25:40.800
+Yeah, thanks. Yeah, so the next paper that I'm going to talk about is actually a paper that came
+
+25:40.800 --> 25:48.480
+before DPS. But I explained DPS first because it really uses the same gradient, I would say
+
+25:48.480 --> 25:54.400
+similar, but almost the same gradient method with DPS. But at the time of development of MCG paper,
+
+25:54.400 --> 26:04.000
+we did not really understand how mathematically the solvers would be derived. So here in this
+
+26:04.000 --> 26:09.600
+paper, we focused more on the explanation in the geometric context of diffusion models. So I hope
+
+26:09.600 --> 26:14.640
+that this also helps the understanding of the underlying intuitive
+
+26:16.320 --> 26:18.480
+things about these gradients based methods.
+
+26:20.880 --> 26:26.480
+So in order to understand the paper, let us review some of the important properties of
+
+26:26.480 --> 26:31.760
+high dimensional Gaussian random variables. And specifically for very high dimensional Gaussian
+
+26:31.760 --> 26:36.800
+random variables, while the mode of the PDF may be near the main of the distribution,
+
+26:37.440 --> 26:42.880
+the measure is actually concentrated in the annulus that is distant from the center.
+
+26:44.240 --> 26:48.240
+This is the reason why when we add fixed variance Gaussian noise to an image,
+
+26:49.840 --> 26:54.960
+you never really see a clean image, even when the highest probability of a Gaussian noise would be
+
+26:54.960 --> 27:02.720
+zero noise. We always get images with very similar noise levels. Now extending that,
+
+27:02.800 --> 27:06.880
+let us think of a random variable Y that is corrupted with Gaussian noise
+
+27:06.880 --> 27:12.560
+by adding some noise. Sorry, can you maybe rephrase that? I mean, I think that's interesting,
+
+27:12.560 --> 27:18.960
+the slides before. So the concentration of Gaussian measure, right? Yeah, so this is a
+
+27:18.960 --> 27:24.240
+Gaussian annulus theorem, right? And then the effect that we see, what you said is that we
+
+27:25.120 --> 27:31.680
+don't see like, so we see the same effect, right? Or what do you mean? Definitely. So
+
+27:32.240 --> 27:38.480
+because of the Gaussian annulus theorem, what we see when we add Gaussian noise to images with,
+
+27:39.040 --> 27:46.960
+let's say, fixed variance Gaussian noise to an image, I guess the highest probability
+
+27:46.960 --> 27:57.920
+instantiation of this Gaussian distribution would be no noise, right? Zeroes. But that never happens.
+
+27:57.920 --> 28:04.240
+So if you add some random Gaussian noise to an image, you will always see some
+
+28:05.280 --> 28:11.280
+very similar noise level images that are corrupted in a very similar way. So that was what I was
+
+28:11.280 --> 28:22.480
+talking about. Yeah, okay. Yeah. So it's also due to the convolution, right? You can observe this
+
+28:22.560 --> 28:30.640
+as a convolution. Yeah. So this is kind of related to what I was talking about before.
+
+28:30.640 --> 28:38.960
+So let's say you have like a linear space of X. And what you would do is you add some Gaussian
+
+28:38.960 --> 28:47.040
+noise to that random variable X. Because this is a convolution, we can show that the marginal
+
+28:47.040 --> 28:55.680
+distribution P of Y is actually a, the measure actually concentrates on the hypercylinder
+
+28:56.240 --> 29:04.000
+that is distant from the center of PX. So this is kind of intuitive reason why
+
+29:05.760 --> 29:09.680
+the noisy images with the fixed variance have similar looking structure.
+
+29:10.560 --> 29:20.160
+So in this work, we propose to interpret diffusion models using some assumptions about the data
+
+29:20.160 --> 29:27.600
+manifold. So the usual manifold hypothesis states that the data lives in a low dimensional manifold
+
+29:27.600 --> 29:32.880
+with much smaller dimensionality than the ambient space. And in this work, we add an
+
+29:32.880 --> 29:38.080
+additional strong assumption that the manifold, the central data manifold is locally linear.
+
+29:38.560 --> 29:43.360
+And in order to leverage, and this is because we want to leverage the results from the concentration
+
+29:43.360 --> 29:51.040
+of Gaussian measure. And specifically, when we assume that our data manifold is locally linear,
+
+29:51.600 --> 29:56.880
+what we can show is that the geometry of diffusion model is given by the successive manifolds
+
+29:56.880 --> 30:02.400
+where there exists a clean data manifold in the center. And there are continuously many
+
+30:02.480 --> 30:10.800
+noisy manifolds where the noisy samples reside. So these are the manifolds of the noisy images.
+
+30:13.360 --> 30:19.360
+Extending that to a continuous limit, we propose that diffusion model is an onion because
+
+30:19.360 --> 30:24.560
+where when we push T to infinity, the distribution actually becomes a pure Gaussian.
+
+30:25.120 --> 30:29.760
+And since the measure of a high dimensional Gaussian resides in a Gaussian hypersphere,
+
+30:30.480 --> 30:35.600
+the intermediate manifolds are covers of the central manifolds that interpolates between these
+
+30:35.600 --> 30:43.440
+two. Therefore, this diffusion process would correspond to these red arrows, and the reverse
+
+30:43.440 --> 30:51.600
+diffusion would correspond to the blue arrows. And furthermore, when we are considering the case
+
+30:51.600 --> 30:56.400
+where we are trying to solve inverse problems with diffusion, we are left with the figure on
+
+30:56.400 --> 31:01.600
+the right. Here, we are not only trying to find points in the central manifold M,
+
+31:02.480 --> 31:08.160
+but we're trying to find the intersection between the manifold M and the line Y equals HX.
+
+31:13.680 --> 31:20.560
+So I've already said this earlier, but let's examine some of the representative methods that
+
+31:20.560 --> 31:26.560
+solve inverse problems using diffusion. These methods, Song at L and Choi at L,
+
+31:27.520 --> 31:33.200
+are a type of projection-based approach, since they directly replace the part that is known
+
+31:33.760 --> 31:42.800
+and keep only the unknown part. Another way to impose data consistency in the Bayesian framework
+
+31:42.800 --> 31:48.320
+is to incorporate likelihood. In other words, try to minimize the residual by gradient descent.
+
+31:49.120 --> 31:54.560
+However, with diffusion models, if we were to use naive gradient descent with a noisy residual,
+
+31:54.560 --> 31:59.600
+we will acquire no meaningful gradient, as the residual between HXI and Y
+
+32:00.560 --> 32:03.760
+will only be focused on the Gaussian noise part of the residual.
+
+32:05.840 --> 32:11.200
+Now, as we saw in diffusion posterior sampling, one can actually approximate the correct likelihood
+
+32:11.200 --> 32:17.600
+by switching to 2D denoised estimate X0 hat here. Here, visually and intuitively,
+
+32:17.600 --> 32:24.400
+we see why this may help. This is because after denoising, the residual is more likely to focus
+
+32:24.400 --> 32:31.840
+on the structural differences between HX0 hats and Y. In practice, using this gradient step over
+
+32:31.840 --> 32:39.680
+the projections work much, much better. And you can see the kind of the resulting differences
+
+32:39.680 --> 32:43.520
+when we use projection type approach and the gradient approaches.
+
+32:47.520 --> 32:53.760
+So in the paper, we properly analyze why this would be the case, leveraging the geometric
+
+32:53.760 --> 33:00.240
+understanding of diffusion models. So first, under our assumptions, we show that 2D denoising
+
+33:00.240 --> 33:06.320
+corresponds to an orthogonal projection to the data manifold. However, note that we have to consider
+
+33:06.320 --> 33:12.160
+two components of the data manifold, the orthogonal one that is related to the noise components,
+
+33:12.160 --> 33:15.120
+and the tangential one that is related to the data fidelity.
+
+33:16.560 --> 33:22.080
+So score function alone cannot handle the data fidelity. And here comes our theorem,
+
+33:22.080 --> 33:27.440
+which states that the proposed manifold constraint gradient term points to a direction that is
+
+33:27.440 --> 33:33.200
+tangential to the central data manifold. And therefore, our solution will move closer to Y
+
+33:33.200 --> 33:41.440
+equals HX every time we apply this MCG step. Another important aspect of this is that since MCG
+
+33:41.440 --> 33:49.200
+lets the sample move on the data manifold, whereas projections move the sample off the data manifold
+
+33:51.040 --> 33:55.520
+because projections are hard constraints that try to make Y minus HX equals 0.
+
+33:56.080 --> 34:04.640
+Note that MCG will not do that. It will move on the data manifolds in the direction tangential
+
+34:04.640 --> 34:09.360
+to the manifold. So those falling off the manifold will not happen.
+
+34:11.680 --> 34:18.320
+So here, note that the score functions that are pre-trained were not trained with
+
+34:19.040 --> 34:26.800
+samples that are off the data manifold. So they were trained with the samples that were on the
+
+34:26.800 --> 34:33.040
+noisy data manifolds. So it will not be able to properly denoise samples that are off the data
+
+34:33.040 --> 34:39.040
+manifolds. So by using projections, the intermediate error will probably accumulate,
+
+34:39.680 --> 34:44.960
+and we conjecture that this is the reason why projection-based approaches often fail to produce
+
+34:44.960 --> 34:54.240
+a good sample. But however, as I said, in the time we wrote MCG, there was a gap between
+
+34:54.240 --> 35:02.000
+theory and practice because even with the MCG steps, we had a hard time trying to solve inverse
+
+35:02.000 --> 35:08.240
+problems. So we had to resort to some projections within the denoising and the gradient steps.
+
+35:09.120 --> 35:14.800
+But in DPS, we managed to achieve a general solver that only uses these gradient steps.
+
+35:19.600 --> 35:26.720
+Now, for the Gaussian case, the only difference between MCG and DPS is that we do not use projections
+
+35:26.720 --> 35:33.840
+for DPS. Leveraging the geometric viewpoint of diffusion models, we can think that DPS is
+
+35:33.840 --> 35:41.120
+superior to MCG specifically because we avoid such projections. As projections here can potentially
+
+35:41.120 --> 35:50.160
+throw samples off the data manifold. Hence, DPS will typically be more stable by avoiding such
+
+35:50.160 --> 35:57.200
+throw-offs. And by the way, this is just an illustration. It doesn't really guarantee anything
+
+35:57.200 --> 36:02.720
+that our solver will always stay on the noisy data manifolds.
+
+36:05.520 --> 36:13.440
+Yeah, so that was about it for MCG. Any questions up until now?
+
+36:19.440 --> 36:25.600
+I just have a question, but maybe a very simple question. At the beginning of this slide,
+
+36:25.600 --> 36:34.480
+when you were explaining the, I think it's, no, the next one, two after this one.
+
+36:37.040 --> 36:48.080
+But yeah, this one, the previous one. How do you define this k? So n, what is n and what is k?
+
+36:48.080 --> 36:59.440
+I would have to look for the definition of n and k here.
+
+37:10.320 --> 37:16.080
+From my memory, n is the dimension of the ambient space, in case the dimension of the
+
+37:16.080 --> 37:23.840
+locally linear, low-dimensional dimensionality of the data manifold.
+
+37:25.920 --> 37:33.360
+I guess you're assuming that this, so the brown, the mean is basically used, the mean of each
+
+37:33.360 --> 37:40.400
+intermediate distribution. So it's the mean of the diffuse or denoise distribution.
+
+37:41.360 --> 37:50.880
+And then this, I'm just wondering, shouldn't you start going from a big
+
+37:52.560 --> 37:57.440
+standard deviation to a small standard deviation? Because basically when you do the denoising,
+
+37:57.440 --> 38:04.880
+you start with a high variance and then you start denoising and the variance slowly decreases.
+
+38:05.600 --> 38:10.160
+That's just something I was thinking that if that's not the case, so I'm missing out something.
+
+38:11.120 --> 38:15.840
+Can you repeat the question again? I'm not sure if I understood it correctly.
+
+38:15.840 --> 38:23.760
+Yeah, so the point of this is to interpret what's going on, like how the denoising samples
+
+38:24.480 --> 38:33.600
+behave in the data manifold through the trajectory. So when you do the denoising,
+
+38:33.600 --> 38:39.200
+so you start with the isotropic Gaussian, which is the highest entropy you can have. So you start
+
+38:39.200 --> 38:46.880
+with the maximum variance that you have and then slowly you start removing the noise and by doing
+
+38:46.880 --> 38:56.640
+that interactively the variance at each intermediate step goes down. So what I was expecting is to have
+
+38:57.200 --> 39:02.480
+this behavior when you have the mean and then the variance is large at the beginning and then
+
+39:02.480 --> 39:08.720
+starts decreasing. Because ideally you would reduce the variance, but I don't know if I'm missing
+
+39:08.720 --> 39:16.400
+something there. Oh, but I think it's what you're saying is kind of different from what
+
+39:16.400 --> 39:23.600
+this slide is saying. So I'm not really stating anything about denoising anything because the
+
+39:24.640 --> 39:30.400
+flow here is that we're first assuming that there exists a central data manifold M here.
+
+39:31.280 --> 39:40.240
+And then we're trying to visualize how the manifold of the noisy images would look like
+
+39:40.240 --> 39:48.560
+if there exists the central data manifold M. And I'm claiming that these noisy data manifolds will
+
+39:48.560 --> 39:56.560
+be covers of the central data manifold, where the distance between from the central data manifold
+
+39:56.560 --> 40:06.960
+will be defined by this constant value. So it's really not about starting from high variance
+
+40:06.960 --> 40:12.800
+Gaussian noise and reducing it to anything. We're starting from a clean image and then we're defining
+
+40:12.800 --> 40:20.160
+the manifolds of these of these noisy images. Okay, so I will have to look at that for I guess also
+
+40:20.160 --> 40:42.640
+more too. Yeah, thanks. Yeah. So I guess we just tell me if
+
+40:42.800 --> 40:53.520
+if I'm
+
+40:53.520 --> 40:55.520
+it's gonna get it's a good cliffhanger.
+
+40:58.480 --> 40:59.200
+It's first again.
+
+40:59.200 --> 41:07.440
+Um, do you hear me okay?
+
+41:08.960 --> 41:16.960
+Yeah, yes. Yeah, so I think it's about 48 minutes. So I don't think we have to go over the final
+
+41:16.960 --> 41:30.000
+section. So yeah. So I'll just try to we just we cannot see you or the slides anymore if you
+
+41:30.000 --> 41:39.760
+can do the same thing as before to stop sharing and start again. Yeah. Well, the talk is basically
+
+41:40.720 --> 41:47.280
+done. So okay, that was the last slide if we if we don't cover the last section.
+
+41:50.240 --> 41:54.160
+I'm not sure if this is the correct way of saying thank you very much in in Dutch.
+
+41:55.120 --> 41:56.560
+Maybe you should put it in Italian.
+
+42:02.960 --> 42:06.640
+Yeah, so yeah, that is the right way to say thank you. Thank you too.
+

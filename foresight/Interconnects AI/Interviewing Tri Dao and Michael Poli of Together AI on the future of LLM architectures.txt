@@ -1,0 +1,348 @@
+Okay. Hey, everyone. Welcome to the first interview that we're going to post on interconnects.
+I'm really trying to bring more scientific voices into the AI discourse as media is covering
+a lot these days. I'm happy to be here with Michael Poli and Tree Dow, experts in some
+of these non-attention architectures that have been really blowing up in the last few
+weeks of December. So, Michael, do you want to introduce yourself first?
+Sure. Thank you. Thank you, Nathan, for inviting me. I do research at Together AI and was also
+a PhD student at Stanford working with Stefan Orenmann and Chris Rea. That's how I met Tree as well.
+If I had to choose, maybe I moved to a few different areas of research. If I had to choose
+one, I like to research at the intersection of signal processing, dynamical systems,
+and deep learning. Most recently, luckily, there's been more interest in efficient
+architectures that use some of these principles to improve scaling along different axes
+and to get new trade-offs at inference time.
+Great. And Tree?
+Hi, everyone. Thanks, Nathan, for hosting us. I'm really excited to be here. I'm Tree. I
+finished my PhD at Stanford. I'm an incoming assistant professor at Princeton. Right now,
+I'm Chief Scientist at Together AI. This is a startup working on AI infrastructure.
+And I've been working at the intersection of machine learning and systems, so designing
+algorithms that take advantage of the hardware that they run on. We're interested in long-range
+dependencies, how to encode that into model, designing architectures that can
+learn long-range dependencies. Yeah, really excited to be here.
+Yeah. Okay. I think I'm going to just, I have some questions to dive right into this. I think
+you two will kind of both answer them or someone can answer longer, whatever you want. I think to
+start with, we should talk about maybe why attention works and what the limitations of
+attention are. I think almost every person in tech, broadly, now knows that a transformer
+is a model built with attention. And ChatGPT does that, but why is this so good? Even how
+much of a transformer is built with attention? Are there other things going on? And what might
+be challenges there? Right. So, you know, a transformer, which is this architecture that
+powers most of the exciting applications that we're seeing nowadays, as you mentioned,
+ChatGPT and so on. Attention is kind of the core layer there. And attention actually
+became earlier around 2014, 2015, and then transformer came out, incorporating that focusing
+a lot on attention with these MLP, interleaving MLP and attention. And I think the success largely
+has been, they seem to be able to scale really well. So you can scale out the models with more
+parameters, with more data. And that has been the recipe for success. It sounds obvious now, but
+I think five years ago, that wasn't clear. So it seems like transformer architecture is a hugely
+successful one. And a couple of reasons why it's successful. I think it's general enough that
+it's able to learn a lot from data. And two, it's pretty friendly to hardware. There's no
+kind of sequential dependency like previous RNNs. So as a result, you can run it well on GPUs,
+TPUs. You can scale it up. It's very hardware efficient. I personally have worked on making it
+more hardware efficient as well. So it's just kind of the recipe for success, which is
+general architecture that scales well. If you're an NLP person, maybe you'll say to incorporate
+some kind of inductive bias for it to protect. Personally, I think it's a very general architecture
+that scales well and it's hardware friendly. Yeah, it's remarkable how it seems so obvious now.
+And it's like, I think one of the things that studying this work is the context length becomes
+a really interesting access to study alternatives to it. And essentially, Michael, do you want to
+talk about that? I could babble, but you know more. Sure. Yeah, there are several points. I'll
+start by saying that there's still great research trying to understand why, from first principles,
+why is it that the transformer can learn these interesting circuits. People can study. They
+pick apart the computational combination of different heads and transformers and so on.
+So there's work on basically understanding transformers from programming language that is
+encoded. But I think, as Trey mentioned, there are some very interesting design choices that
+have gone into the transformer. This interleaving of attention in NLP is quite important.
+And also, the transformer is essentially successful in the beginning because it encoded
+these techniques that have been developed for RNN, Celestium, so these other classical NLP models
+gating to modulate which information is absorbed into the model, gating to determine how quickly
+something is forgotten in this recurrence of the RNN into a parallel form. It is easily a bunch
+of jumps that can be easily, but not very easily, but can be optimized for RNN GPUs.
+Yeah, this stuff's all great. I guess the specific thing that I had in mind is how
+attention ends up being this kind of quadratic scaling in terms of cost when you have an input
+sequence that you have. If you have an input sequence of length L and you want to output a
+sequence of length L, essentially, if you zoom into the math and you look at what's happening
+in inference in most of these libraries, you have this upper triangular attention matrix where you
+say you can only look at the past entries of your text, and as you go through there then,
+you end up getting this L squared relationship where the first token you can only look at one,
+and then you end up looking at more tokens for each pass. And now we've been talking about
+recurrent neural networks, and how does something that isn't attention get around the fact that you
+want to look at all of the history of the text in your sequence? So if you write a long prompt to
+chat GPT, you really want all that information to be encoded, and how can doing something other than
+this dense attention matrix actually make that possible? Yeah. Right. Yeah, so you can go ahead.
+Before attention, there was RNNs, right? And then RNNs, they processed text, which is fine.
+And maybe they didn't scale as well, but yeah. Can you say briefly what a...
+They processed text by encoding text. Can you say briefly what a RNN is and how it works?
+Yeah, so these are recurrent neural nets that go back, I think, to the 80s. Maybe some of the
+more famous ones are LSDMs, GRU. So they were pretty popular around 2012 to 2016 or so.
+They were kind of state-of-the-art for translation, speech recognition,
+I think NLP, they were a state-of-the-art, and they processed text kind of sequentially.
+They see essentially one token, and then that changes their hidden state, and then they will
+update the hidden state, and every time they see a new token. So I think it's kind of, in some sense,
+mimicking how, for example, human brain process information, like you read the sentence or a
+passage, and maybe it's like you're storing some information in your brain, and by the time you
+finish reading the document, maybe you can answer questions about the documents without having to
+refer to that document again. So RNNs kind of work that way. They process the text,
+and then that changes the hidden state, and their hidden state is the representation that
+can be used to either generate new tokens or classify the documents or whatnot.
+These work well back in 2016 or so, but they've kind of fallen out of favor, empirically, they don't
+do as well as Transformer, I think, and as you touch on Transformer, because of this kind of
+quadratic scaling, you compare every token with every other token that comes before it,
+it gives you this very kind of easy way to propagate information. And I think that's for a
+reason why Transformer and attention does really well. But there's been more recently some of the
+new RNN architectures that seem to do pretty well. So RWKV is, I think, one of the earlier ones,
+you know, it's one, I really admire that project, you know, it's effort mostly from one person,
+really going against the orthodoxy of Transformer, showing that RNNs can be pretty strong.
+Who was the lead on that? I think it's this person,
+Bo Peng, I think, and you know, it's an entire project, but I think it's pioneered by Bo Peng.
+I think it's affiliated with Eluta AI and the Compute Sponsor by Stability and so on.
+Yeah, I was reading this earlier. At a technical level, they try to replicate something like the
+very key value lookup of attention with two linear RNNs to essentially be able to remove
+the specific attention scaling potential problems and with two RNNs, which have this
+better, like, long context behavior and different implementation rules.
+I think, and they also, the paper, trained up to 14 billion parameters, which kind of leads
+into some of the next questions. I was going to ask, I was going to ask Tree about Mamba and then
+Michael about Stripe Tahina. I think you could go in either order. I think these came out about
+a week apart and were these two language models kind of seen as being way closer than anyone
+would expect. Essentially, Stripe Tahina came out and the evaluations were close to models
+I've been training on all year, like Lama 2 and Mistral 7B, and I went in and I went to the
+Together API and I did like side by side of Mistral versus Stripe Tahina and it's like,
+it's a good language model. It answers most questions. There's no obvious failure modes.
+I think maybe Michael, do you want to comment on that? I know it's another big project and then
+we can go back to Mamba, even though it's slightly out of order in the chronological
+the release cycle that happened. Sure. I guess I'll start by saying that
+there's an interesting connection between all these new methods. There's this sort of convex set,
+which has a center and there's this connection between linear attention,
+so attention without the softmax, linear RNNs, and state space models, SSM.
+So at some level, the mathematical formulation of this kind of base model here,
+I'm not talking about the base architecture, just the fundamental model, is the same.
+And then you can go in different directions and each direction has its own trade-offs.
+You can go to the feature map direction, the kernel direction. So when you break down the
+softmax, you take away the softmax, you can place on queries and keys, kind of the fundamental
+the entities that compose your attention matrix, you can compose other kernel-like functions,
+other functions that you hope would approximate whatever capability of attention you like.
+You can do things like a Taylor approximation, Taylor expansion, for example.
+And you have a slightly different perspective, but you get something that, again, is very similar.
+You can go to time variance, so you take the RNN and you push this input dependence,
+so the way the computation inside the linear RNN is conditioned by the input sequence,
+and you can add things like gates. We've seen a lot of work, for example,
+modernizing linear attention with additional gates that allow you to make better use of your
+fixed state dimension. And then you have the third direction, at least in my mind,
+is the one that pushes, that uses the convolutional form, that pushes more towards other types of
+linear operators that are still associative, that are still allow you to train in parallel.
+So here are things, time invariant systems, I can elaborate on any of these points,
+but things that can switch between convolutions and recurrence, like this form model,
+with additional gates, again. Striped IEna was born as a project from the IEna architecture,
+which belongs to this third category that I just mentioned, and we're really trying to get the best
+per-flop architecture that we could. And one principle that was validated over and over again,
+and we're trying to understand better now, is that it seems composing, hybridizing different
+layers, different blocks of different categories, and even full attention yields something that
+is better than the individual components. So there seems to be a compositional aspect
+of these models that we're trying to understand better, and this gives you a better
+sort of pre-trained model per-flop. And with this model, we ran a whole suite of skating laws,
+and so on. Hybridizing also gives you, since we wanted something that would be kind of usable
+out of the box, it gives you a way easier time. When you're fine-tuning for longer contexts,
+we can apply some of these techniques that have been developed for transformers, and kind of
+surprisingly work for hybrids as well. So things like linear scaling for
+rotary embeddings and so on, you can go into the details. So it was mostly a project,
+what is the best, given the current landscape, what is the best we can do?
+Yeah, that's a great description of it. I mean, the sentence in the blog that's like,
+start training is optimized using a set of new model grafting techniques, enabling us to change
+the model architecture during training, kind of felt like, to me, that there's a ton going on
+there. And some of which you probably can't talk about, there's normal data. I don't think all the
+data that was quite explained, like what the longer context data was, but it's like,
+are you taking this from models, starting point from models that people would know,
+and can you say any of that? I think even just the summary that it's a synthesizing recent work
+into a strong model is great context for people. Yeah, well, that line, so we've,
+given this explosion of primitives that, you know, described, and given sort of the
+cost that it would require to evaluate all different combinations, we found ways to essentially
+start training with a configuration and then continuing on with another configuration. I
+think we'll have, we're going to have more work with paper. Yeah, there's so much cool work in
+that area. So one of the, someone at AI2 is working on a project where they're essentially
+trying to cut the Lama models in half and keep training them and things. It's just the wild west
+out there with people trying to take strong models and make them smaller while still getting the
+performance benefits of bigger models. I think that's a whole aside, but I wasn't expecting it to
+show up when people, like you follow the social media, I've striped my, you know, people are like,
+oh, non-attention models are finally good. And it's like, it covers up a lot of the details
+that are very interesting about it, in my opinion. So, okay, it turned back to tree. I think Mamba
+actually happened first among these. I did the, his reading back of social media. And it also was
+very surprising to me. I think the largest model in the Mamba suite is 2.8 billion parameters,
+if I remember correctly. And it was compared to a lot of the common benchmarks in open NLP. So
+things like GPTJ, Pythia model suites and the scores on the benchmarks reported were really
+strong. And I think if you want to start with the high level summary, and then I'm definitely going
+to make you talk about the awesome new CUDA kernels and stuff that you had to write for this project.
+Yeah, so this Mamba is a collaboration with, with Albert Gu, who's now, he was,
+he's just doing it at Stanford. That's where we met. And he's now a professor at CMU.
+And also at a startup. So it's a wonderful collaboration credit goes to him.
+Yeah, Albert has been working on this line of work called state space models.
+In some sense, as mentioned, it connects to things like linear tension,
+linear RNN, convolution, neural nets. And that's what his PhD thesis is about. I've also worked on
+state space for the past couple of projects. My, my angle is how to make state space more
+hardware efficient and kind of increase their expressiveness. So it's wonderful working with
+Albert. And there I think is more of a proof of concept, which is can state space actually do
+as well as transformer on language. So we've seen previous papers showing state space could be better
+on audio, could be better on some of the tasks on the long range arena. But language has always been
+the most difficult to get to do well for state space models. And language is also kind of the
+thing that people care about the most right now. So Mamba was more of a proof of concept, which is
+hey, we want to show that state space can be competitive, or maybe even be some of the
+transformers out there. So we validated that at the scale up to 3B, trained to 300B tokens.
+So in absolute terms, you know, these are not very strong models. These are not yet models that you
+would actually play with and expect it to do meaningful things. I think it's more of a,
+more of an academic comparison in terms of architecture, it's like, hey,
+training trained for the same amount of tokens, it does as well, or maybe slightly better than
+some of the transformer out there. And that's, in particular, has been very exciting to us.
+I think Albert's been pushing on this for a while. I've been pushing on this for a while. And I think
+finally, it seems to finally be kind of close to gap or even surpass some of the transformer.
+And it just, I think it opens up a bunch of opportunities. So inference could be way faster.
+Maybe we would have different ways to understand how in-contact learning happens, etc.
+So lots of, lots of future work, I would expect.
+Yeah. Can you go into some of the, like, what does it actually take to implement some of these
+new CUDA kernels? I just remember when this paper was announced, Sasha Rush, who's also very active
+in this space, I recommended me to talk with you too, was tweeting about the types of files or
+whatever. And in the paper, there's this discussion about how like the recurrent state needs to be
+sufficiently expressive, but doing so in a certain type of memory is a problem.
+Translate what this means to people thinking about GPUs and people thinking about these models
+being scaled. Like, is it now much easier to scale these models because they work on GPUs?
+Which GPUs were you using? Is there a bump that could come just from going to H100s or something?
+Any of that? Yeah. So the line of work on state space,
+sort of like S4 models kind of pioneered by Albert's work, they are in some sense
+recurrent neural network, but they have a much larger state size. So the state size is whatever
+kind of buffer that you're going to store information as you traverse or as you process
+the sequence. In some sense, you can view Transformers doing that as well, where it's
+keep the entire history. It's usually called the KV cache. It keeps the history and keep
+referring to it. For RNNs, they have a fixed size state. For Transformers state, you can think of
+the state size as increasing. And our intuition is that the larger the state size, the easier it is
+for the model to do well. So basically, you have more space to store whatever you need to remember.
+And so previous models like S4 and so on, they have an implicitly pretty large state size,
+but they use the convolutional view to avoid having to materialize the state. So that was
+wonderful. Michael has worked behind architecture, has used some of the same insight focusing on
+convolution. Mamba, on the other hand, focuses on the recurrent view. So we wanted to put more
+input dependency in the recurrence. We thought the thinking was that it was going to make it
+more expressive and the model would do better. But that prevents us from using this convolutional
+view that would make things efficient. So we had to figure out a different way to make things
+efficient. And so I focused on making that efficient on GPUs. And so our thinking was,
+instead of, okay, we're going to have a large state size, but we don't have to write to actual
+GPU memory, like the HBM, where you can just keep that large state in a faster memory called S RAM.
+You think of it as a cache. So if you're more familiar with CPUs, you just usually get cache and
+RAM. So if you have large state, you can keep it in the cache. And by avoiding having to write it
+down, you actually don't suffer too much if the state is large. So that's essentially the core
+idea. Would this be due to like input, like having to move the data around being really slow?
+Yes. Yes. That makes sense. That's a really common constraint in a lot of these things. And it's like,
+I think one of the most insightful things I've had now with GPUs versus TPUs and stuff is how
+mixtures of expert models doesn't work very well on TPUs just because you have to like,
+that essentially add a mixture of expert at a basic level. There's a routing layer that you
+learn and then multiple feedforward layers that you can choose from. And when you're distributing
+this, the feedforward layers could end up on a different TPU node and TPUs communicate with their
+neighbors. So TPUs take a big hit relative to GPUs where within video and video clusters,
+everything's connected so much more. And then it's easy to do that sort of distributed training.
+That's super interesting. And it's like, do you think there's going to be,
+I guess this is really where I want to open the conversation of like, what is this going to
+happen in 2024 in this space? Are bigger players going to move in and be exploring this? My take,
+seeing how good the long context learning could be and a fundamental limit is that systems like
+ChatGPT are going to use a transformer model for most tasks. And then if you need to do
+summarization, you might do a long context specialized architecture. And then we could even
+see a whole quiver of architectures behind something that you're using. But I think
+it's just like, is attention going to be dethroned? Is Sasha Rush somehow going to win this bet that
+everyone wants following in the area? What are you thinking about, either of you?
+I think it's a very, very strong architecture. And there's a proven recipe, right? You know,
+people scaling to a trillion of parameters. Right now, if you want, you say,
+well, I just want the best performing model that runs most efficiently on my hardware,
+that has the most support on the software side. The transformer is a safe bet. I think it's here
+to stay. But I think there are new ideas like state space, China, so the linear attention,
+ideas from linear attention, I think they're coming in. We've seen, as Michael mentioned,
+that mixing some of these components seem to improve performance. We're validated at, I think,
+seven B scale, but maybe it might even work at larger scale. I think people tend to be
+conservative and focusing too much on model architecture might not be worth their time.
+Like the LIMAR architecture is very, very strong. Most people are doing off of that. They're
+focusing on data. They're focusing on infrastructure, which makes sense. I think on
+my side personally, the other stuff is just plain interesting. There are more, I would say niche
+use cases, niche for now, where some of these alternative architectures are interesting,
+things like long contacts, different domains like audio and genomics.
+There's just plain interesting scientific questions you can ask, whether it follow
+instruction just as well, whether it's fine to interest as well. Does it play well with
+quantization and so on? There's just plain interesting research questions we can ask.
+Now on the production level, I think transformer is still incredibly strong, very well supported,
+both hardware and software. But I think some of these new ideas are coming in and people might
+start putting them as part of component in the transformer. Maybe we'll still call them
+transformer, but they'll just have more layers and just attention and LPE.
+Yeah, I 100% agree with you. So attention as a computational primitive is not going anywhere
+anytime soon. It's just a very efficient and a very convenient way to increase
+the effective state of your sequence processor. So at some level, if you're working with a model
+that only has a fixed state in each of its sequence mixers, you have an assumption and
+your assumption is that you only need so much information in the sequence. So there's always
+a tradeoff between the ratio of the state dimension, the sequence length, as you push
+things to the extreme, either model sizes, so as you make the model bigger, wider, effectively
+introduce more states and sequence length. Some of these margins, some of this is speculation,
+but some of these margins will disappear, some of the tradeoffs will change, especially 14, 30,
+some of these very fat models. But certainly, either whether that's hybridizing or some kind
+of new block, we're certainly going to see some more innovation. That's really exciting.
+My personal, if I had to make a prediction is that architecture design will get more
+interesting or more complex. There's going to be more to do.
+Yeah, I mean, this year, it's like, I got some 10 minute clock that's fine for us. I think with
+mixture of experts and this being popular as a state-state model, this is all just really within
+a few months outside of OpenAI. They've been doing mixture of experts for a lot longer than
+everyone, but in terms of open and academic communities, no one's really tried to do RLHF
+on mixture of experts. It should just work, but we have to learn all these things. And then the
+model grafting is becoming more of a real thing. That's super interesting. And it's just, I agree
+that it's just fun to follow. And hopefully, it gives academics and scientists more ways to
+influence the conversation where in industry, it's just about scaling and bigger models where we
+could maybe do specific things better, which I'm telling open source companies to do with
+their language models anyways, like if they want to have a business model, they need to have an edge.
+So this all fits into that kind of narrative pretty well with my regards.
+Is there anything else you guys are following in ML? It doesn't have to be about state-space
+models. What's exciting for you broadly for next year?
+Yeah, personally, I think data is still the most important thing. We're thinking a lot about how
+data influences the model performance, like really teasing that out, either having some
+of the synthetic tasks that correlates very well with model performance has been kind of the
+motivating examples in a lot of our papers and work has been focusing on synthetic tasks,
+or having maybe smaller data sets that kind of make it easier to really understand what's
+really going on. So I think personally, my focus is going to be on data for the next little bit.
+All the architecture stuff is fun. Making that hardware efficient is fun, but I think
+ultimately it's about data. If you look at the scaling law curve, the different
+monarchitectures generally have the same slope. They're just different offset.
+Seems like the only thing that changes the slope is the data quality.
+I love that point. That does seem true. I have the plot from Mamba in this blog post that I'm
+writing, which is just a little bit above. Same slope.
+Yeah, maybe add data. Data is really interesting. So miniaturizing architecture design, finding,
+breaking down what tasks are involved into, for example, language modeling and trying to
+package them into something that can be used to iterate, something that's quite exciting.
+That was one of the main techniques that was used for this zoology paper that also looks into
+some of these different behaviors. Personally, I'm also really excited about new applications,
+scientific applications, the genomics work, but even more engineering-focused.
+We're seeing a shift. Right now, language is still the domain that gets most clicks,
+most interest, but I think that will evolve over time.
+Some of these other applications offer, even just talking about architectures,
+they offer completely different design space. I'm excited to look into it.
+Yeah, everyone talks about language, but I feel like images and entertainment and videos are the
+things that are so obviously going to generate so much value to me. I don't know the ceiling on
+language, but when you could access a somewhat local text and video model at your homework
+station, that's tailored to your preferences. The amount of value that that creates is totally
+astronomical. I'm excited. I started playing around with these where I'd take text of the
+blog and convert it to dolly images and convert it to a video with generated audio all with one
+Python script. That's really easy to do, so I agree with your more than language. It's fun to
+have that view. These things actually do work really well in your experience when you stitch
+all of them together. It's not that good. The dolly images are pretty similar, but I'm doing
+something really naive where I literally take the text and have a system prompt. It's like,
+you're generating a series of images for visualizing a blog post, and it generates various
+all the machine learning thumbnails that you see everyone using. There are variations of that.
+The fun ones are whether it's about llama or mamba or something, and then they generate
+animals in them, which is good. I think I could get much better at it and have a better segmentation
+system for the paragraphs and or have chat to BT summarize them or something like that. But I
+just know that within a year, it's going to be a text-to-video API, and I'm just going to switch
+it, and it's going to be great. I'm laying the groundwork for infrastructure to have a
+multimodal content distribution, really, and I just expect it to become very fun. Even the text
+of voice is pretty good, I think. I don't have a studio, but once you have a studio, it's going
+to be able to generate perfect audio for whatever you want. Another one of my dreams that is bad
+for young students is I want to be able to give a slide deck to a script that returns the five-minute
+conference video that no one ever watched, just based on a GPT-4 reading the slide deck and voicing
+yourself. Those are the silly things that I have time to do because I'm not a professor.
+Yeah, I think these advances, these systems, they do generate a lot of economic value,
+and we're seeing that already. Lots of companies are now switching to using these things, and I
+think it's going to change the way we work, as you mentioned, the way we work, the way we entertain,
+so I'm just very exciting future.
+Yeah, anything else? Well, thanks for coming. Try to get you guys as much attention as I can
+bring. You never know, it'll go viral these days, so I think this was a great conversation.
+People are really hungry for basic intuitions in the area, so this is good.
+Yeah, thank you, Nathan. It was a pleasure.
+Absolutely. Thank you for inviting us, and maybe if there are more questions,
+is there a way to collect them to provide readers with listeners with an address or
+something, happy to answer anything? Yeah, I'll include contact info in the post in
+various ways. This will be out there. You'll get your comments on Substack, YouTube, Twitter. It's
+a mess. You've got to pay attention to 10 million streams of information these days, but you'll get
+contacted by people. Thankfully, for some reason, people read my stuff, but here we are. So thanks for listening.

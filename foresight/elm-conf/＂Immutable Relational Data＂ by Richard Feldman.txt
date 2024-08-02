@@ -1,0 +1,533 @@
+All right, so this is immutable relational data.
+I'm Richard Feldman.
+So when I was first getting into Elm, there were two questions that I had, like very early
+on, things that I didn't really know how to do coming from JavaScript.
+And one was, how do I do this?
+Like I want to do some equivalent of courses bracket zero dot students bracket zero dot
+selected equals true.
+Like, how do I, there's a little nested record update syntax, like how do I, I don't know,
+I couldn't quite figure that out at first.
+And then another question I had was, when, if ever, should I put duplicate information
+in my model?
+Like should I ever have the same piece of information in two different places in my model?
+Is that a bad idea?
+Is that, I don't know, what are the trade-offs?
+I didn't really know.
+And as I got more into Elm, I kind of learned about different techniques for modeling data
+and so forth.
+And I ended up discovering that these two questions turned out to be related.
+And they have to do with the title of this talk.
+So we're going to go through sort of my progression of like how I learned about these things.
+And we're going to start with state synchronization.
+And then we're going to move on to talking about relational data in general.
+And then finally end up with immutable relational data and some techniques for dealing with
+it.
+Okay.
+Let's start with state synchronization.
+Okay.
+So some time ago, a friend of mine tweeted me.
+They said, hey, RT Feldman, remember that time in college when we were late to a potluck?
+And we went to a Wendy's drive-thru and got 20 orders of $1 five-piece nuggets?
+So we showed up to the potluck with 100 chicken nuggets, LOL.
+That's a true story.
+That did happen in college.
+So I saw this, I was like, oh, yeah, that was a good time.
+So I like, you know, went to the like button and hit like.
+But I got an error.
+I was like, no, you can't do that.
+It's like, what?
+No, no, for real.
+I like it.
+It's good times.
+So I hit the button again.
+It's error.
+Oh, come on.
+So as it turned out, what had happened was my friend, after posting this, decided this
+was maybe not something the entire internet needed to know.
+And so they ended up deleting it.
+And so they deleted it sometime between when I saw it and when I attempted to click like,
+resulting in the error.
+So this is essentially a sort of a mismatch between the client and the server.
+So my client, the web browser, was like, oh, yeah, this tweet totally exists.
+Sure.
+Here's a nice lovely like button in case you'd like to like it.
+But unfortunately, the server had a different idea, the server was like, oh, that's gone.
+What are you talking about?
+Like, that's been deleted for a while.
+So there was this mismatch between the two, and that led to the error.
+So this is a form of synchronization problem.
+Like, we had a synchronization mismatch between the client and the server.
+And when we have multiple sources of truth, we sort of need to synchronize them or else
+we can get this type of error.
+Now if we have multiple sources of truth, such as the client and the server, and they
+agree like if the client says the tweet exists and the server also believes that it exists,
+that's okay.
+That's no problem.
+The typical thing, which is why, you know, I was surprised to see this error and not
+just like, oh, yeah, another one of these just happens to me constantly.
+Usually despite the fact that there are multiple sources of truth, they're staying in sync
+so it doesn't actually matter.
+It doesn't sort of affect me.
+It's also fine if they both agree that it's gone.
+Like, eventually I refresh the page and then I saw, oh, the thing's gone.
+So they got synced up and then it was again, no problem.
+I was back to being in sync with the server and the multiple sources of truth were not
+really causing any problems there for me.
+So basically when multiple sources of truth remain synchronized, it's okay.
+There's sort of no symptoms, no problems that the end user is faced with.
+However, when they get out of sync, as happened to me in the tweet, then that causes a problem.
+So single sources of truth sort of don't have this issue.
+There's no synchronization because there's nothing to synchronize.
+It's just one source of truth.
+So this entire class of errors goes away, which is one of the things that's nice about
+having a single source of truth.
+So synchronization is sort of error prone.
+This is one of the problems with it.
+As we saw, this is sort of a case in point.
+This is a synchronization error.
+And these sort of things can happen all the time when you have to synchronize two pieces
+of information because there are multiple sources of truth.
+Which sort of begs the question, is it necessarily avoidable to have multiple sources of truth?
+Sometimes do we have to have multiple sources of truth even if we would prefer to have a
+single source of truth and not have to synchronize anything?
+Let's take this client server app as an example and see if we can arrange things such that
+we have a single source of truth.
+This is our goal.
+We're going to have a client and a server, multiple clients and a server, and we're going
+to have a single source of truth that's shared between all of them such that there's nothing
+that we need to synchronize.
+So to do this, probably what we're going to have to do is say, okay, the server is going
+to have to take care of rendering the UI.
+That's going to have to be the source of truth because that's where the database lives.
+I mean, if anyone ever disagrees with the database about what is true, the database is
+going to be right.
+So we're going to have the server render HTML like it's 15 years ago and it's just going
+to send it directly to the client on every single user interaction.
+Like I click anything and the server is going to render some HTML and send it to the client.
+So that way the server is the single source of truth, kind of.
+Problem is that sending stuff from the server to the client takes time.
+It doesn't just like appear on my screen instantaneously.
+There's like networks and packets and like latency and things like that.
+And in fact, there's so much of that that it's like perceptible, which in turn means
+that it's entirely possible that over the course of that network transmission while
+the currently up-to-date perfect single source of truth UI is headed towards my browser,
+my friend deletes the tweet, and now I am once again out of sync.
+So even trying as hard as we possibly can to have a single source of truth with a client
+server application, it's just not possible.
+You cannot have a single source of truth when you've got a client and a server.
+You sort of must have synchronization.
+It's completely unavoidable by the nature of this architecture, which is kind of a bummer
+because hey, clients and servers are nice.
+So we're sort of stuck synchronizing them.
+And again, even if it is unavoidable, synchronization is still error-prone.
+We're still going to have to deal with synchronization errors like this.
+So we'd sort of like to handle these synchronization errors in as graceful a way as we can.
+And there's sort of different levels to this.
+So one is basically just like fail without feedback.
+So this is the absolute worst, which is to say the tweet gets deleted and I hit like
+and then just nothing happens.
+I'm just like, what?
+Or you can do what's called optimistic updates where you're just like, I'm going to update
+the client state and assume it works out on the server.
+This can be even worse and I've been really, really badly burned by this in the past.
+That's basically where you hit like and it does the animation.
+It's like, yeah, everything worked.
+And then later on it just was gone.
+What?
+And then, you know, so once it actually gets in sync, you find out much after the fact
+that there was a problem.
+Having had no idea at the time that there was anything wrong, which would have at least
+given me a clue.
+Like, yeah, I want to try hitting like again in case maybe the server is down or something.
+So failing without feedback is sort of the worst way to handle a synchronization error.
+We can do a little bit better by at least informing the user that some sort of error
+occurred.
+Like error, even if you're saying like error 500, that's at least giving me some clue that
+something went wrong so I can, you know, react accordingly and not be surprised later on
+to discover that there was this mismatch between my expectation and what actually happened.
+Even better than that is to explain the problem.
+Something like this tweet was deleted before you could like it or maybe something more
+concise than that.
+But explaining the problem gives the user a better experience to understand, oh, this
+is not just like something went wrong, which could be so many different things and lead
+me to take completely futile actions such as hammering on the like button.
+If they explain it to me and say this tweet was deleted, then I'm like, oh, okay, well,
+I'm not going to keep hitting like because it's gone.
+I understand that now.
+And the best of all would be to explain and then fix the problem.
+So basically say, hey, this tweet was deleted and then not leave the UI in a state where
+I can continue to hammer on the like button at all.
+Say like this tweet was deleted and then actually synchronize, like change it so it doesn't look
+like this anymore, maybe gray it out, maybe fade out the whole tweet itself.
+There are any number of things you can do.
+But these all require different degrees of effort.
+So in order to synchronize while also reporting the error, it's not just that the server has
+to send back a 500.
+It also has to say, here's what the problem was and also describe how to synchronize the
+state in some particular format, which my client then has to be looking for and know
+to say, oh, I understand that I got this additional data.
+Now I can use this to sort of patch my understanding of the world so that I'm now synchronized
+with the server.
+It's a lot more work to deal with that synchronization error.
+And that's not even getting into what happens if we're trying to synchronize across multiple
+clients where it's not clear who the source of truth is and we have to resolve conflicts.
+So this can be a lot of work, like a lot, a lot of work if you want to do it right.
+First of all, you have to make the updates in the first place.
+If we have multiple sources of truth and something changes, we have to go around and propagate
+those updates to all of the potential places where it could get out of sync.
+Once we've done that, then we have to detect errors, figure out if things are out of sync
+as they were in the case of this tweet.
+And then once we've detected them, then we have to potentially resolve conflicts.
+If we have lack of clarity around who is the source of truth, we have multiple clients
+who made edits at the same time on the same document.
+How do we resolve those?
+There's a lot of techniques for doing that.
+That's kind of a whole field of study.
+And then finally, ideally, gracefully recovering.
+So if we want to give people a good user experience or the best user experience we can in the
+face of all of these potential synchronization problems, we'll look into a lot of work.
+All of which is to say we really want to synchronize as little as possible.
+The more we can have single source of truth and not have to deal with any of this and
+not have to think about it, not have to worry about the errors, not have to spend time handling
+them, resolving conflicts, repairing the state and getting things back in sync, the nicer
+our lives are going to be and more likely, the most likely, the better our user experience
+is going to be as well.
+Okay.
+So let's sort of draw a smaller box around this.
+We've concluded that it's not possible to have a complete client server application
+where we have one single source of truth.
+But what if we narrow it down a little bit just to the client UI state?
+So if we just draw a box around that, what about now?
+We actually can have a single source of truth.
+And we as Elm programmers know this because we use the Elm architecture in which we have
+a single source of truth.
+That's what model's job is.
+It is a single atomic immutable value that is the single source of truth for the entire
+client application state and everything else is built on that.
+And this is one of the reasons that the Elm architecture is nice to use, is that we have
+the single source of truth.
+We don't have to go around syncing a bunch of different disparate pieces of state.
+Like we might if we had something that were, you know, that is like one of the sources
+of truth and then we have a lot of other ones sprinkled around.
+So this is a good thing.
+This helps us out.
+So this brings me to my other question from earlier.
+Like when might model end up with multiple sources of truth anyway?
+Like when might it go from being the single source of truth to being a store that contains
+multiple values, each of which refer to the same piece of information and which might
+have different values for that piece of information depending on which part of the model I look
+at?
+Well one case where this might genuinely want to happen is caching.
+So and this is something that I would do for performance.
+So like basically let's say I have some sort of really expensive calculation that I'm
+doing using model data.
+Really in web applications this almost never happens but it's conceivable.
+I could have some really expensive thing that I have to do like 60 frames per second all
+the time using data from the model.
+And I can't cache it with HTML lazy for some reason but I mean usually I can and if I can
+that's certainly how I want to do it because that's the cache that's very nicely managed
+by the Elm runtime.
+I don't have to think about caching validation which is one of the famously hard problems
+in computer science and this calculation is so expensive that it's a performance bottleneck
+in practice.
+And now we're into the territory of extremely, extremely, extremely unlikely to the extremely
+power because really when we're talking about performance problems it's pretty much always
+to do with rendering stuff.
+It's basically never to do with calculations like this in practice.
+But let's say I did actually end up with something like that.
+This is one of the things that caching is used for is you have a piece of state that says
+I am sort of an intermediate value, some sort of incremental calculation and then I can
+base future calculations on that just like incrementing and decrementing rather than
+having to rebuild it all from scratch.
+So yes it's not like you should never, ever, ever in a bazillion years have duplicate information
+in the model.
+There is a use case but it's pretty rare in practice.
+So that's also good news because it means we can have a single source of truth pretty
+much all the time.
+So how about relational data that gets stored in the model?
+That is to say pieces of data where we have different pieces of information in the model
+but they relate to one another in some way.
+So let's look at an example of this.
+Relational data.
+So I work in a company called No Red Ink and we make stuff for English teachers.
+Now let's say hypothetically, just for the purposes of this example, that we decided
+to sort of like broaden our scope a little bit and we decided to introduce a new feature
+which is not English related but actually it's field trip management.
+This is why I'm not in charge of the product team.
+So we're going to build this new feature that's going to allow teachers to manage a field trip
+for their students where they take everybody on a bus and they go out somewhere interesting
+for the day and learn things there.
+So we've got an all day field trip coming up and the teacher wants to answer the question
+which students are going, sort of manage this and check off, okay, these students are going,
+these students are not going.
+So let's look at this from a data modeling perspective.
+So let's say we've got one of our students named Richard Feldman, going is false which
+is why he's making that face.
+Kid looks like a troublemaker.
+So this is our very simple data model.
+We have name which is a string and going which is a boolean.
+And for our purposes, that's going to be enough.
+And then the teacher has multiple courses.
+So let's say a teacher has a course called second period English.
+It's a very common name for a course that we see in practice and the teacher has a couple
+of students in that course.
+So R. Feldman, B. Knowles, A. Einstein and they can sort of check and uncheck which students
+are going to be going on this field trip.
+This is the UI we're building.
+They might have another course called fifth period history.
+So sometimes we have teachers who have, they're not dedicated English teachers.
+They have some courses that are English and then some courses that are another subject.
+And sometimes they use no reading because we teach writing among other things.
+And so they want their history students to be able to write more effective essays.
+So they'll have no reading activated for both their history course and their English course.
+And of course, if you're teaching multiple subjects, you can have the same student in
+multiple courses.
+So Richard Feldman could be in second period English as well as fifth period history in
+addition to some other number of students.
+So this is an entirely plausible scenario that we might end up with.
+And of course, this is relational data that we have students have a relationship to the
+course and also we have some sort of notion of identity.
+Like Richard Feldman is the same student whether he's in second period English or in fifth
+period history.
+So if the teacher checks one of these boxes because it's the same person, like either
+he's going on the field trip or he's not and it's an all day field trip.
+So certainly he's not going to be going for second period but not fifth period.
+So if the teacher checks one of the boxes because of the relationships innate in this
+data, it should check both of the boxes.
+That's otherwise, you know, we've got some sort of mistake.
+We should never end up with the teacher seeing this in their UI or else we've done something
+wrong.
+This would be a synchronization bug.
+Okay.
+So in JavaScript, the way that I might have done this is I would say something like going
+back to the very beginning of the talk, courses brackets zero dot students brackets zero dot
+going equals true.
+Which is to say the first student in the first course is now going on the field trip.
+When I check that box, that's what we've changed about our data model.
+Now if I do this and I put into a REPL courses brackets zero dot students brackets zero, it
+would now say, hey, this student is now going, great.
+And also, if I said courses bracket one, which is to say fifth period English dot students
+brackets zero, it would also say that that student is going.
+And the reason for that is that students in both cases are mutable references in JavaScript.
+These are JavaScript objects, JavaScript objects are mutable, and they store mutable references
+to other objects.
+So both of these are actually pointing to the same student in memory, which means if
+I change the one, it's going to change the other as well.
+Now this has various downsides that we're probably familiar with, like you pass something
+to a function, you're not sure if that function is going to mutate or not, plenty of downsides,
+but this is one of the upsides when it comes to data consistency.
+It means that when I mutate one, it automatically mutates all the others at the same time for
+me.
+So this is an example of relational data with a single source of truth.
+We don't actually have any duplicate information in this data model that we've built in this
+sort of JavaScript version.
+Okay, so now I'm, you know, was a JavaScript programmer, now I've transitioned to an Elm
+programmer, and so now I'm thinking in terms of immutable data.
+So one way that we might model this in Elm, and probably the way that I would have modeled
+it when I was starting out, I would say type alias student, name colon string, going is
+a Boolean, then I'd have type alias course, name is a string, students is a list of students,
+so we have nested records here, and then finally I would have my model which would have courses,
+which is a list of course, and then various other things, but at least within the scope
+of what we're talking about here, these are the relevant structures that we'd be dealing
+with.
+Now, believe it or not, already we've introduced multiple sources of truth.
+Even though this basically looks like a description of the same sort of schema that we had in
+the JavaScript version, just by virtue of the fact that we've gone from mutable objects
+to immutable data, we have now accidentally introduced multiple sources of truth.
+And this is kind of an easy thing to do, at least it was for me, when going from JavaScript
+to Elm because I'm like, oh, well, records look like objects, so I'll just take the thing
+that I would have done with an object and I'll just do it with a record.
+But it turns out that that mutable to immutable characteristic is actually significant implications
+to sort of do a more apples to apples transition, let's go from the JavaScript object that
+we did before to the JavaScript object notation, better known as JSON, because JavaScript
+objects are mutable references, but JSON is actually immutable data, which it sort of
+has to be to serialize.
+If you want to serialize mutable references to memory locations and just write them straight
+to the disk, it's probably not likely to work out very well when you try to deserialize
+them.
+JSON is immutable despite having the same structure as JavaScript objects.
+So let's look at the JSON version of this.
+So we have courses, we have name, second period English, students, and then an array, name
+Richard Feldman going false, and then another course, name, fifth period history, students,
+name Richard Feldman going false.
+So now we can kind of see more clearly that we actually do, in fact, have duplicated data
+now.
+Like before, both of those students were pointing to the same point in memory, but now we actually
+have two different independent pieces of data.
+So that means that they can now get out of sync.
+I can change one of them to true without changing the other one to false.
+That's a potential problem.
+So objects have mutable references, whereas records, and JSON, have immutable records.
+So objects have this upside of sort of implicit synchronization that sort of automatically
+happens whenever you change something, whereas records also have their own set of upsides,
+really cheap copying, equality checks that can just do reference equality, so on and
+so forth.
+But this is something that we have to be aware of when we're going from objects to records.
+This is a pretty significant difference.
+So let's move along to immutable relational data.
+So what are we going to do differently when we are transitioning to the world of immutability?
+Okay, so this was sort of the problem that we ran into.
+We had this duplicated data, and it could get out of sync.
+We could have going is true in one case and going is false in the other case, and that
+shouldn't be possible because it's the same student.
+Whether he's going on the field trip or he's not.
+So one way we could create a single source of truth out of this is by changing the JSON
+to look like this.
+So let's look at these differences here.
+So the first thing is we've introduced explicit identifiers for what the student refers to.
+We're no longer using memory references, we're actually using identifiers as references.
+So here we have students is just an array of IDs.
+So ID 217, we see down at the bottom there, refers to Richard Feldman.
+And that's the only place that Richard Feldman appears in this whole data model.
+Everywhere else it's an identifier referring to that one single source of truth.
+So we're using explicit identifiers to reference a single source of truth in a completely immutable
+way.
+So let's translate that idea into L. So we've got our type alias student course model.
+So this is what we had before.
+We had a list of students under course and we had a list of courses under model.
+So we're going to tweak that a little bit.
+Instead we're going to go from students to student IDs, which is going to be a list
+of student ID values.
+So student ID type could be whatever you want, you know, integers as we saw in the JSON example,
+strings, custom types, anything you want.
+Inside the model we're going to have students as a new value in the model.
+This is our single source of truth for all of our students across the entire model.
+And it's going to be a dictionary.
+So we're going to change on that same student ID and then having a single source of truth
+be the value of that particular student stored in that dictionary.
+By the way, one thing we would also want to do here, I think, that can sort of take this
+data model a little bit one step further, is to change from a list of student IDs to
+a set of student IDs.
+Because really, like, would it ever be useful to have the same student appear multiple times
+in the same course?
+Not really.
+That should be a set because sets have uniqueness.
+We should only have at most one student ID of the same value inside each course.
+OK, so now let's write a function called students in course that's going to take one
+of these courses, maybe something inside update, and it's going to return a list of
+students.
+So this is sort of our replacement for we want to work in terms of a list of students,
+which is why we originally said courses just have a list of students, but now we're just
+going to do a function to do the same thing.
+So it's going to take a course as an argument.
+And it's going to start off by doing a dicks.filter.
+What's it going to filter on?
+It's going to say, OK, I'm going to look at each of the students that I have, and I'm
+going to say, am I in this particular course?
+The way I can tell if I'm in this particular course is set.member, that particular student's
+ID, and the course's set of student IDs.
+So this is going to filter that dictionary of all the students down to just the ones
+who are in that particular course.
+And that's it.
+We have now gone from our single source of truth of all students in one expression down
+to a single source of truth for the list of students that are in that particular course.
+And now we can do whatever we want with that list of students, whatever we would have done
+previously by courses.students.
+And then, of course, if we want to actually get it from a dictionary to a list of students,
+we'd pipe it to dicks.values.
+OK, so here we have an example of immutable relational data where we've maintained a single
+source of truth, which means no synchronization problems.
+Also it means no nested record updates, which is cool.
+But basically, we no longer have that whole series of problems where we have to keep things
+updated, keep things in sync, detect errors, resolve conflicts, and so on and so forth.
+OK, but what about like more complex relationships?
+What if we had the JavaScript equivalent of something like this?
+Courses bracket zero.students bracket three.assignments bracket two.is done, something where we have
+lots of relationships and we're trying to merge them all together.
+How does this sort of like scale?
+Well, there's actually, as it turns out, an entire sort of field of study and a lot
+of implementations that work with these types of questions.
+If anyone recognizes this logo, this is a good elephant.
+This is PostgreSQL.
+You also got other databases like MySQL, SQLites, and it turns out relational data has been
+well studied and explored by relational databases.
+And we can, what's the word I'm looking for, steal shamelessly from the things that they've
+learned over the years about dealing with relational data without dealing with mutable
+references, which they don't use because they need to serialize everything to the disk.
+So what if we think about dictionaries as sort of like an analogy for database tables?
+What could that do for us?
+So what if we thought about things like select, where, and join in terms of SQL, and then
+we translated those to dictionary concepts like get, filter, intersect, and so forth.
+How might that look?
+So here's a really, really simple SQL query.
+Select count star from users.
+So that's sort of the equivalent of saying like, tick dot size users.
+Ha.
+Stake in the slides.
+Select count star from users where age is greater than or equal to 18.
+This would be voting age users in the U.S.
+So the equivalent to that, dicks dot filter is voting age users, which is kind of nice
+because it's actually a little bit more descriptive than the greater than or equal to 18.
+And then pipe that to dicks dot size.
+I got it right on this slide.
+So this is like a slightly more advanced query.
+So what if we just, okay, let's just go for it.
+Let's do joins.
+Let's do where.
+Let's just get some more stuff in there.
+Select count star from users where age is greater than or equal to 18.
+So this is voting age users inner join residence on residence.id equals users.id where residence.city
+equals stl.
+And now we're saying who are, like, how many users are a voting age and live in St. Louis?
+How do we do that using dictionaries?
+Well, let's start by defining a couple of type aliases because we can't just, you know,
+use a plain old dictionary.
+We're going to need to get some records involved here.
+So let's say we have user, which is user ID and age.
+And then we also have a model which has users, which is a dictionary between user ID and
+user.
+And we have residence, which is a dictionary between user ID and city ID or user ID and
+city.
+So these are, like, examples.
+You can imagine many more dictionaries all at the top level, but you can model as many
+relationships between as many different entities as we want, just like how databases have tables
+all at the top level, which model relationships between as many different tables as you want.
+So here's how we might implement this query.
+So we could say locals, which is to say St. Louis locals or St. Louisans or if you're
+part of Nellie's crew, St. Lunatics.
+And we would say dix.filter, user ID, city, so that user ID being the key and then the
+city being the value, city.name, double equals stl.
+So this is going to give us, among all the residents, only those whose city is St. Louis.
+Then we can do dix.filter on isvotingage, model.users, just like before.
+So now we have a dictionary of all the users who are voting age.
+And then to do the join, we do dix.intersect locals, which is going to take all of the
+users that we've filtered out for just the ones that have voting age, and then also all
+of those that have city name of St. Louis, because that's where they live.
+And then finally, dix.size.
+So just by using a couple of simple expressions, we end up with being able to essentially do
+the same types of things that we could do in a relational database.
+This is like pretty powerful stuff, and it's all with a single source of truth.
+And no nested record updates.
+Pretty cool.
+Okay.
+If you're curious to learn some more data modeling techniques, completely shameless
+plug.
+There's this book by a dude, Elman Action.
+So check it out.
+Okay.
+So let's recap.
+So first we talked about state synchronization, sort of some of the problems, some of the
+pitfalls.
+We talked about relational data, and then we talked about immutable relational data without
+using mutable references.
+We talked about how a single source of truth means there's nothing to synchronize.
+All of those problems that we saw with state synchronization, completely out the window,
+none of those tweet-related problems.
+We talked about the synchronization work that has to be done if we do have multiple sources
+of truth, making updates, detecting errors, resolving conflicts, gracefully recovering
+in the ideal case.
+And we talked about how relational data can be done with a single source of truth, and
+in fact, immutable relational data can still be done with a single source of truth, which
+is really what we would prefer to do if we have the option.
+Then we talked about dictionaries as tables, and sort of how we can use the metaphor of
+tables that appear in relational databases to do the same kinds of data modeling activities
+using dictionaries.
+And finally, we come back to the original two questions that I had.
+When should I put duplicate information in my model?
+The answer is basically almost never, unless performance absolutely demands a cache, and
+I'm really sure I have a performance problem, and I really just can't avoid it.
+That's really the only situation I've ever come across where I would say that that's
+a good idea.
+And how would I do something like this in Elm?
+Of course, it's bracket zero.studentbracketzero.selected equals true using dictionaries as tables.
+Thanks very much.

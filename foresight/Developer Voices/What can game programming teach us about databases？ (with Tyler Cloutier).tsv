@@ -1,0 +1,685 @@
+start	end	text
+0	4920	One of the areas of computing that I'm really curious about, and I think the software world
+4920	11000	has a lot to learn from, is game programming. Probably not on a surface level, I've never
+11000	17120	worked for an e-commerce company that needed collision detection. But get below that surface,
+17120	21360	and a lot of modern games, especially once they go multiplayer, they're dealing with
+21360	28720	things like global networking issues, multi-user concurrency, competitive concurrency, massive
+28720	34960	data volumes, under brutal latency requirements. They have a lot of the programming issues that
+34960	40240	we're familiar with, but under much harsher conditions. And being a somewhat separate world,
+40240	45680	they tend to approach the solution from a novel angle. So this week, we're going to go digging
+45680	51760	for system design ideas in the gaming world. And my guest for this is Tyler Cloutier. He's got a
+51760	56920	background in distributed systems and data science for the gaming industry. And he's
+56920	63160	currently building BitCraft, which is a massive multiplayer open world game, and to support it,
+63160	69200	a really interesting flavor of database called SpacetimeDB, from which we're going to mine
+69200	77200	some ideas about concurrency, transactions, data security, query management, lots more. A lot of
+77200	83200	juicy ideas solved from an angle that I'd never considered. So let's get going. I'm your host
+83240	87960	Chris Jenkins. This is Developer Voices. And today's voice is Tyler Cloutier.
+101440	104520	My guest this week is Tyler Cloutier. How you doing, Tyler?
+104520	105840	I'm doing well. How are you?
+106160	114160	I'm very well. You're going to take me to a new world for me, because I have a long history in
+114160	121280	programming, but one thing I've never done is computer game programming. And along with that,
+121280	127600	the one thing I've always wondered is they must have a lot of the same problems that the rest
+127600	132400	of us industrial programmers have, not like the dealing with graphics and story and stuff,
+132480	134880	but then there are data problems everywhere, right?
+135760	141440	That's right. Actually, I would say what I have experience is that they have the normal problems
+142000	146320	that everybody else has, but times 100, because not only do they have to build the thing,
+146880	153600	but it has to interact with all of the data in the program besides just sort of individual parts.
+153600	155360	And then it has to go really, really fast.
+156080	159360	Yeah. Yeah. All our problems except at 60 times a second.
+159920	166800	That's right. Yeah. So your background is originally in game design or data science
+166800	171440	for games or what's your origin story? My original background is actually in chemical and
+171440	177120	biomolecular engineering, which is completely unrelated to games. And then I did my master's
+177120	184240	in computer science focusing on distributed systems and machine learning. After that, I did
+184240	188480	some time at Bloomberg and then Apple and then a company called Machine Zone, which is a game
+188480	194640	development company. Right. And what did you do for them? So there I worked in their data science
+194640	201920	and engineering department as a data science engineer. And there we were building two things.
+201920	207200	One, pipelines for data. So making sure that we got the real live data as quickly as possible
+207200	211600	into a form that we could then feed into our models. So then the second part of what I did is
+211600	216800	also build those models, which predicted various things about how players are likely to behave.
+216800	222480	So like, how likely is this player to turn? How likely is this player to spend money? Will
+222480	227280	they give us a good review? That kind of thing. This is a pay to play game. This is a free to
+227280	234880	play game, actually, that is quite expensive. Ultimately. Because it's the business model
+234880	239920	where like most players don't pay anything, but some pay for like cosmetics upgrades,
+239920	243280	that kind of thing. And they spend a lot. No, no, it's much worse than that. So it's a mobile game.
+244240	250800	And it's the whole idea of the game is it's supposed to simulate what it feels like to be a king.
+251360	257120	And so what that ends up being is that you have this little city, it's called the forex game,
+257120	262080	which is for the four different types of play that you're going to do. And
+264560	270000	you build the city up, you upgrade your buildings. And then you can start sending marches out to
+270000	275440	attack other players. And ultimately, you want to capture a what's called a wonder,
+275440	281280	which will give you make you the king of the kingdom. And the process of capturing that wonder
+281280	289360	is quite an expensive endeavor. So the way it works is that they sell you speed ups. So upgrades
+289360	295040	take time, you can speed things up by paying for it. And some people pay quite a lot. There were
+295040	300560	individuals who spent upwards of several million dollars in that game.
+301920	308480	Several million. You heard that correct. If I did not see it myself, I would not have believed it.
+309360	315120	Gee, I can't, I struggle to compute why someone would do that and how they can be rich enough
+315120	320160	that that's their disposable income. There were Saudi princes, there were people of that kind.
+320160	325440	I mean, it was a global game. And so it attracted a lot of people who were interested in
+326240	332560	simulating what it felt like to be a king. There was one person who was rumored to have hired
+333120	337920	at least one person or a team of people to actually purchase and open the packs because
+338960	345120	it's actually mechanically a lot of work to open a $1 million worth of $100 packs,
+345120	351120	right? That's 10,000. That's 10,000 packs. So there's that. There was another person
+351120	356560	who used to fly his entire alliance out to Las Vegas to be closer to the servers
+357120	360560	so that they could do the Super Wonder event more effectively.
+361600	367920	That's, I mean, A, that's really weird, but B, is it that much weirder than traders putting
+367920	372080	their computers right by their main exchange? I don't know.
+373040	378480	I don't, I suppose not. I mean, these people really cared about the game. I asked players,
+379200	387040	why are you so interested in this game? And I remember one told me, I'm a security guard at
+387040	391120	a place or something to that effect. And I just sat there all day and I downloaded this just to
+391120	397760	pass the time. But over time, I found that I had like real actual friends in this game. And
+399040	403120	when I would log on, they'd say, oh my God, this person's here. And he felt like somebody,
+403120	407280	whereas in real life, he did not really feel like someone. And that, that was important to him.
+407280	414240	Okay, I can see that. But, okay, so curious game mechanics, but that's not why I want to talk to
+414240	420800	you. The thing that's, the reason I get into that is because you're there clearly in a
+420800	429200	background where there's serious amounts of data coming in live and serious money to be made in
+429200	436080	understanding the flow of that data. Certainly. Yep. Tell me about that and how it led into
+436080	442240	what you did next. Sure. So now this is an interesting story because it's sort of
+442880	448480	obliquely leads into what we actually ended up building. Because certainly my time at
+448480	454000	Machine Zone inspired it. But it's not the way I would explain exactly what we're doing. But
+454000	460000	let me tell you, I suppose the origin story. So while I was at Machine Zone, always we wanted
+460000	464880	historical data. So we wanted to know not only this is the current power of this individual,
+464880	469600	or this is the current set of items that they have. But what is the full history of what they
+469600	475840	have? So we can predict, for example, hey, look, this person was attacked, they got zeroed out,
+475840	479120	and now they left the game, and they're not likely to come back. We always wanted to know
+479120	485600	that data. And Machine Zone didn't have that data because the traditional infrastructure of companies
+485600	496240	is to have their game data or their really website data in normal relational databases, like in this
+496240	501760	case, I believe it was MySQL. Right. And the problem is, when you update someone's power in those
+501760	507920	databases, the old power goes away. So you need to have some kind of a way to actually get that
+507920	512960	historical data. And what they started to do was they were snapshotting their databases every 12
+512960	519760	hours. And we would then get that snapshot data, and we'd try to piece together a historical data.
+519760	525520	But that was very sad for two reasons. The first reason is that the data itself was awful, because
+526480	530160	a lot can happen in 12 hours, that could cause you to leave the game, right? So you don't really
+530160	533920	have that information. And I should also say there was another stream of data, which was just event
+533920	538720	data. But it was very loosey-goosey event data that was sort of whatever people had slapped together.
+540240	545200	Right. So you tried to build up a picture of what had happened historically from these two sources.
+546080	551760	And the other reason the snapshotting data was bad was that it was enormous, because if you think
+551760	559680	about it, 99% of the data in a database does not change in 12 hours. If 99% of your players have
+559680	564720	turned, you're just copying this old data every 12 hours. And so eventually, they had to pert to
+564720	572560	the old data, so they couldn't keep it forever. And they spent millions of dollars trying to
+572560	577600	clean up this data and get it into a form. We built a system which was based on the Lambda
+577600	581440	architecture. And if you're not familiar with how the Lambda architecture works, you essentially
+581440	586640	set up a streaming part of your data pipeline, and you set up a sort of a batch part of your data
+586640	594560	pipeline, and you try to weave those two together. So you might put all of your big, well-formed data
+594560	604320	in Hive, which is a write, append-only database made by Facebook for large data, and then you would
+604320	609920	have something like Flink or Apache Spark taking your real-time data and trying to make decision
+609920	615280	space in that and bringing it in with your batch process data as well. There's a huge amount of
+615280	623600	work. And I would say 95% of the data science was actually just getting the data into the
+623600	629600	right form in the right place at the right time. That's a very familiar statement that spans way
+629600	638880	past gaming, right? Absolutely. So when we began to build our own game, I decided I'm not going to
+638880	645520	have it. We're going to have the full history of the data. So I want to be able to go back to
+645520	650560	any point in time and actually see what the game state was. But more than that, I want to actually
+650560	654880	be able to replay it at that time so that you could hop into the game at that time and actually
+654880	663120	see it being replayed. On that level of granularity. Right. So you're not just storing events, but
+663520	672880	player thumbstick movements and stuff. Correct. And actually, I saw on an earlier podcast that
+672880	678160	you had, I think it was maybe two weeks ago, you were talking about event streaming. And the guest
+678160	683920	there said at the end, this doesn't always work for everything. It doesn't work, for example,
+683920	689600	for games. And I thought, aha, how wrong you are. In fact, this is exactly what we're doing.
+690400	693760	So event sourcing is essentially what Space SoundDB does.
+694480	701200	Okay. That's colossal amounts of data, very widely distributed user base,
+702000	708560	high response times required, because you've got to deal with things 60 frames a second ideally.
+711040	716640	That's a big challenge. How do you start to break that down into something? What's your approach?
+717360	722640	I think the best place to start is to first understand what the game is that we're trying to
+722640	728720	build. And then from that, you can see why Space SoundDB is a necessary requirement. So we have
+728720	734720	two products. We have a game called BigCraft Online, which is a massively multiplayer online
+734720	741280	role playing game. You can sort of think of it as like a combination between RuneScape,
+741280	746640	if you're familiar with that, and Minecraft. So there's this very long term
+747440	751760	skilling and progression in the game. But at the same time, you can actually change and edit the
+751760	758960	world and build your own things within the world. That's the game that we set out to build. And in
+758960	764320	order to do that, notably, the first thing you think is, well, we need to put everybody in a
+764320	772240	single world logically, because you can't have people occupying the same space in the way that
+772240	777760	you could in a normal MMORPG, because they actually are editing the world. So if I was a normal MMORPG,
+777760	784320	I'd put many, many instances all in the same city, right? It doesn't matter. In our game,
+784320	788000	it certainly does, because you actually need to do that. So now you have a very interesting
+788000	792880	distributed systems challenge on your hands. Yeah, you've got a large global mutatable state.
+793440	797520	Correct. And it has to be persistent. So if your servers crash, people want to have their
+797520	804080	buildings that they spent their time building and stuff like that. Yeah. So that's the first thing
+804080	810560	you have to understand about how we came at this problem. And so in order to do that, we realized,
+811120	816640	okay, well, we need a system which is built around the persistence, right? Because
+817040	823120	if we're going to be making these permanent changes to the world, and it is everywhere, either we're
+823120	829120	going to be doing the normal architecture of games, which I'll take a brief aside to explain. So the
+829120	834720	normal architecture is you'd have a game server, you'd have your databases, the game server itself,
+834720	841360	unlike a web server, would have quite a bit of state, right? And you at periodic times,
+841600	846800	at periodic times, or when people did important events, would write to the database with a
+846800	853600	transaction. And then you get that back. But you as the developer are doing a lot of work to
+856000	862000	maintain, I suppose, synchronicity between your database and your game server state.
+862640	869200	Because for example, if I kill an enemy, there's a lot of things you can do that make things
+869920	876560	pretty crazy. But if I kill an enemy, that enemy is probably not, their position is probably not
+876560	882480	stored in the database, but they that there was an enemy might be, or that you picked up items
+882480	887360	probably is because if Susie enters your inventory, you don't want to lose that. Or you could do it
+887360	892640	periodically, and then they could do replays and stuff. What you end up getting to is a place where
+892640	898560	you're spending a lot of your time as the game developer, not thinking about the actual gameplay
+898560	903600	programming, and rather thinking about the distributed system environment in which you're
+903600	911200	actually building this game. Yeah, I can believe that. So what we decided to do is say, we are going
+911200	916560	to make that all, I suppose, opaque to the game developer, and we're going to put them in a context
+917120	922960	where they're operating inside a transaction already. That transaction is going to be manipulating
+923040	930000	in memory data. And then we are going to do all of the necessary things to persist that data to
+930000	936400	disk so that the gameplay programmer does not have to think about that at all. What's that look
+936400	942800	like for the programmer? They just, they're treating their local client side instances,
+942800	951520	though it's a relational database. Is this what you say? That is one consequence. But the main
+951520	958880	point of what I'm saying is that on the server, all things inside of BitCraft happen
+959840	965840	within a database. So let me explain just a little bit about how SpacetimeDB works and what it is
+965840	970880	actually. So we built this game and we wanted to do this in this way. So we built a system called
+970880	978080	SpacetimeDB, which is fundamentally a database. So it's very focused on persistence. The way it
+978080	985040	works is you take BitCraft, you compile it to a WebAssembly module, you upload that into the
+985040	990160	database, and then clients connect directly to the database. And now I hear a lot of people
+990160	995920	in the audience screaming, oh, you can't do that. You couldn't do that. And it maybe was a bad idea
+995920	1003920	for databases like Postgres and so forth. But we have built a permissions model around SpacetimeDB
+1003920	1013920	that allows you to do that safely. And so the way that works is you, as a client, call what we
+1013920	1019440	call reducers on the database. They're very similar to store procedures. And then those store procedures
+1019440	1023760	which are written in whatever language you want that compiles the WebAssembly will access things
+1023760	1028400	from the database and write them back to the database. So just as an example, let's say we had
+1028480	1032960	player move. And notably, everything in BitCraft, including all the player movement,
+1032960	1037440	all the chat, all the trees, all the ground, everything is stored within the database.
+1038160	1042640	So if we want to move a player, what we do is we call a reducer called move player
+1042640	1047440	on the server that updates some rows in the database and then commits those rows. And that's it.
+1048400	1055440	Then clients, other clients will subscribe to the database state. So they'll say, I want to select
+1055440	1062000	star from player position, where they are near me, basically, would be what that word clause would
+1062000	1067040	say. And then all connected clients that have subscribed to that, when that player moves,
+1067040	1072480	we'll hear about those rows and their updates, and then automatically update it in the database.
+1072480	1079680	I'm sorry, on their local client. So hang on, where is the database? The database is on a server
+1080320	1086240	stored. In this case, I believe in New York. Okay, so how on earth does that possibly work
+1086240	1092160	when I'm moving and expecting things to update 60 times a second? So, okay, this is the first thing
+1092160	1098080	that's interesting about games. You would not have a tick rate on the server that's 60 times per
+1098080	1103840	second, unless you were making a game like Counter Strike. So typically, I'll give you sort of a
+1103840	1110560	range. Minecraft updates 20 times per second. So every 50 milliseconds. RuneScape updates,
+1110560	1117120	I believe, four times a second. So every quarter of a second. So there's a variety of different
+1117120	1122960	levels that you can do. Generally speaking, the larger your game is, obviously, the fewer updates
+1122960	1127440	per second you want to be doing, because there's so many entities to move within a timeframe.
+1128000	1134400	Yeah, but I mean, I'm in London. I'm not sure I can guarantee four frames a second in New York
+1134400	1142160	and back. I see. So I understand your question now. With any game like this, you do not wait for
+1142160	1148960	the round trip. So how long would the round trip be from New York to London? I actually happen to
+1148960	1154240	know it's about 80 milliseconds or 70 milliseconds, something like that. So it's actually not crazy.
+1154560	1158640	You can play it without what's called client side prediction. But the typical way
+1158640	1162480	that you would actually do this is you'd run client side prediction. What does that mean?
+1162480	1170640	That means that I as a client have some subset of the server state. And when a player, my player,
+1170640	1176480	decides to do something, I can predict what the server is going to do to my local state,
+1177120	1180160	assuming that it will work. So based on the state of the world as I know it,
+1180880	1186800	if I try to move, I should be able to update my local state, assuming the server will agree with
+1186800	1191840	me. And so I will do that. And then I will immediately see the results of that on my own
+1191840	1197280	local client. But I will send something to the server. Now, if the server agrees, we basically
+1197280	1203040	come back, we reconcile, no problem. If the server disagrees, let's say somebody exploded a bomb
+1203040	1209840	that your client hadn't heard about yet, right on top of you. And the thing you try to do is
+1209920	1216000	invalidated by that. Maybe you're dead now. What will happen is you will have sent a request to
+1216000	1220800	the server that says, I want to move. The server interjects and says, actually, you died.
+1223040	1228320	What will happen is your client will say, oh, I understand, it will roll back to the point at
+1228320	1233920	which you were going to move. And it will then play forward the updates as they actually happen
+1233920	1239360	from the server and then try to replay your move. So it would go originally before you heard about
+1239360	1244560	from the server, it would go, you're standing here, you move, you actually move. Then what happens
+1244560	1249520	is you hear about the bomb, you roll back to the point at which you were about to move,
+1250320	1255200	you then blow up because of the bomb. And then you find out, then at that point, you try to move,
+1255200	1259520	but you can't move because you're dead. Right. And that's how that reconciles.
+1259520	1262800	This sounds very like transaction on the client side.
+1263440	1264400	Yes, it does.
+1264400	1266320	So is there a database on the client side?
+1267200	1272960	Well, I believe basically everything is a database. I have more I could talk about that,
+1272960	1277360	but essentially, yes, although typically people don't think of it that way. So typically the way
+1277360	1284560	that people think about it, first of all, in games is with a tick. So on the client, you would have
+1285280	1290400	a frame, essentially, that happens, they would call it like a server frame if it's not the
+1290400	1295520	actual render frame. So the render frame always happens at 60 frames per second, or sometimes
+1295520	1302800	now like 120 or 144 or whatever your monitor actually has. A server frame typically doesn't
+1302800	1310000	go beyond 60 frames per second. And it assumes there's a loop. And basically, we're going to
+1310000	1314720	update all the state once a frame. Space IDB actually doesn't make that assumption. You can
+1314720	1320240	do that with Space IDB, but it's not a requirement. So I'll just say that. And there's latency
+1320240	1324400	versus throughput trade-offs with that. That's essentially what that will end up with.
+1325200	1329920	Because if you have something ticking 60 frames a second, the minimum latency that you can have
+1329920	1336960	is one 60th of one second. Because you could have the wrong time. You could have tried to do
+1336960	1339920	something just as the frame was starting. And now you have to wait the full frame time
+1340640	1349680	before you actually that effect is applied. So now, yes, is the client a database?
+1350400	1356400	What is happening on the client is there's really two ways of doing it. And so I want to be careful.
+1358640	1364880	In the one way of doing it, the client has a deterministic simulation of the game world.
+1365440	1372560	So that means that all of the inputs that are going to manipulate the game state are being sent
+1372560	1377040	to the server and replicated out to the clients. Those clients then receive that input. And then
+1377040	1384960	they run the game forward a little bit, like one frame. And they will find out what actually
+1384960	1389680	has changed in the game state and they move their state forward. That requires having total
+1389680	1395360	knowledge of all of the state. Because if you don't have total knowledge, you're
+1395360	1399760	non-deterministic because you no longer know what you don't know. You don't know that that bomb
+1400320	1403520	might come in from outside and actually...
+1404480	1408000	Yeah, if you want total knowledge, you have to have the entire world so you can see events
+1408000	1409440	that might be coming over the horizon.
+1410880	1418080	Yes, this type of server synchronization really only happens with match-based games.
+1418880	1422800	So games with a sort of small state, so like League of Legends, that kind of thing.
+1424320	1430080	Or like RTSs, which is another match-based game, where the inputs are quite simple,
+1430160	1434800	but the outputs are quite complex. So you might click here to move a group of guys,
+1434800	1439840	but 500 guys might move. And so that's actually a lot of data to say where all the positions of
+1439840	1443680	them are, but you don't have to do that. You just have to replicate. I clicked here, or this player
+1443680	1448800	clicked here, and thus when I play my deterministic simulation forward, all the guys will move within
+1448800	1451280	my simulation. I don't have to communicate that data over the network.
+1451840	1457280	Okay, yeah, I can see that. So that's one way to do it. For MMOs, part of the reason they're so
+1457280	1461280	difficult is you can't do that, because I cannot possibly have the total state of the world
+1462640	1468720	on my client. It's too big, sort of fundamentally, by design. I can't put the whole world of
+1468720	1475120	Warcraft and all its players on every single machine. Correct, alas, you cannot. So instead,
+1475120	1482000	what they do is typically the way this would work is you have your game server. That game server
+1482000	1486560	knows what a game client is, and when they connect, they know where the player is, and they have a
+1486560	1490080	bunch of special logic to say, okay, I know what this player is, I know what they need, I'm going
+1490080	1495600	to send down that data to the client. And then I'm going to send down that data to the client
+1498240	1502960	let's say once a frame. So every frame, I will compute, okay, what has changed on the server,
+1502960	1506880	and I'm going to send a bunch of messages down saying these are the new positions of all the
+1506880	1515760	players. That's the typical way of doing it. Now, notably, this means that you have baked in
+1517520	1523760	what your client wants to know about into your server code. Because you as the server need to
+1523760	1528320	know what they need to know, because you're going to do this streaming update to them. Yeah,
+1528320	1534240	so it's more complex than first, for example, let's say a web site with a GraphQL query,
+1534240	1538400	because with a GraphQL query, you can say, Oh, I'm this client of client, and I want to know
+1538400	1542240	all about this data. And I'm this kind of client, I want to know about this data. But because games
+1542240	1546560	are streaming, and they need to go fast, and they have this tick based thing built into it.
+1546560	1552320	Historically, people have built them so that you write all the code for synchronizing the
+1552320	1556240	clients, and you build in some concepts, like you probably build in the concept of positions
+1556240	1559520	and of players, and that players want to know about things that are around them,
+1559520	1564720	and all of that good stuff. So if you were to then go build an AI that doesn't care about
+1564720	1567680	where certain players are, maybe it's trying to regrow the trees or something.
+1568480	1574560	And it wants to listen to the data. No can do. You've already built in the particular query
+1574560	1582720	that wants to be done on that game server state. Right. So we're inverting the controls. So the
+1582720	1588160	server knows what kind of things you would want and pushes those to you.
+1588160	1594480	Correct. So that really bakes in the server then has to have very fixed ideas about what
+1594560	1598240	kind of people connect and what they might want to do. Absolutely. Correct.
+1599440	1603360	What space time to be does is the opposite. We actually treat it sort of from a formal database
+1603360	1607840	perspective and say, actually, clients are just going to write queries, which are going to be
+1607840	1616880	executed with a query engine in a subscription based streaming way. So first, we connect,
+1617600	1620480	and we send a query, and we say, I want to listen to all of these players in this
+1621120	1625920	region or whatever we are interested in. And then that data will be incrementally streamed
+1625920	1630480	down. So as the data changes in the database, we compute that query for all the subscribe things
+1630480	1636400	and we send it down to their clients. Then you can think of their clients as having a replica
+1637200	1642720	of the server database. Now that replica is a subset of the data, and it is only prefix
+1642720	1647440	consistent. So it's not strongly consistent. Would you mean by prefix consistent?
+1648080	1657600	You have the database state as it existed at some point in time in the past. So you have all of the
+1657600	1665200	updates in a prefix of the message log, of the write ahead log, up to a certain point. That's
+1665200	1669600	what I mean. Now it's a subset. So it's not, I have the whole database, I have some set of the
+1669600	1675760	data as it was in time. So it's not eventually consistent. I don't see any weird things about
+1675840	1680800	it. I will see the database state as it was maybe like five milliseconds ago, or if I'm far away
+1680800	1687040	a hundred milliseconds ago. Right, yeah. And so what that allows us to do is then you can query
+1687040	1693200	your local database as though it were the actual database. And so you can get this information
+1693200	1700720	out from your local database much more conveniently and faster than you might otherwise do in a
+1700720	1706080	normal game server. You'll forgive me being really boring here, but I'm translating this
+1706080	1715040	into a non gaming world. And I can see I can imagine I as a as a client of the second client
+1715040	1722480	of a bank or trading platform, I might want to have all the data relating to my accounts and
+1722480	1729120	maybe some of my counterparties, but not the entire bank's data. And then I want to be able to
+1729360	1734480	optimistically make transactions on that data. They get sent back to the central server and I get
+1734480	1739840	told if that works, but I can progress as though it did. Yes. And that would be exactly the same
+1739840	1746080	architecture we're talking about in the gaming world. 100%. Yes. So what we are in sense, sense
+1746080	1753200	trying to do is unify across both of those things. A lot of people in why, why is that important?
+1754160	1763920	Because many people have tried to make a game service, game server back end kind of thing,
+1763920	1770880	like a game engine, but for the server, right? So there's unity, you've got Unreal. Wouldn't it
+1770880	1774800	be nice if somebody made that for the back end? The problem that people have is that
+1775760	1781360	when you think about what a game is on the client, it's the same across all games. If I'm playing
+1782000	1787600	chess or solitaire, what I want to do on the client is very similar to what I want to do in
+1787600	1793840	World of Warcraft. Let's say I'm making a 3D solitaire. I am rendering objects on a screen
+1793840	1799440	and I have all of that stuff. It's all kind of the same across both games. I want to render a 3D
+1799440	1805680	world. I want to loop that, apply some logic to the state of that world. And then I want to,
+1805680	1810400	yes, and I want to turn it into 3D objects and I want to project them onto a screen and I want
+1810400	1814880	to do lighting effects and I want to do sound effects and I want to do all of that. Every game
+1814880	1819840	from the client perspective is not identical, but they rhyme. They have a lie in common that
+1819840	1825120	an engine could do that we don't have to write over and over and over again, essentially. On the
+1825120	1830480	server, if you think about what chess versus World of Warcraft is, those architectures are,
+1831280	1836480	they share nothing. They might as well, one is like a web app kind of, right? Like a chess move.
+1837360	1842400	I could build that with a web server and Node.js and all that. And the other one is a very complex
+1844800	1851920	multi-user, fast-changing state thing, which synchronizes data persistently to the database
+1851920	1856560	and updates positions and all of that. So what we're trying to do in some sense with SpacetimeDB
+1856560	1861280	is close over all of those things and you really have to go all the way back to the database
+1861280	1865520	for it to be general enough to actually apply to both of those scenarios.
+1866800	1872480	Yeah. Okay. I can see that. It sounds like a colossal amount of work to do well, though.
+1873200	1881520	It does. Nobody knows this better than I do. Let me put it to you this way, though, with respect to
+1881520	1888320	that. When we decided we were going to make BitCraft, we were committed to making such a system.
+1888400	1893840	The fact that it's available as its own standalone thing is not really that much more work.
+1894400	1902400	Every MMO that you have ever seen has an architecture which is at least as complicated
+1902960	1910960	as SpacetimeDB. And I actually know that some of them, I can't necessarily name them,
+1912560	1917680	operate in the same sort of stored procedure way because it's the sort of convergent evolution
+1917680	1923680	that they arrived at, but they just didn't formally call it a database. In some sense,
+1923680	1931040	an easier problem because if you treat it as a database formally, you get to use all of the
+1931040	1938800	research and learnings that 50 years of database research has brought about. You do not have to
+1938800	1947040	reinvent the wheel, is what I'm saying on a lot of these things. And so we were always
+1947040	1953840	destined to create a system that's like this. As soon as we decided we wanted to actually create
+1953840	1960800	this kind of thing. Ours is arguably just not sort of shoestring and duct tape, not to
+1960800	1966320	disparage anyone else. It's very hard to build an MMORPG, but that's kind of how I would think
+1966320	1971360	about it. Let's say rather than that, it's not an afterthought. Not an afterthought,
+1971360	1979680	yes, correct. Okay, so what we've got here is a system where I as the game programmer,
+1981280	1987280	updating a row in a date, someone moves the joystick up, I update the Y position
+1987920	1995520	of their player's row in a database. Correct. Magic Clitty, that's going to be synchronized
+1995520	2000800	to the server without me worrying about it. And roll back if it turned out it didn't work.
+2000800	2004880	And then I just have a rendering function that's also looking at my local database
+2006080	2009600	and drawing it to the screen. That is correct, yes, that's essentially correct.
+2011520	2018640	Okay, let's start with the first objection. That's going to be too slow, even
+2019920	2023440	even if you don't have to do the server round trip every time.
+2024560	2030320	So let me ask a follow up question to your question. What specifically would be too slow?
+2030880	2036800	Because what I want to ascertain is exactly what you're talking about. There is a perception
+2036800	2042400	that databases are slow, and perhaps that's what you're driving at.
+2042400	2051280	I think because, okay, it's got to be transactional. It's probably iterate. Once you get into things
+2051280	2056960	like, oh, my bullet's flying across the screen and hitting people, it's updating a considerable
+2056960	2062960	amount of data. And collision detection, it's got to happen a lot of times a second. I won't
+2062960	2070320	give you the number, you can give it to me. But that feels like that's going to grind on a
+2070320	2075840	transactional database. Okay, so this is a great question. And I understand where you're coming
+2075840	2084480	from. And we had to be a little bit crazy to think that this was a thing that should be done
+2084480	2091200	originally. But for several reasons, which I'm about to outline, I think you will come to agree
+2091200	2095040	that actually that's completely possible and plausible to do within a database context.
+2095840	2100400	So the first thing I will draw your attention to is that we're not, by no means the first,
+2100400	2107360	to do things like this in history. There is a database called times 10,
+2107360	2110880	which was developed in the 90s. Oh, that was bought out by Oracle, wasn't it?
+2110960	2115760	It was bought out by Oracle, correct. And it actually has a very similar architecture to
+2115760	2122880	SpacetimeDB. So a couple of things. One, it's fully in memory. So the whole purpose of that
+2122880	2127520	database was that for certain very high throughput, low latency applications,
+2128720	2134480	current databases weren't hacking it, not even that currently server architectures weren't
+2134560	2142160	hacking it. So what they decided to do is to have a database, have in memory state in that
+2142160	2149120	database, put the logic of your program, physically within the same process as that database, and
+2149120	2156320	then have you access the data within the same process. So you're literally reaching into your
+2156320	2161120	current program memory, you're treating your program memory as though it were a database.
+2162080	2167520	And then what they do is all the updates to that data, they append in an append-only fashion
+2168080	2177200	to a write-ahead log. And this was developed for telecom processing, like routing calls,
+2178480	2183760	these kinds of very, very low latency high throughput things. That's the almost identical
+2183760	2189040	architecture actually to how SpacetimeDB operates. We have just modernized it for
+2191200	2196240	use with WebAssembly and whatever language you would like, and some nice things on top of that,
+2196240	2201760	including subscribing to the database, which I don't believe TimeSend actually provides that
+2201760	2209760	information. Okay, but that write-ahead log that we've got into persistence, which you said is
+2209760	2219120	important, isn't that a blocker to the performance? Not typically. So first thing I would say is that
+2220000	2226240	appending to a write-ahead log is actually quite performant on modern hardware. So that's actually
+2226240	2230160	how Kafka works, and it's how it's assumed to work. And Kafka is known as sort of a low latency
+2230160	2236000	streaming thing. It's not that low latency because of details, but it's relative to what a lot of
+2236000	2242160	people use, very low latency. The other thing that's important to know about Kafka and systems like
+2242160	2250000	that is that you can trade off throughput for latency. So in the case of Kafka, you can batch
+2250000	2255040	more things up, which will cause the latency to increase, but will cause the throughput to go
+2255040	2260400	up. You can always say, I care about latency more than I care about throughput. So I will
+2261600	2265760	decrease it down to just one transaction. So that would make sense for I want a really high,
+2265760	2271680	fast-paced game where I really want the lowest possible latency, or I don't really care if things
+2271680	2279040	come in late. So that's one thing. The next thing I would say is that for games, or really any
+2279040	2286400	application, choosing the level of durability that you want should be configuration and not code.
+2286960	2293840	So what I mean by that is I ought to be able to decide that I want to listen to data that might
+2293840	2300240	not be persisted to disk, because I don't actually care about that. For a player movement, if my
+2300240	2308560	server crashes and they move back 10 feet, don't really care about that. If I'm running a bank
+2308560	2315760	transaction and it rolls back the last 10 seconds or whatever of bank transactions, it could be a
+2315760	2319600	problem, because they might have already given away the item that the guy bought, right?
+2319600	2325200	Okay, yeah, yeah. So when you say that's configuration, are you configuring it on a
+2325280	2333600	per object type basis? So could I make some match levels of persistence, you guaranteed?
+2333600	2338880	You actually configure it on a subscriber basis. So you would say, hey, I'm going to subscribe to
+2338880	2344880	this data. And for this particular subscription, I want to see the data as soon as it updates.
+2344880	2350080	I don't care if it's ready. Like, I want to hear about, so there's sort of levels at which you
+2350080	2355120	can listen in. So there's a pipeline of data that comes in. My message happens, I update the data,
+2355840	2360240	that changes the stuff in memory, I write it to disk, I replicate it to other machines,
+2360240	2363360	all of this. And at any point in time, you can decide, like, you know what, it's good enough,
+2363360	2367360	I want to listen in here, right? So I want to listen in after it's been updated memory versus
+2367360	2372560	I want to listen after it's been persisted disk versus I want to listen only when it's been replicated
+2372560	2379040	to five machines. That's a sort of a different level of listening, if that makes sense.
+2379040	2383680	I'm jumping around trying to get my handle or my hands all over. But, okay, so how does that
+2383680	2390400	work programming? I let's say the score, player score, is gradually ticking up. It's not the
+2390400	2396880	end of the world if it maybe rolls back a little bit. Am I writing some code that just subscribes
+2396880	2403120	to the score changing and just renders that corner of the screen? You certainly could do that.
+2403680	2407200	Typically, what a client will do is they'll subscribe to all the data that they want right
+2407200	2410960	up front. So they'll say, like, let's say it's a chess match, you'll say, I want to subscribe to
+2410960	2415040	all the peace positions. Or I want to subscribe to, it depends on how you program that match,
+2415040	2419680	but let's say you're going to do it in a certain way. I'm going to listen to all the peace positions
+2419680	2424000	and I want to subscribe to the score. You don't actually, a lot of cases, you can actually
+2424000	2429360	compute the score on the client based on the state of the game. But let's say you can't,
+2429360	2433280	for some reason, in this game, you would subscribe to the score as well. And then that will be
+2433280	2440080	updated in a row and you'll just say from score table, subscribe, select off star from essentially.
+2440480	2446880	Am I doing like a, am I joining those datasets? So select all from pieces, union, select all from
+2447440	2454560	score? Yeah. So in this case, you're going to basically select a subset of each server table.
+2454560	2463920	We do not yet support subscription joins. We do actually. So we support what's called a
+2464880	2471760	semi-join. So you may filter out rows from a table based on a join from another table. So for
+2471760	2480080	example, I might want to subscribe to all players who's, who are friends with this other person.
+2480080	2485520	So I would write a join and I could, but I would always get the whole player row.
+2486320	2491120	And I'm not going to get any like player plus others data. If you want to do that,
+2491120	2494640	you would subscribe to the other table as well. And then we union all of those together and send
+2494640	2502880	them down. Okay. And are we writing this query in SQL? SQL. Currently. We, there's no reason we
+2502880	2507200	can't also support other query languages like GraphQL in the future. It's just for right now,
+2507200	2512800	for building an MMO or RPG, we need SQL. Okay. So as a game programmer, I'm writing,
+2514640	2520400	like you say, very much like stored procedures that have a mixture of SQL and coding. And like,
+2520400	2525840	what's the language? So the language is the module that you're writing is a WebAssembly module.
+2525840	2532560	So it's any language that you want that compiles to WebAssembly. Notably, we support Rust and Csharp
+2532560	2536240	in terms of building a library of nice things for you to use in those languages.
+2537360	2542240	In principle, anybody else could do whatever language they want that compiles to WebAssembly.
+2543280	2545920	But yeah, those are the two that we support right now. Okay.
+2546400	2551680	I risk framing this all as objections, but I'm trying to think...
+2551680	2559600	Sure. No, no, please. There is an objectionable idea that happens to work. And so it's quite
+2559600	2564960	exciting. Okay. So the other thing that people always complain about with stored procedures,
+2564960	2568720	I mean, a lot of people dislike stored procedures. And I think the reason is,
+2570000	2574480	I think there's two reasons. One is the language can be weird for stored procedures. Personally,
+2574560	2579120	I reject that one. If it's valuable enough, you'll learn the language. The real one is
+2579120	2585600	management of stored procedures is a misery. Correct. Yes, it is. And I think these are the...
+2585600	2589760	So I would actually go a little bit further too. The permissions model of stored procedures
+2589760	2599840	at times can be arcane as well. So I believe it's really, to your point, fundamentally a user
+2599840	2606320	experience problem, not a theoretical or technological problem, if that makes sense.
+2606320	2610960	Yeah. It's like developer experience rather than this simply doesn't work.
+2610960	2614720	Yes. I mean, why... If you actually think about stored procedures as they were,
+2614720	2619600	it's a nightmare. You have data that's in your database operating that's opaque because somebody
+2619600	2622560	updated it, but you don't... It's not in version control. You don't have any idea like,
+2623440	2630560	what was running? Did somebody change it? It's like, where is it stored? It's just a nightmare.
+2632400	2637040	It's a great point. What I will say to this is actually, we didn't set out to build the database
+2637040	2641760	in stored procedures. What actually happened is we built a system that had the right UX for what
+2641760	2645920	we wanted our developers to have and then looked at it and said like, oh, from this angle, actually,
+2645920	2649840	this is just a database with stored procedures. So it was very much a... We backed into it,
+2649840	2654320	we didn't arrive there. So that's number one. Developer experience is the most important aspect
+2654320	2659280	of space time DB. And if it is bad, there's no point to doing it. That was why we created it in the
+2659280	2664640	first place. The way we solve these problems are, number one is we put all of the stored procedures
+2665440	2671920	as the root of your database. It is all in a single module that's based from a single repo,
+2671920	2678880	in this case, that you can version in version control and then you can see the versions of it.
+2678960	2684160	The thing I would liken it to, from a developer experience perspective, and now I'm going to
+2684160	2693040	say something that will maybe trigger a lot of people, but it's similar in principle to smart
+2693040	2699840	contracts. So from there, you... Nobody thinks the developer experience of those is bad, except
+2699840	2704720	the fact that they have to deal with the blockchain. But ultimately... And the programming language
+2704720	2707840	can be pretty terrible. And the programming language can be pretty terrible. But fortunately,
+2707840	2712960	we've solved both of those problems by removing the blockchain and making it so you can use whatever
+2712960	2720640	programming language you'd like. But it's the same idea, right? You do not need a DevOps team
+2721200	2726560	to maintain or an operations team or any of that or AWS credit or any of that to run your
+2728400	2733360	smart contract. What you do is you say publish, you set it, you forget it, you walk away. You
+2733360	2737600	don't have to deal with that ever again. It's running, someone's running it for you. You really
+2737600	2742160	truly don't care. And that is the promise of the developer experience that I think we can provide
+2742160	2746320	with store procedures. And it's very easy in the case of smart contracts to keep them in sync.
+2746320	2749760	Normally, actually, in a lot of systems, you can't update your smart contracts. So that's one thing.
+2750560	2756240	But in our case, you can update a space-time-due module. And it comes from a database, and you
+2756240	2759440	can see the version that was up there. And the version is stored in the log. So
+2762240	2766320	the fact that you're updating your whole database and you can do migrations within your
+2767840	2774800	module, and you're doing the whole module at a time, vastly, vastly improves it. Then you have
+2774800	2778400	the language that you want to work within, which is a normal programming language.
+2779200	2782800	And then on top of that, we have built a permissions model that allows you to
+2784000	2790800	have complex logic, which is easy to understand by the developer, if that makes sense.
+2791440	2798480	Let's go through the permissions thing. For instance, if I've got access to subscribing
+2798480	2804880	to data from the server, I wouldn't. Hypothetical black hat me would very much like to use it to
+2804880	2808720	cheat on the game. By subscribing to other people's data.
+2808720	2816720	Okay. So first thing I'll note, all games of the first type that I described, where they have a
+2816720	2822000	deterministic client and they're replicating inputs, must know about all data in those games.
+2822000	2827520	So League of Legends, you can cheat. In fact, they're doing like a kernel extension to prevent
+2827520	2836000	people from cheating. But beside the point, they require you to see all data. So if you see Fog
+2836000	2841360	of War in an RTS, you could get data, everything under that Fog of War is there. You could remove
+2841360	2845760	the Fog of War on your client and see all of the units. So sad times. So first of all, they're
+2845760	2851440	just right out. They don't provide that to you at all. In our case, what you can do is
+2852560	2856080	there's two types of permissions. There's sort of write permissions and then there's read permissions.
+2856080	2862080	So if you want to update the database, clients are only allowed to update the database through
+2862080	2866320	the module. And so what that will be is like, let's say I wanted to move a player, but I try to
+2868160	2872560	move a player in a way that's illegal. Like I'm trying to go into this level, this place where
+2872560	2879760	I need to be level 56 and I'm only level 50. What the server will do is it will check the
+2879760	2883280	level of the player because you're just writing the logic and you'll just fail the transaction.
+2883280	2886720	So you'll just say, no, you can't do that. We roll everything back and we throw it away.
+2887520	2892240	All right, so that's the first thing. The way that works is each client has an identifier,
+2892240	2896480	which is called the identity, makes sense. It's kind of like an Ethereum address,
+2896480	2899600	if you want to liken it to something in that regard, you can see who the person is.
+2900560	2906720	And then you can say, you do all the procedural checks you want in the whole world.
+2907280	2911920	Is this player friends with that or do they know each other, whatever it is,
+2911920	2916560	and then fail the transaction if it's not allowed? So that's the right. So right is super simple,
+2916560	2922800	very, very easy to do. From a read perspective, there's a couple layers that you can do. So first
+2922800	2928640	of all, what we implement today is private tables. So that's just, hey, this table is only
+2928640	2933280	viewable by the owner of the module. So based with the database creator.
+2935600	2941280	And we would like to add, so we have not yet added because it's not yet 1.0,
+2942480	2949040	both column permissions and then column read permissions and then row level security. So
+2949040	2955760	what that means is you should be able to write a function inside of your module that says,
+2956160	2961280	well, in the case of column, you're just going to annotate columns as being private, right?
+2961280	2967520	And that's that's pretty sure for for row level security. That means like, can this person see
+2967520	2971600	this row? So if they subscribe to these players, maybe this player is invisible, and I shouldn't
+2971600	2975920	be able to see them right now. Right. So you want to be able to write a filter function
+2976880	2981520	on a table. So a filter function that applies to a table that allows you to do arbitrary
+2981520	2988000	procedural logic that basically says whether or not this player should be or this row in this table
+2988000	2997040	should be visible to this subscriber. So if I had like a hypothetical card game of some kind,
+2997040	3002640	where I have cards that only I can see, cards that all my teammates can see, and cards that
+3002640	3007520	the opponent can also see, would I be able to model that? You certainly would. So you'd be able,
+3007520	3011040	what you'd do is you'd say, let's say you just have one table called cards and you'd write
+3012080	3017200	a function that says, this is the subscriber, which is like this is the identity of the subscriber.
+3018240	3022000	Do you want to show this row or these batch of rows or however we end up
+3022000	3027120	ultimately implementing it for performance reasons? And you would look through the row and you would
+3027120	3033040	say, ah, is this who is the owner of this card? I am the owner of this card. I can see it. Oh,
+3033040	3037520	I'm not the owner of this card. Is the owner of this card my teammate? Okay, I can see it.
+3038240	3041920	I am, you know, and so forth and whatever conflicts logic you want.
+3041920	3045200	Okay. And I'm writing those functions in the same language?
+3045200	3051280	In, yes, in Rust or whatever language. Okay. So the language to define security roles is
+3051280	3055360	the general purpose language. The general purpose language. And it's a procedural language,
+3056320	3062560	not going very fancy. Obviously, you can do what, for example, SuperBase does, which is they have
+3062560	3069440	you write those row level security rules in SQL. So we may also support that. I'm not sure right
+3069440	3076160	now, but boy, it is a lot easier to write Rust than some arcane SQL query about row level security.
+3076160	3080720	I'll tell you that. Okay. Right. Where does that leave us? So
+3084000	3089120	is my experience programming the server side similar to my experience program in the client
+3089200	3091920	side? Okay, this is a fantastic question.
+3095600	3101520	Let me tell you where we are today. And the vision for where we want to be with SpaceMDB.
+3102240	3108320	So where we are today is you write your server module that runs on the server. It's written in,
+3108320	3114000	let's say, Rust. You write your client. We have a Rust SDK. And what that does is
+3114960	3120320	gives you a bunch of functions that you can use like subscribe function where you can pass in
+3120320	3124320	all your SQL queries, and then you can get all the data back. The Rust SDK currently stores that
+3124320	3130160	data internally. So it has this like data, little mini database, if you will, like a little mini
+3130160	3135760	memory, and you can query that data. The querying of that data is relatively rudimentary. It's based
+3135840	3144720	on code generation that we do. So your module has a bunch of types, right? And a bunch of
+3144720	3150000	schemas and all that stuff. You can take a module, and then you can extract the schema from that
+3150000	3154640	module, and then you can code generate whatever type of clients you want. So for example,
+3155840	3162320	you can call a particular function from the client. You can get the type, so if you have a
+3162320	3167600	Rust module and a C sharp client, as we do, you can get that C sharp equivalent type to the Rust
+3167600	3173920	type on your client, if that makes sense. Okay. Which is important because that's another thing
+3173920	3179680	with with store procedures is that like, oh, the type, like you hopefully the types work because
+3179680	3184160	it's like dynamic, who knows, it's just crazy the way they do things. Or you have to sort of like
+3184160	3190960	apply a type and you have to maintain the types. We are code generating a lot of it's like protobuf,
+3190960	3197120	right? So you, you have your schema, we scoop that out of your module. It's like a protobuf
+3197120	3201760	representation of your schema, you can then code generate on whatever client you want,
+3201760	3205520	whatever types you need. So TypeScript, we support for right now TypeScript, Python,
+3206640	3213520	Rust and C sharp for clients. Okay. Yeah, but when I call those functions, they're still going to the
+3213520	3222240	local space time to be client instance. Okay. So they do and then they, they get sent out to the
+3222240	3226960	server. We don't automatically do client side prediction right now. That is something that
+3226960	3234720	for example, in bitcraft, we have to replicate the, the logic of so if you move a player, you have
+3234720	3239200	to move them fit like yourself is to rewrite the logic and C sharp and then you have to write the
+3239200	3244960	logic in Rust. That's typically how a lot of people do this, these things and it is a huge pain.
+3244960	3248400	They duplicate the logic and they have to do this thing and it's a huge pain. Yeah.
+3249120	3252240	Some more clever people, actually, I know of some that are developing
+3255280	3264240	an RTS use web assembly and they run the server both on the client and the server
+3264240	3267200	and they do that. And so that's ultimately where we'd like to go with this. So ultimately,
+3267200	3271760	we want to run space and to be not only in the server, but also in the client and have them
+3271760	3276320	synchronized between each other automatically based on your subscriptions. And then you have
+3276320	3282000	a fully running module. So the same module is running the server is running on the client.
+3283120	3289680	And when you update, when you do a call, actually we run the actual server logic on your client,
+3289680	3293600	update that and then that does the whole reconciliation. So you automatically get client
+3293600	3298720	side prediction for free. Really, how far away do you think that is?
+3299600	3303520	It's a good question. So in a sense, we're already doing it on the,
+3304320	3308160	what we call space and to be cloud, which is our cloud office. So we have, okay, there are two
+3308160	3312320	versions of space and to be there's space and to be standalone, which is the open source version
+3312320	3318160	that's on GitHub. You can take a look at that, everything that'll run like a single node clustered
+3319120	3325600	as though it were your own personal instance of space and to be, we also have cloud, which is a
+3325600	3331120	distributed system, which will run many machines in coordinate between them all. And the way we
+3331120	3334960	replicate from one to the other is sort of the normal way in which you would replicate
+3334960	3339280	a client. So they're all just clients of each other is an interesting thing. Right.
+3339280	3342720	And that has a lot of implications for strong consistency, but I don't think we have time to
+3342720	3348640	get into that. But either way, we're working towards that, I suppose on the server. And then
+3349920	3354000	we will do that as soon as we can on the client. We're also building an MMORPG. So we're a little
+3354000	3359760	bit busy. So I'm not sure exactly when that'll be, but it is still useful in the way that it is right
+3359760	3364480	now that is to say, not automatically doing client side prediction. But we will, we will
+3364480	3368480	eventually do that. I envision world. So here's the secret. Here's the real secret to what space
+3368560	3375520	and to be is actually it's not really a database at all. What it really is, is a distributed
+3375520	3383520	operating system in the spirit of plan nine, which has never sort of taken off. Let me explain. Okay.
+3385040	3392880	Briefly. So space and to be cloud, as I mentioned, runs over, let's say 100 computers,
+3392880	3398320	right? So you've got this, this thing that's running from the outside, it looks like just one
+3398320	3403120	instance of space time to be. So you can't really tell that it is made up of 100 computers.
+3403680	3406640	And what you're doing is you're taking a program and you're running it
+3407600	3412560	on that distributed computer. So it looks again, like a single
+3414320	3420160	computer. And you're running a program on it. And we're abstracting away the hardware. Boy,
+3420160	3426240	that does sound like an operating system, doesn't it? And so that is really ultimately where we'd
+3426240	3434080	like to go is a place where the cloud is not this collection of hardware and services that you
+3434080	3442080	have to piece together in this grotesque fashion. But really, it is just a giant computer. And
+3442080	3445840	you're going to take your program and you're going to run it on that giant computer. And that's it.
+3446640	3450160	This is going to be even more blurred when you've got a series of clients connecting
+3450160	3453200	into that who are themselves similarly programmed.
+3453840	3461200	Correct. And so what you might say is that you're building a gigantic distributed
+3462480	3469200	operating system that the whole world runs on top of, right? You could say that if you were so bold.
+3469840	3473760	And I don't know that we are yet, but one day, perhaps we will. So the idea would be
+3474560	3482160	that you're all operating on the same protocol to speak with each other and that you can't really
+3482160	3487680	even tell. I mean, there's a lot of details in this one. And to be quite honest, I haven't thought
+3487680	3491760	through all of it. But if everybody's speaking the same language, you have all of these modules
+3491760	3496480	subscribing to each other, it's just the actor model, you know what it is. It's very similar
+3496480	3501600	to Erlang, right? It's got the same kind of spirit. You've got these actors, and they are
+3501600	3506480	sending messages to each other, and they're listening to messages that are being sent to them,
+3506480	3511840	and they're updating their state, and they're moving on. So it's very much in that spirit.
+3511840	3516080	Okay. Let me ask you this, and you may not like this question, but I'm going to ask it anyway.
+3516720	3520320	If someone thought this is a great idea, but I'm not waiting for you to do it,
+3520320	3525280	I'm going to build this on Erlang myself. Sure. What parts would they be missing? What
+3525280	3529840	parts would they find hard? Yeah, so the whole database part, right? So don't forget about that.
+3529920	3535520	So I've thought about this in a sense. So let's say you want to build this on Erlang. Cool.
+3536240	3540080	What is Erlang missing? Well, it's missing the persistence. I know they have persistent actors,
+3541360	3549440	but the performance of that is key. The size of each actor is key. So within a space on DB actor,
+3549440	3556640	if you think about them as actors, we also do multi-version concurrency control so that we can
+3556640	3562320	run as many transactions as possible within one machine as sort of one actor as you might
+3562320	3568320	possibly be able to do. So you want each actor to be as large as possible before you start going
+3568320	3571360	into other actors because as soon as you go into distributed systems, it's complicated,
+3572080	3578320	and you can do a lot with a single machine, it turns out. Although each actor could in principle
+3578320	3582480	be more than one machine, but I digress. That's another direction to go in down in the future.
+3583360	3589120	And then there's the whole relational model. So you need to build on top of Erlang the ability
+3589120	3594400	to do queries on the rows and get the actual row data out, all of the type system stuff.
+3594400	3598960	You'd want to be able to run in whatever language you would like to because maybe
+3600000	3603360	your programmers are familiar with C-Sharp because they're Unity developers and all that.
+3604160	3609360	Let's say also now, what about the subscription? So actors in the Erlang model, as I understand,
+3609360	3612400	you can send messages to other clients, but that's kind of like the old way of
+3612400	3616400	doing it with the game servers where I need to know what this other actor wants to know
+3617360	3621200	or build a subscription system where they send me a message, which is their subscription,
+3621200	3625520	and then I run the whole query engine and then I send them what they need to know,
+3625520	3629760	which is what we have done. So you have to build that whole query subscription system up
+3630800	3635120	from the ground as well. So good luck to you. And I would love to see and use your system
+3635120	3641040	if you do that because we wanted to make a game. We are doing this because we must.
+3642160	3647520	Okay. Then perhaps we should wrap it up with the last two questions. If someone decides they
+3647520	3654240	don't want to do that, what state is SpacetimeDB in for me as a user? Can I go and play with it?
+3655120	3659360	You absolutely can. So you can go to spacetimedb.com. You can play with a demo. It's right there.
+3660320	3664720	You can also very quickly go to our quick start guide, install spacetimedb,
+3664720	3669520	get a local instance of it running, spacetime standalone. You can upload a module to that.
+3669520	3674800	You can connect to that. You can call functions on that. You can also upload to our testnet.
+3674800	3680080	So our testnet is a version of spacetimedb cloud, which is relatively nascent,
+3680720	3685360	but it's meant for you to play around with what the cloud version will be. It's completely free.
+3685840	3693920	We give you a free amount of energy. Energy is what powers these things. It's not actual energy,
+3693920	3698960	to be clear. It's just points. You can give it AWS credits. We give you AWS credits.
+3701280	3709200	You can go to town on that. Then notably for the testnet, we reserve the right monthly to
+3709760	3714480	wipe the data because we're still updating the ABI and we don't want to be locked in yet.
+3715760	3724400	Early this year, we're trying for, let's say, April to move into 1.0 and the main net. The main net
+3724400	3729120	of spacetimedb will be the version of spacetimedb where we guarantee that your data is going to
+3729120	3734400	be there forever and it will be persisted and replicated and all that good stuff.
+3736640	3740560	You can begin building your applications now for a launch post-April.
+3740960	3745920	Okay. Here's another dangerous question because there's only really one right answer.
+3746800	3750000	Is your game, BitCraft, going to be running on that testnet?
+3750000	3751360	On that main net?
+3751360	3752160	It already is.
+3752160	3758800	So, yes, 100%. We are working on, so a lot of our focus right now is getting the performance
+3759760	3763360	to where it needs to be. BitCraft used to run on what we called janktimedb,
+3763360	3767440	which was like spacetimedb, but it was the thing that we built first and it was not its own product.
+3768240	3775680	And that works quite well, but it actually was more like the traditional old servers where
+3775680	3781040	the server knew what the client wanted and it was relatively performant. And we're now
+3781600	3786400	getting back to that point that right around now, we had the same performance of janktimedb
+3786400	3791280	and now as we gear up for the alpha, which, by the way, signed up for the BitCraft alpha,
+3791280	3793440	it's happening early this year as well.
+3793440	3794880	I'll put a link in the show notes.
+3795680	3804240	Yes. And we are getting to the point where we are at that performance level that we need for
+3804240	3809280	that alpha. So that's like, well, I don't know how much I can say without upsetting the BitCraft team,
+3809280	3812720	but it's many more users than we had previously, concurrently, running in the game.
+3813360	3817040	Right. Cool. Well, you've got a busy year, a busy few years coming up.
+3817040	3818880	We surely do. We surely do.
+3818880	3822880	Awesome. Well, good luck with spacetimedb. I hope it takes off.
+3822960	3826400	Good luck with BitCraft. I hope that takes off. And if they both take off,
+3826400	3828640	you're going to invite me to your private yacht for a follow-up.
+3829200	3833120	I don't know that I'll have one of those. I'll be too busy on the next part of spacetimedb.
+3833120	3836000	So good luck. I need satellite from there.
+3837280	3839280	You'll be able to afford it if both of those work.
+3839280	3840640	I guess so. I guess so.
+3841440	3843280	Tyler, thanks very much for joining us. Cheers.
+3843280	3846400	Thanks for having me. And that's all from Tyler. Thank you very much.
+3847040	3852480	You know, in among all the things we discussed in there, I think Tyler must be something like
+3852480	3856640	our third guest to reference the Plan 9 operating system.
+3857200	3860480	And I don't know much about Plan 9, except it never took off,
+3861040	3863840	but it was a huge influence for a lot of people.
+3863840	3867440	I think we might have to have some kind of retrospective
+3867440	3870960	what we could have learned as an industry episode on Plan 9 one day.
+3871600	3875920	So if you're a Plan 9 expert, or if you know one, please get in touch.
+3876640	3880160	And the way you get in touch is the same way you send us any feedback.
+3880160	3882400	My contact details are in the show notes.
+3882400	3885760	If you're on YouTube, there's a comment box just down there.
+3886480	3891760	Spotify has a Q&A thing for each episode these days, and so on and so on. Check your app.
+3892640	3895680	On the subject of feedback and the future episodes,
+3895680	3899520	if you enjoyed this episode, please leave a like or a comment.
+3900160	3903120	If you think other people should find this podcast,
+3903120	3905280	please rate it or share it with a friend.
+3905920	3909280	And make sure you're subscribed because we're going to be back next week
+3909280	3912560	with more interesting voices from the software development world.
+3913200	3916160	Until then, I've been your host, Chris Jenkins.
+3916160	3919280	This has been Developer Voices with Tyler Clute here.
+3919280	3920240	Thanks for listening.
+3939280	3940740	you

@@ -1,0 +1,2261 @@
+WEBVTT
+
+00:00.000 --> 00:03.000
+All right. Thanks for the intro.
+
+00:03.000 --> 00:07.000
+Indeed, the title of the paper is
+
+00:07.000 --> 00:10.000
+Solucidating the Descent Space of Diffusion Based Tensive Models.
+
+00:10.000 --> 00:14.000
+This is work with Tero, myself, Timo and Samuli from NVIDIA.
+
+00:14.000 --> 00:20.000
+The agenda here is to try and make sense
+
+00:20.000 --> 00:24.000
+of these recently immersed diffusion models,
+
+00:24.000 --> 00:28.000
+but really dig into the fundamentals
+
+00:28.000 --> 00:32.000
+and with that understanding then ask what are the best practices
+
+00:32.000 --> 00:36.000
+for designing and wanting these methods.
+
+00:36.000 --> 00:41.000
+So for a brief background on generative modelling,
+
+00:41.000 --> 00:45.000
+there are many ways to do it, but the idea is usually
+
+00:45.000 --> 00:49.000
+you have a dataset of something, for example in this case phase photos,
+
+00:49.000 --> 00:52.000
+but it could be anything, even not images,
+
+00:52.000 --> 00:55.000
+and you want to train some kind of a neural method
+
+00:55.000 --> 00:59.000
+for basically converting random numbers into random
+
+00:59.000 --> 01:03.000
+novel instances from that data distribution.
+
+01:03.000 --> 01:07.000
+And after recently GANs where the leading contender in this space,
+
+01:07.000 --> 01:12.000
+and these are from there, but now
+
+01:12.000 --> 01:16.000
+the denoising diffusion methods have really immersed
+
+01:16.000 --> 01:20.000
+as the leading contender here.
+
+01:20.000 --> 01:24.000
+So I'm sure we've all seen these superimpressive results
+
+01:24.000 --> 01:28.000
+from these models like a stable diffusion,
+
+01:28.000 --> 01:32.000
+and everything I'm going to say is basically stuff that runs
+
+01:32.000 --> 01:36.000
+at the bottom of these things, and that is in some way directly applicable
+
+01:36.000 --> 01:40.000
+to anything like this.
+
+01:40.000 --> 01:44.000
+Okay, so all of these methods, the denoising diffusion methods,
+
+01:44.000 --> 01:48.000
+the way they implement this idea is you start from pure random noise,
+
+01:48.000 --> 01:53.000
+you feed it to a neural denoiser, you keep feeding it,
+
+01:53.000 --> 01:57.000
+and reducing the noise level until it reveals a random image
+
+01:57.000 --> 02:01.000
+that was hiding underneath the noise, and now you've generated a random image,
+
+02:01.000 --> 02:05.000
+so this is a generative model.
+
+02:05.000 --> 02:09.000
+One concern with these methods is efficiency.
+
+02:09.000 --> 02:13.000
+You need to call this denoiser tens or even thousands of times in some methods
+
+02:13.000 --> 02:17.000
+to get the best quality. On the other hand,
+
+02:17.000 --> 02:21.000
+it's indeed a trade with the quality of the individual
+
+02:21.000 --> 02:27.000
+generative images and with the distribution as a whole.
+
+02:27.000 --> 02:31.000
+And these tradeoffs are not really well understood in this previous work.
+
+02:31.000 --> 02:35.000
+And some methods simply work better than others,
+
+02:35.000 --> 02:39.000
+and it's a bit of a folklore that this one seems to be
+
+02:39.000 --> 02:43.000
+good one, good and so on.
+
+02:43.000 --> 02:47.000
+And there are many ways to formulate the theory of these methods.
+
+02:47.000 --> 02:51.000
+There are, like, market chains, stochastic differential equations,
+
+02:51.000 --> 02:55.000
+and some more exotic ways. But when you kind of strip away
+
+02:55.000 --> 02:59.000
+all those fancy theories, in the end they all do something like this.
+
+02:59.000 --> 03:03.000
+But they differ, lastly,
+
+03:03.000 --> 03:07.000
+in practical design choices.
+
+03:07.000 --> 03:11.000
+Like at what rate do you reduce the noise level
+
+03:11.000 --> 03:15.000
+at different stages of the generation? Do you do this?
+
+03:15.000 --> 03:19.000
+Oh, it's showing.
+
+03:19.000 --> 03:23.000
+Does anyone know it?
+
+03:27.000 --> 03:31.000
+Yeah, thanks.
+
+03:31.000 --> 03:35.000
+Yeah, whether you do this deterministically
+
+03:35.000 --> 03:39.000
+or stochastically, we'll see the difference soon.
+
+03:39.000 --> 03:43.000
+How do you deal with vastly different
+
+03:43.000 --> 03:47.000
+single magnitudes at different stages of this process? Do you predict the signal
+
+03:47.000 --> 03:51.000
+or the noise? And so on.
+
+03:51.000 --> 03:55.000
+And given that ultimately these are the only differences between these existing methods,
+
+03:55.000 --> 03:59.000
+these must be the explanation for their vastly different performance
+
+03:59.000 --> 04:03.000
+characteristics also. And these are something we wanted to understand
+
+04:03.000 --> 04:07.000
+in this process and project.
+
+04:07.000 --> 04:11.000
+So we'll be building on the differential equation formulation
+
+04:11.000 --> 04:15.000
+from a couple of years back, where the images seem to evolve
+
+04:15.000 --> 04:19.000
+according to stochastic or an ordinary differential equation.
+
+04:19.000 --> 04:23.000
+And in principle it's known that this kind of generalizes
+
+04:23.000 --> 04:27.000
+all of those other methods. You can express them in this framework.
+
+04:27.000 --> 04:31.000
+But nobody has really gone through the work of getting their hands dirty
+
+04:31.000 --> 04:35.000
+and sorting everything into a sort of
+
+04:35.000 --> 04:39.000
+common framework where you could compare and
+
+04:39.000 --> 04:43.000
+understand the impact of these design choices. So that's the first thing
+
+04:43.000 --> 04:47.000
+we are going to be doing here. And armed
+
+04:47.000 --> 04:51.000
+with that knowledge, we'll then ask what are the best
+
+04:51.000 --> 04:55.000
+practices for running this sampling process, namely how do you
+
+04:55.000 --> 04:59.000
+manage this chain of denoising steps in the best possible way.
+
+04:59.000 --> 05:03.000
+First the deterministic version and then the stochastic version.
+
+05:03.000 --> 05:07.000
+And then finally we'll come to
+
+05:07.000 --> 05:11.000
+best practices for training these neural networks. How do you precondition them?
+
+05:11.000 --> 05:15.000
+How do you, what are the lost functions?
+
+05:15.000 --> 05:19.000
+Why does this keep coming back?
+
+05:19.000 --> 05:23.000
+Okay.
+
+05:23.000 --> 05:27.000
+And just one thing we won't be looking at
+
+05:27.000 --> 05:31.000
+the actual neural architectures like whether you should use the answer or not.
+
+05:31.000 --> 05:35.000
+We'll leave that for future work.
+
+05:35.000 --> 05:39.000
+So we'll be studying a few key works in this field.
+
+05:39.000 --> 05:43.000
+There's this paper that presents the so-called VBVE method.
+
+05:43.000 --> 05:47.000
+There's preserving, there's exploding and there's
+
+05:47.000 --> 05:51.000
+DDIM, denoising diffusion implicit model.
+
+05:51.000 --> 05:55.000
+It's not really that important for us what the difference is between these
+
+05:55.000 --> 05:59.000
+but on the face of it they look kind of like
+
+05:59.000 --> 06:03.000
+packages that you have to take as a whole.
+
+06:03.000 --> 06:07.000
+You cannot mix and match their properties.
+
+06:07.000 --> 06:11.000
+But this is not really true.
+
+06:11.000 --> 06:15.000
+The running theme in this paper
+
+06:15.000 --> 06:19.000
+is that we identify this complete and exhaustive set of
+
+06:19.000 --> 06:23.000
+design choices that completely characterize and reproduce
+
+06:23.000 --> 06:27.000
+any given method or at least these three methods and many others
+
+06:27.000 --> 06:31.000
+in this space. And this gives us sort of an
+
+06:31.000 --> 06:35.000
+extra view into the internals of these methods. We can ask
+
+06:35.000 --> 06:39.000
+what are the exact design choices they made about this and this aspect.
+
+06:39.000 --> 06:43.000
+Now don't worry. We won't be looking at slides
+
+06:43.000 --> 06:47.000
+like this. I'll try to keep it visual and intuitive
+
+06:47.000 --> 06:51.000
+to the extent possible. But the important point here is that this can be done
+
+06:51.000 --> 06:55.000
+and with this knowledge we can then ask what is the
+
+06:55.000 --> 06:59.000
+best choice for any given design point here.
+
+06:59.000 --> 07:03.000
+And that gives us our method, which will be building piece by piece
+
+07:03.000 --> 07:07.000
+and that then yields significantly improved results.
+
+07:07.000 --> 07:11.000
+And we'll be measuring our progress with the FID
+
+07:11.000 --> 07:15.000
+metric, which is sort of the current cost standard
+
+07:15.000 --> 07:19.000
+in evaluating any kinds of generative models.
+
+07:19.000 --> 07:23.000
+So let's start looking at how
+
+07:23.000 --> 07:27.000
+Song and Colleagues build this
+
+07:27.000 --> 07:31.000
+and I'll formulate this denoting diffusion problem
+
+07:31.000 --> 07:35.000
+using differential equations.
+
+07:35.000 --> 07:39.000
+So throughout this talk I'll be using this running toy example,
+
+07:39.000 --> 07:43.000
+which is actually one detoy example, which is actually quite
+
+07:43.000 --> 07:47.000
+actually in many ways completely representative of the actual thing that's going on
+
+07:47.000 --> 07:51.000
+with images. So in a way this is one of the images where
+
+07:51.000 --> 07:55.000
+you would have more dimensions on the x-axis,
+
+07:55.000 --> 07:59.000
+with actual high-dimensional images, like
+
+07:59.000 --> 08:03.000
+one megapixel image is a million numbers, so that would be a million dimensional space.
+
+08:03.000 --> 08:07.000
+But this describes the essential characteristics of it.
+
+08:07.000 --> 08:11.000
+So the point is we have some distribution of data.
+
+08:11.000 --> 08:15.000
+Let's imagine there are cat and dog photos or something
+
+08:15.000 --> 08:19.000
+and it happens to be this bimodal thing, so certain pixel values
+
+08:19.000 --> 08:23.000
+are more probable than others.
+
+08:23.000 --> 08:27.000
+We want to learn to produce novel samples from this distribution.
+
+08:27.000 --> 08:31.000
+We have a handful of examples, or let's say millions
+
+08:31.000 --> 08:35.000
+of examples, which is our data set, and based on those
+
+08:35.000 --> 08:39.000
+we want to learn to do this. So in this analogy
+
+08:39.000 --> 08:43.000
+one of the samples we have might be this dog photo.
+
+08:43.000 --> 08:47.000
+On the other axis
+
+08:47.000 --> 08:51.000
+we have increasing time, which is essentially increasing
+
+08:51.000 --> 08:55.000
+noise level. That's what we are going to be dealing with when we want to reduce this noise.
+
+08:55.000 --> 08:59.000
+But before we do that
+
+08:59.000 --> 09:03.000
+let's look at the easier direction of adding noise, like
+
+09:03.000 --> 09:07.000
+destroying an image. So if I start taking this
+
+09:07.000 --> 09:11.000
+image from the training data set, I gradually start adding noise onto it.
+
+09:11.000 --> 09:15.000
+I end up doing this random work in this pixel
+
+09:15.000 --> 09:19.000
+value space until the image is completely drowned under
+
+09:19.000 --> 09:23.000
+this white noise. And if I have a population of images
+
+09:23.000 --> 09:27.000
+in the end they'll all become
+
+09:27.000 --> 09:31.000
+indistinguishable white noise. So if I plot
+
+09:31.000 --> 09:35.000
+the density that these trajectories make
+
+09:35.000 --> 09:39.000
+it'll look like this. So the density of the data
+
+09:39.000 --> 09:43.000
+on the left edge becomes diffused over time until it's completely
+
+09:43.000 --> 09:47.000
+normally distributed at the end. And this is really nice now
+
+09:47.000 --> 09:51.000
+because it has disappeared again.
+
+09:51.000 --> 09:55.000
+No.
+
+09:55.000 --> 09:59.000
+I'll try
+
+09:59.000 --> 10:03.000
+one thing.
+
+10:03.000 --> 10:07.000
+I'll try one thing.
+
+10:07.000 --> 10:11.000
+I'll try one thing.
+
+10:11.000 --> 10:15.000
+Well, maybe we'll just leave
+
+10:15.000 --> 10:19.000
+it. Do you think we can do that?
+
+10:19.000 --> 10:23.000
+Yeah.
+
+10:23.000 --> 10:27.000
+Yeah, let me know if something important seems to be missing underneath it.
+
+10:27.000 --> 10:31.000
+So okay. Okay. So yeah, as I said
+
+10:31.000 --> 10:35.000
+we can sample from this normal distribution at the right edge. We just
+
+10:35.000 --> 10:39.000
+go random in PyTorch. And that'll give us a sample from that edge.
+
+10:39.000 --> 10:43.000
+And the magic is that there exists a way
+
+10:43.000 --> 10:47.000
+to sort of reverse this path we took earlier.
+
+10:47.000 --> 10:51.000
+So go backward in time and that will land us
+
+10:51.000 --> 10:55.000
+on the left edge where we have the density of the actual data. And that of course generates an image.
+
+10:55.000 --> 10:59.000
+And so if I have a population of these
+
+10:59.000 --> 11:03.000
+complete random noises, oops.
+
+11:03.000 --> 11:07.000
+Okay.
+
+11:07.000 --> 11:11.000
+Yeah, if I had many images I would have gotten
+
+11:11.000 --> 11:15.000
+different instances of the image. Okay.
+
+11:15.000 --> 11:19.000
+And what makes it stick is that this can be seen
+
+11:19.000 --> 11:23.000
+as a stochastic differential equation. In this example
+
+11:23.000 --> 11:27.000
+it's about the simplest one we have. When we go forward in time
+
+11:27.000 --> 11:31.000
+over a very short time period
+
+11:31.000 --> 11:35.000
+the change in image dx equals the omega, which is
+
+11:35.000 --> 11:39.000
+white noise. So that's just a mathematical expression
+
+11:39.000 --> 11:43.000
+of doing cumulative sum of random noise.
+
+11:43.000 --> 11:47.000
+Now the magic is that to this forward equation
+
+11:47.000 --> 11:51.000
+corresponds a backward version that has this same
+
+11:51.000 --> 11:55.000
+stochastic component, random walk component. But on top of that
+
+11:55.000 --> 11:59.000
+it has this term that kind of attracts the samples towards
+
+11:59.000 --> 12:03.000
+the data density. You see it's some kind of a gradient of the
+
+12:03.000 --> 12:07.000
+density p. But the problem of course is that this p is unknown
+
+12:07.000 --> 12:11.000
+and here is the axiomagic. This is a well known function
+
+12:11.000 --> 12:15.000
+from previous literature in data science
+
+12:15.000 --> 12:19.000
+called the score function and it has the property
+
+12:19.000 --> 12:23.000
+that you do not need to know the p if you have
+
+12:23.000 --> 12:27.000
+a least gross optimal denoiser for this data set d.
+
+12:27.000 --> 12:31.000
+So you can directly evaluate that formula above
+
+12:31.000 --> 12:35.000
+by the formula below. And this
+
+12:35.000 --> 12:39.000
+is an opportunity. We train a neural network to be such a denoiser
+
+12:39.000 --> 12:43.000
+and this means that we can run this kind of
+
+12:43.000 --> 12:47.000
+backward equation evolution using that
+
+12:47.000 --> 12:51.000
+denoiser.
+
+12:51.000 --> 12:55.000
+So some colleagues also present this deterministic variant of this
+
+12:55.000 --> 12:59.000
+where you don't have the stochastic term
+
+12:59.000 --> 13:03.000
+you only have this chord term scaled in some appropriate way.
+
+13:03.000 --> 13:07.000
+And this has a somewhat different like a visual character.
+
+13:07.000 --> 13:11.000
+You see it's kind of fading in and out instead of like
+
+13:11.000 --> 13:15.000
+jittering around. And this one actually provides
+
+13:15.000 --> 13:19.000
+a much cleaner view into this sampling dynamic. So we'll be looking at
+
+13:19.000 --> 13:23.000
+this first and then returning to the stochastic later.
+
+13:23.000 --> 13:27.000
+And with this I can now always draw this
+
+13:27.000 --> 13:31.000
+paint flow lines of this ODE. So the idea
+
+13:31.000 --> 13:35.000
+is that we are trying to somehow follow these lines to do the generation.
+
+13:35.000 --> 13:39.000
+And indeed the way that happens is by discretization
+
+13:39.000 --> 13:43.000
+I take little but macroscopic steps
+
+13:43.000 --> 13:47.000
+in this space I reduce the time and
+
+13:47.000 --> 13:51.000
+for any change in time I want to jump. The ODE formula
+
+13:51.000 --> 13:55.000
+tells me how much the image changes. And again
+
+13:55.000 --> 13:59.000
+the ODE formula is already does a neural network
+
+13:59.000 --> 14:03.000
+so the neural network tells us where to go on the next step.
+
+14:03.000 --> 14:07.000
+That's the general idea. And that gives me a step.
+
+14:07.000 --> 14:11.000
+I keep stepping until I hit time zero and that's my generated sample.
+
+14:11.000 --> 14:15.000
+With the SDEs we would have some kind of noise addition
+
+14:15.000 --> 14:19.000
+on top of this so we would kind of jitter it
+
+14:19.000 --> 14:23.000
+but I said we'll leave that for later.
+
+14:23.000 --> 14:27.000
+And now we've exactly reproduced this intuitive
+
+14:27.000 --> 14:31.000
+picture using differential equations.
+
+14:31.000 --> 14:35.000
+Okay so that was song and colleagues
+
+14:35.000 --> 14:39.000
+for our purposes. And let's now identify
+
+14:39.000 --> 14:43.000
+some design choices involved in making this kind of an ODE or SD.
+
+14:43.000 --> 14:47.000
+But before we do that we should understand what can go wrong
+
+14:47.000 --> 14:51.000
+in this process. What are the error sources? Well the obvious one
+
+14:51.000 --> 14:55.000
+because I might end up like in a different place than I should have
+
+14:55.000 --> 14:59.000
+when I do this sampling chain. So the obvious one is that if the network
+
+14:59.000 --> 15:03.000
+gives me an incorrect direction I end up moving in the incorrect
+
+15:03.000 --> 15:07.000
+direction and in the end I end up somewhat in the wrong place.
+
+15:07.000 --> 15:11.000
+It's more subtle than this but this is kind of a cartoon.
+
+15:11.000 --> 15:15.000
+The other source of error is that we are trying to approximate this continuous
+
+15:15.000 --> 15:19.000
+trajectory in green here using these linear
+
+15:19.000 --> 15:23.000
+segments. And
+
+15:23.000 --> 15:27.000
+if I try to jump too far at once the curve will kind of
+
+15:27.000 --> 15:31.000
+move away from my feet and I'll end up veering off
+
+15:31.000 --> 15:35.000
+this path. It's of course familiar to anyone who's done like a physical simulation
+
+15:35.000 --> 15:39.000
+with ODE. And
+
+15:39.000 --> 15:43.000
+the proof of solutions to that is to take more steps
+
+15:43.000 --> 15:47.000
+but that's exactly what we want to avoid because that directly means
+
+15:47.000 --> 15:51.000
+more compute to generate an image.
+
+15:51.000 --> 15:55.000
+Okay and so what we argue and what is underappreciated in previous
+
+15:55.000 --> 15:59.000
+work is that these two effects should be analysed
+
+15:59.000 --> 16:03.000
+or can be and should be analysed in isolation.
+
+16:03.000 --> 16:07.000
+You don't have to sample in a certain way just because you train your
+
+16:07.000 --> 16:11.000
+network in a certain way and so on you can decouple this. And indeed
+
+16:11.000 --> 16:15.000
+we'll be looking at sampling first and then coming back to the training later.
+
+16:15.000 --> 16:19.000
+Okay so I promise to show you some
+
+16:19.000 --> 16:23.000
+choices and here is one finally. So
+
+16:23.000 --> 16:27.000
+when I built this example I added noise at a constant rate
+
+16:27.000 --> 16:31.000
+over every time step and that gives me this simplicity, it gives me this schedule
+
+16:31.000 --> 16:35.000
+where the noise level increases as a square root of time
+
+16:35.000 --> 16:39.000
+because that's how the variance will grow linearly so the standard
+
+16:39.000 --> 16:43.000
+will go square root. That's what you get
+
+16:43.000 --> 16:47.000
+if you call random and then do a comp sum on top of it.
+
+16:47.000 --> 16:51.000
+Had I added it at a different rate I might have arrived at a schedule
+
+16:51.000 --> 16:55.000
+like this for example where the standard deviation is the gross linearity
+
+16:55.000 --> 16:59.000
+and indeed I could do any
+
+16:59.000 --> 17:03.000
+kind of a choice here. I could do something even something
+
+17:03.000 --> 17:07.000
+crazy like this way we schedule here in the middle if I wanted to
+
+17:07.000 --> 17:11.000
+for some reason. And indeed we generalise in the paper the
+
+17:11.000 --> 17:15.000
+ODE form or we reparametise it in such
+
+17:15.000 --> 17:19.000
+a way that we get a clear view into these effects.
+
+17:19.000 --> 17:23.000
+So we can parameterise the noise level we want to have reached
+
+17:23.000 --> 17:27.000
+by explicitly by this function sigma.
+
+17:31.000 --> 17:35.000
+But the real question is why would you want to do something like this.
+
+17:35.000 --> 17:39.000
+Well one reason for that could be that if you look at this picture for example
+
+17:39.000 --> 17:43.000
+you see almost nothing happens until
+
+17:43.000 --> 17:47.000
+at almost zero noise level suddenly curves rapidly
+
+17:47.000 --> 17:51.000
+to one of these two basins and
+
+17:51.000 --> 17:55.000
+there's high curvature there so we'd probably want to be careful
+
+17:55.000 --> 17:59.000
+in stepping. We'll want to take somehow be more careful in sampling
+
+17:59.000 --> 18:03.000
+that region and less careful you're in the bulk. So there's two ideas
+
+18:03.000 --> 18:07.000
+of how you might do that. You might
+
+18:07.000 --> 18:11.000
+first you might take shorter steps at the more difficult parts
+
+18:11.000 --> 18:15.000
+usually is the low noise levels because that's where the
+
+18:15.000 --> 18:19.000
+image details are usually built. The other alternative
+
+18:19.000 --> 18:23.000
+would be to instead warp the noise schedule in such a way
+
+18:23.000 --> 18:27.000
+that you just end up spending more time at these difficult parts.
+
+18:27.000 --> 18:31.000
+And it's tempting to think
+
+18:31.000 --> 18:35.000
+that these two approaches would be equivalent.
+
+18:35.000 --> 18:39.000
+And this is an implicit assumption I think that many previous works do.
+
+18:39.000 --> 18:43.000
+But this is simply not true because the error characteristics
+
+18:43.000 --> 18:47.000
+can be vastly different between these choices like the error that comes
+
+18:47.000 --> 18:51.000
+from this tracking this continuous curve
+
+18:51.000 --> 18:55.000
+and we'll see the effect of that later.
+
+18:55.000 --> 18:59.000
+So now we've identified the first pair of design choices here.
+
+18:59.000 --> 19:03.000
+The time steps and the noise schedule.
+
+19:03.000 --> 19:07.000
+But let's introduce a couple more.
+
+19:07.000 --> 19:11.000
+And this address is the following problem. I zoom out a little
+
+19:11.000 --> 19:15.000
+because in reality we add a ton of noise. So at the
+
+19:15.000 --> 19:19.000
+other extreme the noise level is very large. I've been showing this zoom in
+
+19:19.000 --> 19:23.000
+so we can easier see what's going on. But I zoomed out
+
+19:23.000 --> 19:27.000
+now to see what's here. So the issue
+
+19:27.000 --> 19:31.000
+if you don't do anything is that the signal magnitude grows
+
+19:31.000 --> 19:35.000
+as the noise level grows. You keep piling noise. The signal
+
+19:35.000 --> 19:39.000
+is quite simply bigger numerically like the values that
+
+19:39.000 --> 19:43.000
+are in your sensor. They are much larger at the high noise levels
+
+19:43.000 --> 19:47.000
+than in the low noise levels. And this is known to be really bad for neural network
+
+19:47.000 --> 19:51.000
+training dynamics. And these kind of
+
+19:51.000 --> 19:55.000
+effects are actually critical to deal with to get good performance.
+
+19:55.000 --> 19:59.000
+So the way many previous works approach this is by using
+
+19:59.000 --> 20:03.000
+something called variance preserving schedules where you effectively
+
+20:03.000 --> 20:07.000
+introduce this additional
+
+20:07.000 --> 20:11.000
+so called scale schedule where you squeeze
+
+20:11.000 --> 20:15.000
+the signal magnitude into this constant with constant
+
+20:15.000 --> 20:19.000
+variance tube. So that makes
+
+20:19.000 --> 20:23.000
+that's one way to make the network happy here.
+
+20:23.000 --> 20:27.000
+So we generalize this idea again by
+
+20:27.000 --> 20:31.000
+just formulating an OD that allows you to directly
+
+20:31.000 --> 20:35.000
+specify any arbitrary scale schedule. And viewing this slide
+
+20:35.000 --> 20:39.000
+it again becomes appropriate that the only thing that the scale schedule does
+
+20:39.000 --> 20:43.000
+is distort these flow lines in some way.
+
+20:43.000 --> 20:47.000
+So you are just doing a coordinate transform in a way on this XT plane.
+
+20:47.000 --> 20:51.000
+Now there is an alternative
+
+20:51.000 --> 20:55.000
+way to deal with this scaling issue. And it is quite
+
+20:55.000 --> 20:59.000
+simply this. Instead of changing the OD at all
+
+20:59.000 --> 21:03.000
+you could change your neural network in such a way that it has an initial scaling
+
+21:03.000 --> 21:07.000
+layer that uses the known single scale
+
+21:07.000 --> 21:11.000
+scale it to something that's palatable for the neural network.
+
+21:11.000 --> 21:15.000
+And again you might think that this is completely
+
+21:15.000 --> 21:19.000
+accurate with the OD, but this is simply not true because again the error characteristics
+
+21:19.000 --> 21:23.000
+are vastly different between these two cases. And I'll come
+
+21:23.000 --> 21:27.000
+back soon to how the chosen practice.
+
+21:27.000 --> 21:31.000
+But now we've identified a second set, second pair of these matrices.
+
+21:31.000 --> 21:35.000
+The scaling schedule and the
+
+21:35.000 --> 21:39.000
+scaling that happens inside the neural network itself.
+
+21:39.000 --> 21:43.000
+And that we kind of saw so-called preconditioning of the neural network.
+
+21:43.000 --> 21:47.000
+Okay, so now we have quite a few
+
+21:47.000 --> 21:51.000
+collected here. And
+
+21:51.000 --> 21:55.000
+at this point we can ask, like get our hands dirty
+
+21:55.000 --> 21:59.000
+go look at the appendices of these papers, read their code
+
+21:59.000 --> 22:03.000
+for the final ground truth and ask what
+
+22:03.000 --> 22:07.000
+formulas actually exactly reproduce their
+
+22:07.000 --> 22:11.000
+approaches. And they are these. Again don't worry, but don't even
+
+22:11.000 --> 22:15.000
+try to read them. But the question now is
+
+22:15.000 --> 22:19.000
+what choices should we actually make, which ones of these are good, which ones are
+
+22:19.000 --> 22:23.000
+suboptimal. And that's going to be the topic of the next section.
+
+22:23.000 --> 22:27.000
+And for now, we will be ignoring these neural network training
+
+22:27.000 --> 22:31.000
+aspects. We will be using pre-trained networks from previous work.
+
+22:31.000 --> 22:35.000
+We won't be retraining anything yet. We'll just try to improve the sampling.
+
+22:35.000 --> 22:39.000
+So now we move on to the deterministic sampling
+
+22:39.000 --> 22:43.000
+and actual prescriptions of what
+
+22:43.000 --> 22:47.000
+you might want to do. So first the noise schedule. Why would
+
+22:47.000 --> 22:51.000
+some of them be better than others? For example this way one must be
+
+22:51.000 --> 22:55.000
+terrible for some reason, but why?
+
+22:55.000 --> 22:59.000
+Well, now we get a clear view.
+
+22:59.000 --> 23:03.000
+Well, parameterizing things in this way gives us a
+
+23:03.000 --> 23:07.000
+quite a clear view to this. So let's zoom out again.
+
+23:07.000 --> 23:11.000
+And consider the fact that
+
+23:11.000 --> 23:15.000
+we are trying to follow these curving trajectories by following
+
+23:15.000 --> 23:19.000
+these linear tangents. And that's probably going to be more successful
+
+23:19.000 --> 23:23.000
+when the tangents happen to coincide with this curve trajectory.
+
+23:23.000 --> 23:27.000
+So when the trajectory is as straight as possible in other words.
+
+23:27.000 --> 23:31.000
+So if I use a bad schedule like this one, you see
+
+23:31.000 --> 23:35.000
+there's already a visible gap between the tangent and the curve.
+
+23:35.000 --> 23:39.000
+So you easily fall off if you try to step too much.
+
+23:39.000 --> 23:43.000
+And indeed if I show you this random family of different
+
+23:43.000 --> 23:47.000
+schedules, we see that some of them seem to be better in this regard than others.
+
+23:47.000 --> 23:51.000
+In particular this one.
+
+23:51.000 --> 23:55.000
+And this is actually the same schedule used in the previous work
+
+23:55.000 --> 23:59.000
+DDIM, which is known to be quite good.
+
+23:59.000 --> 24:03.000
+And this in a way explains it.
+
+24:03.000 --> 24:07.000
+So this is the schedule where standard deviation cross-lineally
+
+24:07.000 --> 24:11.000
+and we do not use any scaling. And indeed
+
+24:11.000 --> 24:15.000
+we'll be leaving the scaling for neural network parameterization.
+
+24:15.000 --> 24:19.000
+And the reason for that is that this scaling also introduces unwanted
+
+24:19.000 --> 24:23.000
+curvature into these lines.
+
+24:23.000 --> 24:27.000
+Yeah, it just turns them unnecessarily at some point.
+
+24:27.000 --> 24:31.000
+It's actually better to let the
+
+24:31.000 --> 24:35.000
+signal in the ODE grow from that perspective.
+
+24:35.000 --> 24:39.000
+As further, and yeah, with this the
+
+24:39.000 --> 24:43.000
+is the ODE becomes very simple. So as a further
+
+24:43.000 --> 24:47.000
+demonstration, like an actual mathematical fact about this
+
+24:47.000 --> 24:51.000
+schedule and why it allows us to take long steps is that
+
+24:51.000 --> 24:55.000
+if I took a step directly to times zero, then
+
+24:55.000 --> 24:59.000
+with this schedule and only this schedule
+
+24:59.000 --> 25:03.000
+the tangent is pointing directly to the output of the denoiser.
+
+25:03.000 --> 25:07.000
+And that's very nice because
+
+25:07.000 --> 25:11.000
+the denoiser output changes only very slowly during the
+
+25:11.000 --> 25:15.000
+sampling process. And this means that
+
+25:15.000 --> 25:19.000
+well, the direction you are going to doesn't change almost at all.
+
+25:19.000 --> 25:23.000
+So it means you can take long bold steps and you can consequently only take
+
+25:23.000 --> 25:27.000
+a few steps or many fewer steps than with the alternatives.
+
+25:27.000 --> 25:31.000
+Okay, and then I said we'll want to direct
+
+25:31.000 --> 25:35.000
+our efforts to the difficult places. Now we've tied our
+
+25:35.000 --> 25:39.000
+hands with the noise schedule. So the remaining tool
+
+25:39.000 --> 25:43.000
+is to take different length steps at different stages
+
+25:43.000 --> 25:47.000
+of the generation. And indeed, when you go look
+
+25:47.000 --> 25:51.000
+at the possibly implicit choices the previous methods have done,
+
+25:51.000 --> 25:55.000
+all of them take shorter steps at low noise levels
+
+25:55.000 --> 25:59.000
+because that's where the detail is built again.
+
+25:59.000 --> 26:03.000
+And yeah, we
+
+26:03.000 --> 26:07.000
+formulate this family of these discretizations
+
+26:07.000 --> 26:11.000
+like a polynomial step length growth and we find that there is a broad
+
+26:11.000 --> 26:15.000
+optimum of good schedules there.
+
+26:15.000 --> 26:19.000
+You can read those details in the paper.
+
+26:19.000 --> 26:23.000
+So there's one more thing that this ODE framework allows you to do
+
+26:23.000 --> 26:27.000
+which is not so clear with for example the Markov chain
+
+26:27.000 --> 26:31.000
+form lessons is use higher order solvers. So again
+
+26:31.000 --> 26:35.000
+there is going to be curvature and it can be quite
+
+26:35.000 --> 26:39.000
+rapid at places. So you can still fall off
+
+26:39.000 --> 26:43.000
+the track if you just naively follow tangent and that method
+
+26:43.000 --> 26:47.000
+of following the tangent of course is called the Euler method.
+
+26:47.000 --> 26:51.000
+But there are higher order schemes for example in the Hoin scheme you take a second
+
+26:51.000 --> 26:55.000
+tentative step and you move it back to where you started from
+
+26:55.000 --> 26:59.000
+and your access step is going to be the average of that and the initial one.
+
+26:59.000 --> 27:03.000
+And this makes you much better follow these trajectories.
+
+27:03.000 --> 27:07.000
+This of course has a cost. You need to take these sub steps.
+
+27:07.000 --> 27:11.000
+And what we find in the paper by extension we're studying this
+
+27:11.000 --> 27:15.000
+is that this Hoin method strikes the best balance between these higher order methods
+
+27:15.000 --> 27:19.000
+for sort of the extra bang for the buck.
+
+27:19.000 --> 27:23.000
+And the improvement is actually quite substantial.
+
+27:23.000 --> 27:27.000
+Okay, so those are the choices we made.
+
+27:27.000 --> 27:31.000
+And now we can evaluate. So we'll be evaluating
+
+27:31.000 --> 27:35.000
+these results throughout the talk on a couple of very competitive
+
+27:35.000 --> 27:39.000
+generation categories. Saifat Sen
+
+27:39.000 --> 27:43.000
+at Resolution 32 using it at Resolution 64.
+
+27:43.000 --> 27:47.000
+And I want to say a couple of words on this might sound
+
+27:47.000 --> 27:51.000
+like a useless toy example to you if you're used to seeing
+
+27:51.000 --> 27:55.000
+like outputs from stable diffusion or something.
+
+27:55.000 --> 27:59.000
+But the way also those methods work is they first
+
+27:59.000 --> 28:03.000
+they something like a 64 by 64 image and then they upsample it sequentially.
+
+28:03.000 --> 28:07.000
+And it turns out that generating the 64 image is the difficult part there.
+
+28:07.000 --> 28:11.000
+The upsampling just kind of it just kind of works.
+
+28:11.000 --> 28:15.000
+So this is highly indicative of
+
+28:15.000 --> 28:19.000
+improvements we get in very relevant
+
+28:19.000 --> 28:23.000
+very relevant classes of models.
+
+28:23.000 --> 28:27.000
+Okay, so if we look at the performance of the original
+
+28:27.000 --> 28:31.000
+samples from these works, from a few previous methods
+
+28:31.000 --> 28:35.000
+on these data sets, we see
+
+28:35.000 --> 28:39.000
+that we have the quality on the y-axis, the FID lower is
+
+28:39.000 --> 28:43.000
+better, and we have a number of samples we need to take, like number of steps
+
+28:43.000 --> 28:47.000
+or the function evaluations on the x-axis. We see that we need to take
+
+28:47.000 --> 28:51.000
+something like hundreds or even thousands of steps to get kind of
+
+28:51.000 --> 28:55.000
+saturate the quality to get the best quality that model gives you.
+
+28:55.000 --> 28:59.000
+So introducing the point sampler and our discretization schedule
+
+28:59.000 --> 29:03.000
+we vastly improved this. I noticed that
+
+29:03.000 --> 29:07.000
+the x-axis is logarithmic, so we've gone from like hundreds
+
+29:07.000 --> 29:11.000
+to dozens of evaluations.
+
+29:11.000 --> 29:15.000
+And further introducing the noise schedule
+
+29:15.000 --> 29:19.000
+and scaling schedule further improved the results by a large amount
+
+29:19.000 --> 29:23.000
+except in DDIM which was already using those schedules.
+
+29:23.000 --> 29:27.000
+So now we've already made it quite far here
+
+29:27.000 --> 29:31.000
+and using some super fancy
+
+29:31.000 --> 29:35.000
+higher audio, so it's not worth the effort.
+
+29:35.000 --> 29:39.000
+Okay, so now we've covered the deterministic sampling
+
+29:39.000 --> 29:43.000
+and let's next
+
+29:43.000 --> 29:47.000
+return to the question of SDE which we
+
+29:47.000 --> 29:51.000
+put on the back burner on the other slides. And remember
+
+29:51.000 --> 29:55.000
+instead of following these nice smooth flow trajectories
+
+29:55.000 --> 29:59.000
+the SDE sort of cheaters around as some kind of
+
+29:59.000 --> 30:03.000
+exploration around that baseline. So it can be interpreted as
+
+30:03.000 --> 30:07.000
+replacing the noise as you go on top of like reducing it.
+
+30:07.000 --> 30:11.000
+And the reason why people care about the SDE is of course
+
+30:11.000 --> 30:15.000
+well one reason is that that's where this stuff is derived from
+
+30:15.000 --> 30:19.000
+but the other is that in practice you tend to get better results when you use the SDE
+
+30:19.000 --> 30:23.000
+instead of the ODE, at least in previous work.
+
+30:23.000 --> 30:27.000
+And the reason for that will become apparent soon.
+
+30:27.000 --> 30:31.000
+But let's first generalize this idea a little.
+
+30:31.000 --> 30:35.000
+So in the paper we present this generalized version of the SDE
+
+30:35.000 --> 30:39.000
+which allows you to specify the strength of this exploration
+
+30:39.000 --> 30:43.000
+by this sort of noise replacement schedule.
+
+30:43.000 --> 30:47.000
+So especially when you set it to zero you get just the ODE
+
+30:47.000 --> 30:51.000
+boosting this factor. Or you can do more exotic schedules
+
+30:51.000 --> 30:55.000
+like something like this
+
+30:55.000 --> 30:59.000
+where you have it behave like an SDE in the middle and like the ODE
+
+30:59.000 --> 31:03.000
+and so on. And samples would look like this.
+
+31:03.000 --> 31:07.000
+But again that's the question of is this just a nice streak
+
+31:07.000 --> 31:11.000
+or like what's the point.
+
+31:11.000 --> 31:15.000
+And as I said empirically
+
+31:15.000 --> 31:19.000
+this improves the results. And now looking at this SDE
+
+31:19.000 --> 31:23.000
+the reason becomes somewhat apparent.
+
+31:23.000 --> 31:27.000
+So don't try to read it unless you're an expert in SDEs
+
+31:27.000 --> 31:31.000
+but we can recognize a couple of familiar parts here.
+
+31:31.000 --> 31:35.000
+So the first term in the SDE is actually just the ODE from the previous section.
+
+31:35.000 --> 31:39.000
+So that means that we still have this force
+
+31:39.000 --> 31:43.000
+that is driving us towards the distribution
+
+31:43.000 --> 31:47.000
+of flow lines. And the remainder we can identify
+
+31:47.000 --> 31:51.000
+some kind of a lens around diffusion stochastic difference equation
+
+31:51.000 --> 31:55.000
+which is a well-known thing from a long ago.
+
+31:55.000 --> 31:59.000
+It has this property that it makes the samples sort of explore your
+
+31:59.000 --> 32:03.000
+distribution and if the samples are not distributed correctly
+
+32:03.000 --> 32:07.000
+it will kind of reduce that error.
+
+32:07.000 --> 32:11.000
+So it has this healing property.
+
+32:11.000 --> 32:15.000
+And because we do make errors during the sampling it kind of actively corrects
+
+32:15.000 --> 32:19.000
+for them. And this is how it looks like. So let's take this extreme situation
+
+32:19.000 --> 32:23.000
+we have our samples to blue dots. And
+
+32:23.000 --> 32:27.000
+let's say they are really bad. They are not following the underlying distribution at all.
+
+32:27.000 --> 32:31.000
+They are skewed to one side.
+
+32:31.000 --> 32:35.000
+So if we keep following the ODE it does nothing to actually
+
+32:35.000 --> 32:39.000
+correct the skew and we completely miss the other basin of the days for example.
+
+32:39.000 --> 32:43.000
+So when I introduce stochasticity to this process
+
+32:43.000 --> 32:47.000
+it starts looking like this.
+
+32:47.000 --> 32:51.000
+So these samples do this kind of random exploration
+
+32:51.000 --> 32:55.000
+and gradually forget where they came from and forget the error
+
+32:55.000 --> 32:59.000
+in this opposition. And now we've covered both modes for example
+
+32:59.000 --> 33:03.000
+in the generated images on the left edge.
+
+33:03.000 --> 33:07.000
+So that's the sort of reason why stochasticity is helpful.
+
+33:07.000 --> 33:11.000
+No, arguably this is the only benefit of the SDE over the ODE.
+
+33:11.000 --> 33:15.000
+But there are also downsides in using SDEs.
+
+33:15.000 --> 33:19.000
+For example we would technically have to use these
+
+33:19.000 --> 33:23.000
+complicated solvers that are arguably designed for much more complicated
+
+33:23.000 --> 33:27.000
+cases where you have more general SDEs.
+
+33:27.000 --> 33:31.000
+So we asked the question could we instead directly combine the ODE solving
+
+33:31.000 --> 33:35.000
+with this idea of this
+
+33:35.000 --> 33:39.000
+churning of the noise, adding and removing it.
+
+33:39.000 --> 33:43.000
+And the answer is this.
+
+33:43.000 --> 33:47.000
+So this is a stochastic example we proposed in the paper.
+
+33:47.000 --> 33:51.000
+So we have our current noise image at noise level TTI.
+
+33:51.000 --> 33:55.000
+Remember in our parent recession the noise level is now
+
+33:55.000 --> 33:59.000
+completely equivalent with time.
+
+33:59.000 --> 34:03.000
+So we have two sub steps in one step.
+
+34:03.000 --> 34:07.000
+So first we add noise. So this represents the lens of an exploration.
+
+34:07.000 --> 34:11.000
+So we landed some random
+
+34:11.000 --> 34:15.000
+noisier image so the time increases here.
+
+34:15.000 --> 34:19.000
+And then we solved the ODE to where we actually wanted to go
+
+34:19.000 --> 34:23.000
+with say lower noise level.
+
+34:23.000 --> 34:27.000
+And that simply follows the flow line there.
+
+34:27.000 --> 34:31.000
+And in practice we do this with a single point step. So we keep alternating between
+
+34:31.000 --> 34:35.000
+this noise addition and the point step.
+
+34:35.000 --> 34:39.000
+And this brings us closer and closer to time zero as we want.
+
+34:39.000 --> 34:43.000
+But underneath it is the ODE running the show
+
+34:43.000 --> 34:47.000
+and guiding us along these lines.
+
+34:47.000 --> 34:51.000
+But on top of that we now have this jittering with correct servers.
+
+34:51.000 --> 34:55.000
+Okay, so this all sounds really nice.
+
+34:55.000 --> 34:59.000
+You get free error correction but it's not actually free
+
+34:59.000 --> 35:03.000
+because the lens event term is also an approximation of some continuous thing.
+
+35:03.000 --> 35:07.000
+And you introduce new error also when you make it.
+
+35:07.000 --> 35:11.000
+So it's actually a quite delicate balance of how much you should do this.
+
+35:11.000 --> 35:15.000
+And now with this clear view into this dynamics we actually find that it is really
+
+35:15.000 --> 35:19.000
+finicky. You need to tune the amount of stochasticity
+
+35:19.000 --> 35:23.000
+on a per data set per architecture basis.
+
+35:23.000 --> 35:27.000
+You get the benefits but it's really annoying.
+
+35:27.000 --> 35:31.000
+So it's a mixed bag.
+
+35:31.000 --> 35:35.000
+Nonetheless it is very useful. So if we compare the ODEs from the previous section
+
+35:35.000 --> 35:39.000
+their performance with just original SDE
+
+35:39.000 --> 35:43.000
+samples from these respective works.
+
+35:43.000 --> 35:47.000
+We see that the SDE solvers are simply better in the end
+
+35:47.000 --> 35:51.000
+but they are also very slow.
+
+35:51.000 --> 35:55.000
+Now applying all of these improvements
+
+35:55.000 --> 35:59.000
+with our method, with the optimal tune settings for this data set
+
+35:59.000 --> 36:03.000
+we read both much better quality
+
+36:03.000 --> 36:07.000
+at a much faster rate.
+
+36:07.000 --> 36:11.000
+And yeah, there's been some previous works
+
+36:11.000 --> 36:15.000
+that applied also higher order solvers.
+
+36:15.000 --> 36:19.000
+So I want to highlight one result here.
+
+36:19.000 --> 36:23.000
+This image net 64 highly competitive
+
+36:23.000 --> 36:27.000
+just with this change of schedule.
+
+36:27.000 --> 36:31.000
+We went from a pretty mediocre FID of 2.07 to 1.55
+
+36:31.000 --> 36:35.000
+which at the time of getting this result was state of the art
+
+36:35.000 --> 36:39.000
+but that record was broken before the publication
+
+36:39.000 --> 36:43.000
+but we'll have our events in a few slides.
+
+36:43.000 --> 36:47.000
+But just to show that this is just taking
+
+36:47.000 --> 36:51.000
+the existing network and using it better
+
+36:51.000 --> 36:55.000
+for improvements already.
+
+36:55.000 --> 36:59.000
+Okay, so that's it for deterministic sampling.
+
+36:59.000 --> 37:03.000
+At this point I have to say I'm going to go a bit overtime because of the hassle
+
+37:03.000 --> 37:07.000
+in the beginning and because this is kind of incompressible anyway.
+
+37:07.000 --> 37:11.000
+So if you need to leave then no problem.
+
+37:11.000 --> 37:15.000
+So yeah, that's it for stagastic sampling
+
+37:15.000 --> 37:19.000
+and for sampling as a whole.
+
+37:19.000 --> 37:23.000
+So just a brief recap.
+
+37:23.000 --> 37:27.000
+The way this works was that the role of the ODE
+
+37:27.000 --> 37:31.000
+is to give us the step direction
+
+37:31.000 --> 37:35.000
+which is given by the score function
+
+37:35.000 --> 37:39.000
+which is given by the score function
+
+37:39.000 --> 37:43.000
+which is given by the score function
+
+37:43.000 --> 37:47.000
+which is given by the score function
+
+37:47.000 --> 37:51.000
+which can be evaluated using a denoiser
+
+37:51.000 --> 37:55.000
+which can be approximated using the neural network
+
+37:55.000 --> 37:59.000
+and that is the role of the neural network.
+
+37:59.000 --> 38:03.000
+It tells you where to go in a single step or what's the direction you need to go to.
+
+38:03.000 --> 38:07.000
+And the theory says that as long as the denoiser does something
+
+38:07.000 --> 38:11.000
+that minimizes this loss, the L2 denoising loss
+
+38:11.000 --> 38:15.000
+the theory will be happy.
+
+38:15.000 --> 38:19.000
+And you can do this separately at every noise level
+
+38:19.000 --> 38:23.000
+so you can weight these loss according to the noise level also.
+
+38:23.000 --> 38:27.000
+But before we go to these loss weightings
+
+38:27.000 --> 38:31.000
+let's look at the denoiser itself.
+
+38:31.000 --> 38:35.000
+So I draw the CNN there in a bit of a hazy way
+
+38:35.000 --> 38:39.000
+and this is because it's actually a bad idea to directly connect the noise image to the input of the network
+
+38:39.000 --> 38:43.000
+or to read the denoised image from its output layer
+
+38:43.000 --> 38:49.000
+rather we'll want to wrap it between some kind of signal management layers
+
+38:49.000 --> 38:53.000
+to manage those signal scales
+
+38:53.000 --> 38:57.000
+of both the input and the output to standardize them somehow
+
+38:57.000 --> 39:01.000
+and also in this case we can often recycle stuff from the input
+
+39:01.000 --> 39:05.000
+because let's say if the input image is almost noise free
+
+39:05.000 --> 39:07.000
+then we don't really need to denoise much
+
+39:07.000 --> 39:11.000
+we should just copy what we know and only fix the remainder
+
+39:11.000 --> 39:15.000
+we're going to come to that soon.
+
+39:15.000 --> 39:19.000
+And this is super critical here.
+
+39:19.000 --> 39:23.000
+I mean this might sound like boring technical details
+
+39:23.000 --> 39:27.000
+but these kind of things really are critical for the success of the neural network training
+
+39:27.000 --> 39:31.000
+and we've seen this over and over again over the years.
+
+39:31.000 --> 39:35.000
+And in this case the noise levels vary so widely
+
+39:35.000 --> 39:39.000
+that this is extra critical here.
+
+39:39.000 --> 39:43.000
+So without too much to do here is how one of the previous methods, the VE method
+
+39:43.000 --> 39:47.000
+implements the denoiser.
+
+39:47.000 --> 39:51.000
+So the idea of this setup is that they are
+
+39:51.000 --> 39:55.000
+learning to predict the noise instead of the signal using those CNN layers.
+
+39:55.000 --> 39:59.000
+And the way that works, and I'll explain why soon
+
+39:59.000 --> 40:03.000
+the way that works is of course the loss will be happy
+
+40:03.000 --> 40:07.000
+if the denoiser can produce the clean image
+
+40:07.000 --> 40:13.000
+and we can interpret this model as having this kind of a skip connection
+
+40:13.000 --> 40:17.000
+so the noisy input goes through that.
+
+40:17.000 --> 40:21.000
+Now implicitly the task of the CNN will be to predict
+
+40:21.000 --> 40:25.000
+the negative of the noise component in that image
+
+40:25.000 --> 40:31.000
+and then they have an explicit layer that scales that noise to the known noise level.
+
+40:31.000 --> 40:35.000
+And so now when you add whatever came from the skip connection to this
+
+40:35.000 --> 40:39.000
+you get an estimate of the clean image.
+
+40:39.000 --> 40:43.000
+So this way they kind of turn it so that the CNN itself
+
+40:43.000 --> 40:47.000
+is concerned with the noise instead of like the signal.
+
+40:47.000 --> 40:51.000
+I'll explain soon why that is relevant.
+
+40:51.000 --> 40:55.000
+But first let's do the thing I promised to do a long ago.
+
+40:55.000 --> 40:59.000
+I said there's huge variations in the magnitude, just the numerical magnitude
+
+40:59.000 --> 41:03.000
+of these input signals.
+
+41:03.000 --> 41:07.000
+So fairs to accounts for that, which is problematic.
+
+41:07.000 --> 41:11.000
+And so we quite simply introduced this
+
+41:11.000 --> 41:15.000
+interscaling layer here that uses the known standard deviation of the noise
+
+41:15.000 --> 41:19.000
+to scale the image down.
+
+41:19.000 --> 41:23.000
+I want to highlight this not like a batch normalization or something.
+
+41:23.000 --> 41:27.000
+We know what the noise level is, we know what the signal magnitude should be.
+
+41:27.000 --> 41:31.000
+We divide by an appropriate formula.
+
+41:31.000 --> 41:36.000
+So that gives you one of the wishes we had on that orientation slide.
+
+41:36.000 --> 41:40.000
+On the output side we actually have something nice already.
+
+41:40.000 --> 41:45.000
+So this is very good because now the network only needs to produce
+
+41:45.000 --> 41:49.000
+a unit standard deviation output and this explicit scaling to the known noise level
+
+41:49.000 --> 41:54.000
+takes care of applying the actual like a magnitude of that noise.
+
+41:54.000 --> 41:57.000
+So this makes it again much easier for the neural network.
+
+41:57.000 --> 42:01.000
+It can always work with these standard sized signals.
+
+42:01.000 --> 42:05.000
+And that deals with the second hope we have there.
+
+42:05.000 --> 42:11.000
+But now the question of should we predict the noise or the signal and why?
+
+42:11.000 --> 42:15.000
+So it turns out this is actually a good idea at small noise levels
+
+42:15.000 --> 42:19.000
+but a bad idea at high noise levels.
+
+42:19.000 --> 42:23.000
+So I'll show you what happens at low noise levels.
+
+42:23.000 --> 42:27.000
+So if we have low noise, the stuff that goes through the skip connection
+
+42:27.000 --> 42:30.000
+is almost noise free already.
+
+42:30.000 --> 42:33.000
+And now the CNN predicts this negative noise component
+
+42:33.000 --> 42:37.000
+and it's scaled down by this very low noise level.
+
+42:37.000 --> 42:43.000
+And this is great because the neural network
+
+42:43.000 --> 42:46.000
+is actually the only source of error in this process.
+
+42:46.000 --> 42:49.000
+So if the network made errors, now we've downscaled them.
+
+42:49.000 --> 42:52.000
+So it doesn't really matter if the network is good or bad.
+
+42:52.000 --> 42:55.000
+We didn't do much error in this case.
+
+42:55.000 --> 42:58.000
+So that's great. We are sort of recycling what we already knew
+
+42:58.000 --> 43:03.000
+instead of trying to learn the identity function within your network.
+
+43:03.000 --> 43:07.000
+So that kind of deals with the third hope we had on the slide.
+
+43:07.000 --> 43:11.000
+But on high noise levels, the situation is reversed.
+
+43:11.000 --> 43:14.000
+Whatever comes through the skip connection is completely useless.
+
+43:14.000 --> 43:19.000
+It's a huge, huge noise signal with no signal at all.
+
+43:19.000 --> 43:22.000
+And now the CNN predicts what the noise is.
+
+43:22.000 --> 43:25.000
+And then it is massively boosted at this stage.
+
+43:25.000 --> 43:30.000
+So if the network made any errors, now there are going to be huge errors after this.
+
+43:30.000 --> 43:33.000
+And those are directly passed out of the denoiser.
+
+43:33.000 --> 43:40.000
+So now we've introduced a huge error into our stepping procedure in the ODE.
+
+43:40.000 --> 43:44.000
+It's also a bit of an absurd task because you're trying to subtract
+
+43:44.000 --> 43:48.000
+two massive signals to get a normal size signal.
+
+43:48.000 --> 43:56.000
+And kind of like trying to draw without two meter long pencil, not optimal.
+
+43:56.000 --> 43:59.000
+So instead what we'd like to do is somehow disable the skip connection
+
+43:59.000 --> 44:02.000
+when the noise level is high.
+
+44:02.000 --> 44:08.000
+And in that case, effectively the task of the CNN will be to just break the signal directly.
+
+44:08.000 --> 44:10.000
+There won't be any need to scale it up.
+
+44:10.000 --> 44:13.000
+So we won't end up boosting errors.
+
+44:13.000 --> 44:17.000
+And the way we implement that is by adding this sort of switch
+
+44:17.000 --> 44:19.000
+but in a continuous way.
+
+44:19.000 --> 44:23.000
+So we have this so-called skip scale, which when set to zero,
+
+44:23.000 --> 44:25.000
+effectively disables the skip connection.
+
+44:25.000 --> 44:28.000
+Set to one, you get the noise prediction.
+
+44:28.000 --> 44:32.000
+And furthermore, we make it so that it's actually a continuous value
+
+44:32.000 --> 44:36.000
+between zero and one that depends on the noise level.
+
+44:36.000 --> 44:41.000
+And if it's somewhere in between, that means that we are predicting
+
+44:41.000 --> 44:50.000
+some kind of a mixture of noise and the signal in this instead of just one of them.
+
+44:50.000 --> 44:57.000
+And there is a principle way of calculating what the optimal skip weight is.
+
+44:57.000 --> 45:01.000
+But I won't go there in the interest of time.
+
+45:01.000 --> 45:05.000
+We have it in the paper of Enix.
+
+45:05.000 --> 45:10.000
+And that deals with the remaining issues we had on this slide.
+
+45:10.000 --> 45:13.000
+And now we can look at what the previous works did and what we did.
+
+45:13.000 --> 45:19.000
+So these are the actual formulas that implement those ideas.
+
+45:19.000 --> 45:22.000
+Then there is the couple of training details.
+
+45:22.000 --> 45:25.000
+How should you weight the loss based on the noise level
+
+45:25.000 --> 45:30.000
+and how often should you show samples of different noise levels.
+
+45:30.000 --> 45:35.000
+So the general problem, if you don't deal with these issues,
+
+45:35.000 --> 45:40.000
+is that you might have a highly lopsided distribution of gradient feedback.
+
+45:40.000 --> 45:49.000
+So if you're not careful, you might be prodding the weights gently to one direction or the other.
+
+45:49.000 --> 45:57.000
+And then every few iterations you have this massive gradient smash on the weights and so on.
+
+45:57.000 --> 46:01.000
+And that's probably very bad for your training dynamics.
+
+46:01.000 --> 46:07.000
+So the role of the loss weighting or the scaling, the numerical scale in front of the loss term,
+
+46:07.000 --> 46:16.000
+should we be to just equalize the magnitude of the loss or equivalently equalize the magnitude of the gradient feedback that gives.
+
+46:16.000 --> 46:23.000
+And then the noise level distribution, maybe how often you show images of any given noise level.
+
+46:23.000 --> 46:29.000
+The role of that is to kind of direct your training efforts to the levels where you know it's relevant,
+
+46:29.000 --> 46:31.000
+where you can make an impact.
+
+46:31.000 --> 46:37.000
+And for that, in the paper, we have this sort of an important sampling argument that whatever we do,
+
+46:37.000 --> 46:39.000
+we end up with this kind of a loss curve.
+
+46:39.000 --> 46:45.000
+So we don't make much progress at very low and very high noise levels, but we do make a lot of progress in the middle.
+
+46:45.000 --> 46:51.000
+For example, at very low noise end, you're trying to predict noise from a noise free image.
+
+46:51.000 --> 46:55.000
+It's impossible, but it also doesn't matter if you can't do it.
+
+46:55.000 --> 47:09.000
+So we, based on this, we find that it's enough to, or suffice this to sort of have this very broad distribution
+
+47:09.000 --> 47:17.000
+of noise levels here that are targeted towards the levels where you know you can make progress.
+
+47:17.000 --> 47:22.000
+And this is a logarithmic scale on the x-axis, so it's a lot of normal distribution.
+
+47:22.000 --> 47:24.000
+So those are those sources.
+
+47:24.000 --> 47:26.000
+And it's starting to pretty full.
+
+47:26.000 --> 47:30.000
+There's one more thing, which I'll just keep in the interest of time.
+
+47:30.000 --> 47:41.000
+We have some mechanism presented in the paper for dealing with vastly like two small data sets when your network starts overfitting by this augmentation mechanism.
+
+47:41.000 --> 47:43.000
+You can look at it there.
+
+47:43.000 --> 47:46.000
+But yeah, let's not go there.
+
+47:46.000 --> 47:50.000
+It's really only relevant for various small data sets like Cypher.
+
+47:50.000 --> 47:54.000
+With ImageNet, we haven't found benefits from it, I think.
+
+47:54.000 --> 47:58.000
+Okay, so with all these improvements, we can stack them one by one.
+
+47:58.000 --> 48:00.000
+These are the lines here.
+
+48:00.000 --> 48:10.000
+And in the end, we get state-of-the-art results in various competitive categories.
+
+48:10.000 --> 48:20.000
+In deterministic sampling, we get an FID 179.97 on the Cypher categories, which might still be state-of-the-art.
+
+48:20.000 --> 48:26.000
+Also at very low sample counts compared to most previous work.
+
+48:26.000 --> 48:28.000
+That's more interestingly.
+
+48:28.000 --> 48:30.000
+Okay, that was with deterministic sampling.
+
+48:30.000 --> 48:43.000
+When we enable the stochastic sampling and tailor it for these architectures for ImageNet and use these retrained networks, we trained ourselves using these principles.
+
+48:43.000 --> 48:50.000
+We get an FID of 1.36, which was a state-of-the-art when this paper came out.
+
+48:50.000 --> 48:56.000
+It's been overtaken, I think in the last few weeks, possibly earlier.
+
+48:57.000 --> 49:03.000
+So all in all, we've turned this model that was okay-ish in the beginning.
+
+49:03.000 --> 49:14.000
+And by stacking all of these improvements, we get the best model in the world at that time for generating 64 ImageNet.
+
+49:14.000 --> 49:23.000
+Interestingly, the stochasticity is no longer helpful with Cypher in this resume or after the training improvement.
+
+49:23.000 --> 49:29.000
+And so it appears that the network has become so good that it doesn't make that many errors.
+
+49:29.000 --> 49:36.000
+And any exploration, lands and wine exploration you do, introduces more error than you are actually fixing with it.
+
+49:36.000 --> 49:39.000
+But this is still not the case with ImageNet.
+
+49:39.000 --> 49:44.000
+So there it's still pays to do stochasticity.
+
+49:44.000 --> 49:50.000
+Okay, so that was the, that was mostly it.
+
+49:50.000 --> 49:54.000
+Just a brief conclusion.
+
+49:54.000 --> 50:01.000
+So we've sort of exposed this completely modular design of these diffusion models.
+
+50:01.000 --> 50:07.000
+Instead of viewing them as tightly coupled packages where you can't change anything without breaking something,
+
+50:07.000 --> 50:15.000
+we show that you can pretty much change every, like you get a valid method no matter what you do as long as you follow these loose guidelines.
+
+50:15.000 --> 50:22.000
+And then with that knowledge, we get a clear view into what we should actually be doing with those choices.
+
+50:22.000 --> 50:25.000
+And doing so pays off in a big way.
+
+50:25.000 --> 50:30.000
+We get much improved quality at much, much more efficient models.
+
+50:30.000 --> 50:34.000
+One takeaway about stochasticity, it's a bit of a double edged sword.
+
+50:34.000 --> 50:42.000
+As said, it does help, but it also, it requires that annoying per case tuning.
+
+50:42.000 --> 50:45.000
+There are no clear principles how to do that tuning.
+
+50:45.000 --> 50:50.000
+There is also a danger that you can even have bugs in your code or something.
+
+50:50.000 --> 50:54.000
+And stochasticity will kind of fix them to an extent,
+
+50:54.000 --> 50:59.000
+which is of course not what you want to do if you're trying to understand what your potential improvements are,
+
+50:59.000 --> 51:02.000
+what their effect is and so on.
+
+51:02.000 --> 51:07.000
+Ideally, you'd be able to work in a completely deterministic setting.
+
+51:07.000 --> 51:16.000
+And if you want, then in the end just kind of reintroduce the stochasticity as the final, final cherry on the top.
+
+51:16.000 --> 51:22.000
+Okay, so we haven't talked about all the fancy stuff like higher resolutions, network architectures,
+
+51:22.000 --> 51:24.000
+classifier free guidance and so on.
+
+51:24.000 --> 51:28.000
+But probably many of these would be right for a similar principle of analysis.
+
+51:28.000 --> 51:35.000
+We hope this inspires you to also think about that kind of things and certainly we are.
+
+51:35.000 --> 51:39.000
+So with that, the code and everything is of course available.
+
+51:39.000 --> 51:45.000
+I would argue this is probably one of the better places to copy paste your code.
+
+51:45.000 --> 51:53.000
+If you want to experiment with stuff, it's very clean code based that directly implements these ideas.
+
+51:53.000 --> 51:57.000
+Yeah, so thank you for your attention.
+
+52:04.000 --> 52:07.000
+Hey, so we have time.
+
+52:07.000 --> 52:09.000
+Yeah, I have some.
+
+52:09.000 --> 52:15.000
+I just want to ask a question.
+
+52:15.000 --> 52:18.000
+All right.
+
+52:27.000 --> 52:30.000
+It probably has to do with the data's complexity.
+
+52:30.000 --> 52:35.000
+Seffari is maybe a bit too simplistic in the end.
+
+52:35.000 --> 52:38.000
+It's kind of learnable entirely.
+
+52:38.000 --> 52:45.000
+But it seems like that something like ImageNet, it's still so extremely cool.
+

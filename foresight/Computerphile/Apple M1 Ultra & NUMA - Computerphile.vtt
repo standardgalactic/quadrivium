@@ -1,0 +1,665 @@
+WEBVTT
+
+00:00.000 --> 00:06.520
+Last week, I think it was maybe the week before Apple had one of their usual press conferences and they announced their latest
+
+00:06.960 --> 00:12.560
+Possibly last version of the M1 chip, which was the M1 Ultra
+
+00:12.560 --> 00:20.000
+And one of the things that they said as they launched it was that they designed it using two M1 Max chips
+
+00:20.520 --> 00:27.440
+Basically stuck together using something called Ultra Fusion to join them together. Now, Ultra Fusion is just a marketing buzzword
+
+00:28.440 --> 00:34.400
+Literally all they've got is a high-speed interconnect between the two silicon dyes to transfer data between them
+
+00:34.400 --> 00:38.480
+But one of the things that they said which was interesting is that the reason they've done this
+
+00:38.920 --> 00:42.640
+Was so that you didn't have to write the software in a different way
+
+00:42.640 --> 00:45.960
+And I thought it was interesting just to pick up on that and to explain
+
+00:46.360 --> 00:49.640
+Why if they hadn't made that interconnect fast enough
+
+00:49.920 --> 00:53.640
+You would have to write the software in a different way because if you think about it
+
+00:53.760 --> 01:00.440
+All they seem to be doing is adding more cores to the CPU making it a 20-core CPU instead of a 10-core CPU
+
+01:00.440 --> 01:03.240
+And you think well if it's a multiprocessor system
+
+01:03.240 --> 01:06.800
+And if you watch the videos we've done previously on multiprocessor systems
+
+01:07.000 --> 01:11.480
+You're going to have to write the software to split the tasks up over the multiple cores to run
+
+01:11.600 --> 01:17.520
+So why are you not going to have to write things differently with this architecture of chip?
+
+01:17.520 --> 01:19.520
+So I thought we'd have a look at that today
+
+01:19.840 --> 01:27.200
+So to understand what Apple's done, we need to go back to basics and think about how a computer
+
+01:27.720 --> 01:29.960
+Actually works and we'll go with the von Neumann model
+
+01:29.960 --> 01:33.880
+I know technically most modern CPUs are modified Harvard architecture
+
+01:33.880 --> 01:38.760
+But the von Neumann model is good for what we want to look at. We have at the center of our system
+
+01:39.120 --> 01:40.800
+the CPU
+
+01:40.800 --> 01:43.840
+Whatever we want and that is then connected
+
+01:44.720 --> 01:49.040
+To some memory and I'm just going to write RAM here
+
+01:49.040 --> 01:50.200
+So it fits into the box
+
+01:50.200 --> 01:55.880
+Of course some of it would be ROM and other things and then the other thing that we have in there is we have the IO
+
+01:56.400 --> 02:01.000
+And things and that's basically the model we use for a computer
+
+02:01.000 --> 02:07.360
+We've got the CPU talking to the RAM where the instructions and data are stored and you can talk to the IO to talk to the rest of the world
+
+02:07.360 --> 02:08.560
+So that's things like your
+
+02:08.560 --> 02:13.480
+Disk controllers with a solid-state hard disk your graphics card your network card now what happens?
+
+02:13.960 --> 02:18.760
+When we have a multi-processor system the general way that we build multi-processor systems
+
+02:18.760 --> 02:24.640
+Certainly the ones that we use in laptops or using desktop computers is using what's called a shared memory model
+
+02:24.760 --> 02:27.800
+So just as before with the von Neumann architecture
+
+02:28.080 --> 02:33.160
+We're going to have a single block of RAM and that's going to be connected
+
+02:33.800 --> 02:35.960
+Not to one CPU now
+
+02:37.160 --> 02:40.640
+But we'll give it to CPUs. So we've got two
+
+02:41.640 --> 02:48.440
+CPUs that it's connected to so it's connected to a shared bus between them and then each of those CPUs are
+
+02:49.040 --> 02:54.520
+Connected to it now effectively. That's how you build a multi-processor system. There's a bit more
+
+02:55.280 --> 02:58.320
+Involved for example, you need some sort of logic here
+
+02:58.960 --> 03:01.040
+for bus
+
+03:01.040 --> 03:03.840
+Arbitrations will call that the ball the bus arbitration logic
+
+03:03.840 --> 03:09.940
+So you need something to sort of control well, which CPU can talk to the RAM at any one point now
+
+03:10.640 --> 03:15.400
+One thing I need to say here is that I've drawn this is the CPU talking directly to the RAM
+
+03:15.400 --> 03:20.280
+If you think about it, if you watch the video I did many years ago on CPU caches
+
+03:20.640 --> 03:22.880
+You need to have a cache here because otherwise
+
+03:23.640 --> 03:26.240
+Only one CPU can ever talk to RAM at the same time
+
+03:26.240 --> 03:31.080
+If there's no cache this CPU tries to talk to RAM this one can't
+
+03:31.440 --> 03:34.680
+If that's this CPU tries to talk to RAM that one can't at the same time
+
+03:34.680 --> 03:35.880
+It would effectively
+
+03:35.880 --> 03:41.600
+Result in serializing the operation so you wouldn't get any speed up. You need a cache in there and that
+
+03:41.880 --> 03:48.080
+Sort of leads us to the first part of the problem only one CPU can access the RAM at any one point
+
+03:48.080 --> 03:51.520
+Now if we've got a cache in our system and I'm going to draw that as a red line
+
+03:51.840 --> 03:55.480
+Which sits between the CPU and between the RAM?
+
+03:55.640 --> 03:58.640
+That's not a problem because as a CPU accesses data
+
+03:58.840 --> 04:01.080
+It stores a local copy in its cache
+
+04:01.080 --> 04:08.040
+So when it needs to try and fetch that data or those instructions again it can fetch them from the cache and not access the RAM
+
+04:08.800 --> 04:10.440
+So that's absolutely fine
+
+04:10.440 --> 04:16.360
+Most of the time we want to get it so the CPUs are satisfying their data and instruction fetches from the cache
+
+04:16.360 --> 04:18.720
+And then only occasionally they go to the RAM
+
+04:18.840 --> 04:24.360
+So that actually whenever one of the CPU goes to the RAM needs to go to the main memory to fetch a value
+
+04:24.720 --> 04:26.280
+Then effectively
+
+04:26.280 --> 04:32.760
+It's unlikely to be being used by the occasion that you'll get the situation where they both try and access a value main memory at
+
+04:32.760 --> 04:38.920
+The same time at which point that's why you have the bus arbitration logic to say this CPU is going to fetch the value
+
+04:38.920 --> 04:41.160
+Then that CPU is going to fetch the value
+
+04:41.800 --> 04:46.200
+So we can build a shared memory multiprocessor system like that
+
+04:46.840 --> 04:50.360
+I'm going to say relatively straightforwardly. There's a lot involved, but
+
+04:50.920 --> 04:56.120
+That's the basic idea of what's going on and we can extend that to have more CPUs
+
+04:56.120 --> 04:58.120
+So we can just add another CPU in
+
+04:58.600 --> 05:01.400
+Up here so we could have a three CPU system
+
+05:01.800 --> 05:04.360
+Normally you'd probably go up to four and things but I've run out of paper
+
+05:04.760 --> 05:10.640
+It's got its cache as well and you could extend that for as many CPUs as you like
+
+05:11.720 --> 05:13.000
+except
+
+05:13.000 --> 05:14.920
+There was a slight issue
+
+05:14.920 --> 05:16.920
+we said that
+
+05:17.640 --> 05:23.400
+There are occasions where one CPU might be trying to access the memory at the same time as another CPU
+
+05:24.440 --> 05:26.360
+Hopefully we can build the cache system
+
+05:26.360 --> 05:31.880
+We can load more data than we need each time we fetch things and so on we can build an intelligent memory system that can
+
+05:32.440 --> 05:36.920
+Satisfy this so that the probability of that happening is relatively low
+
+05:38.040 --> 05:40.920
+But if we think about it if we add more and more CPUs
+
+05:41.560 --> 05:43.560
+onto the same shared memory bus
+
+05:44.520 --> 05:47.640
+Then we're going to end up with more chance
+
+05:48.280 --> 05:52.920
+Of a collision happening of two CPUs trying to access memory at the same time
+
+05:53.240 --> 05:58.680
+And the caches on each CPU mitigate that to some effect so that they reduce the probability
+
+05:59.160 --> 06:01.240
+Of two things trying to access at a time
+
+06:02.120 --> 06:05.800
+But a bit like the old birthday problem, you know the sort of question you ask
+
+06:06.120 --> 06:07.480
+If you've got a class of school children
+
+06:07.480 --> 06:10.360
+What is the probability that two of them share a birthday in there?
+
+06:10.600 --> 06:14.600
+Turns out it's quite likely once you get a bit of about 20 or so children in the class
+
+06:15.240 --> 06:21.640
+The same thing applies here as you increase more CPUs the chance that two of them will try and access memory at the same time
+
+06:22.280 --> 06:23.560
+increases
+
+06:23.560 --> 06:26.520
+As you add more CPUs and so this will scale
+
+06:26.920 --> 06:31.320
+Scale, but it'll only scale up to a point once you get past a certain number of CPUs
+
+06:31.960 --> 06:34.360
+You will find that you're back to the point where actually more
+
+06:34.920 --> 06:39.560
+It's more likely than not that two of them will be trying to access memory at the same time
+
+06:40.440 --> 06:43.880
+So we can scale this up to a certain number of CPUs
+
+06:44.360 --> 06:49.320
+So does that form a limit? Is there a limit on how many CPUs we can have working together in the multiprocessor system?
+
+06:50.440 --> 06:53.160
+Well, not as such because there's another way
+
+06:54.040 --> 06:56.440
+We can design a multiprocessor system
+
+06:56.760 --> 06:59.880
+So this is what's known as a uniform memory access system
+
+07:00.280 --> 07:02.680
+And the reason it's known is that is that for any location
+
+07:03.560 --> 07:05.560
+in RAM
+
+07:05.800 --> 07:07.800
+Any of these CPUs can access it
+
+07:08.360 --> 07:13.640
+With the same sort of speed so it doesn't matter whether it's coming from CPU one up here or CPU three down here
+
+07:13.960 --> 07:17.000
+It'll take the same amount of time for them to access the value
+
+07:17.560 --> 07:19.560
+In that memory location
+
+07:19.560 --> 07:23.560
+Different memory locations may have different speeds your ROM might be slower than the RAM
+
+07:24.120 --> 07:26.840
+You may have things mapped in there which are slower still and so on
+
+07:27.000 --> 07:33.800
+But for any particular memory location each CPU can access it in the same time or within the same nanosecond ballpark
+
+07:33.800 --> 07:39.720
+So it makes no difference in reality as we said that will scale up to a certain number of CPUs
+
+07:39.720 --> 07:41.720
+But if we want to take it to beyond that
+
+07:42.040 --> 07:46.760
+Then we need to change that system. We need to build a system that no longer has
+
+07:47.400 --> 07:53.240
+Uniform memory access rather than from a memory location each CPU being able to access at the same speed
+
+07:53.800 --> 07:59.080
+For each memory location the speed it takes to access it or how long it takes for it to access the data value there
+
+07:59.560 --> 08:06.120
+Depends on which CPU core is trying to access it. So it might be that for one CPU core it takes
+
+08:06.840 --> 08:08.840
+I don't know let's say
+
+08:08.920 --> 08:11.400
+100 nanoseconds just picking a time off the top of my head
+
+08:11.880 --> 08:15.080
+But for another CPU core it takes 200 nanoseconds
+
+08:15.320 --> 08:18.920
+They're just ballpark times and not all the magnitudes are just sort of show there's a difference
+
+08:19.560 --> 08:25.800
+Between the two. Okay, let's have a look at how we build a system like that. So what we're talking about is what's referred to
+
+08:26.760 --> 08:28.280
+as a non
+
+08:28.280 --> 08:33.160
+Uniform memory access system. So non uniform memory access
+
+08:34.040 --> 08:35.800
+system or Numa
+
+08:35.800 --> 08:41.160
+For short. So how does that differ? Well, let's think about it. It starts off in the same way. We have a block of ram
+
+08:42.760 --> 08:44.760
+I'm going to turn the diagram around
+
+08:45.480 --> 08:47.960
+Ram like that and that is connected
+
+08:48.520 --> 08:55.400
+To our CPUs just as before I'm missing out the caches and the arbitration logic from this diagram just for simplicity
+
+08:55.480 --> 09:00.040
+So this looks relatively similar to what we had before we've got a some ram and some CPU cores
+
+09:00.440 --> 09:06.680
+Sharing access to it. No difference there with a Numa system though. We also have some other ram
+
+09:07.400 --> 09:12.360
+That's part of our system connected to a different set of CPU cores
+
+09:12.920 --> 09:18.200
+Over here now at this point you've got effectively two computer systems. These CPUs can access this RAM
+
+09:18.520 --> 09:20.520
+These CPUs can access this RAM
+
+09:20.600 --> 09:23.960
+The difference in the Numa system is that there is actually a link
+
+09:24.680 --> 09:26.680
+between the two
+
+09:26.760 --> 09:28.760
+Systems here and you've got a distributed
+
+09:29.320 --> 09:33.400
+Shared memory system think of it like a sort of network, but it's often done at
+
+09:34.040 --> 09:37.880
+The CPU level and things even within on some between cores
+
+09:38.360 --> 09:42.760
+Now what this means is as far as the program's running there is one block of memory
+
+09:42.840 --> 09:44.840
+There is so this is if this was 16 gig
+
+09:45.480 --> 09:50.920
+And this was 16 gig the programs would see 32 gigabytes. They're not separate blocks of memory
+
+09:51.560 --> 09:54.360
+They they're seen by the programs as one block of memory
+
+09:55.080 --> 09:59.480
+But the difference is is if we've got a program running on this CPU over here
+
+10:00.920 --> 10:03.800
+It's got direct access to this block of memory here
+
+10:04.520 --> 10:07.080
+So let's say it takes I don't let's say it takes
+
+10:07.640 --> 10:09.880
+100 nanoseconds again to access memory
+
+10:10.360 --> 10:13.560
+So we've got 100 nanoseconds to access memory if he wants to access memory in here
+
+10:14.120 --> 10:17.720
+It will take 100 nanoseconds to access that memory value
+
+10:17.720 --> 10:23.320
+But if the data it's trying to access is over in this memory over here
+
+10:25.080 --> 10:28.120
+A CPU over here could access it in 100 nanoseconds
+
+10:28.600 --> 10:31.000
+But for this CPU over here a CPU over here
+
+10:31.560 --> 10:34.360
+It's got to go over this distributed shared memory connection
+
+10:34.920 --> 10:40.440
+From this set of RAM and this set of CPUs to this set of RAM and this set of CPU cores over here
+
+10:40.920 --> 10:42.920
+And that would take
+
+10:43.000 --> 10:47.160
+A significant amount of time. I mean it would take 100 nanoseconds over here
+
+10:47.720 --> 10:49.720
+To get from here to here
+
+10:49.720 --> 10:51.720
+So to get from here to here plus this
+
+10:52.360 --> 10:56.280
+Let's say this is 200 nanoseconds. I'm just making a number up over here. It's a longer
+
+10:57.000 --> 10:58.280
+amount of time
+
+10:58.280 --> 10:59.880
+I'm making these numbers off of the top of my head
+
+10:59.880 --> 11:03.880
+So don't take them as any sort of things other than so it's longer to go from here over here
+
+11:04.040 --> 11:06.040
+So we'd have to go over here
+
+11:06.200 --> 11:08.200
+across the distributed shared memory link
+
+11:09.080 --> 11:11.560
+To get the value and then we could bring the value back
+
+11:11.560 --> 11:16.120
+So rather than taking 100 nanoseconds it would take in the order of 300 nanoseconds
+
+11:16.200 --> 11:20.760
+It would take a significantly longer amount of time. So if we build a computer system like this
+
+11:21.000 --> 11:23.000
+We have the situation where
+
+11:23.080 --> 11:27.720
+Depending where an instruction is in memory or where data is in memory
+
+11:28.360 --> 11:34.840
+It could either access it very very quickly on this CPU core if it can go directly to the RAM that it's directly connected to
+
+11:35.480 --> 11:37.480
+Or it would end up taking a long time
+
+11:38.280 --> 11:41.960
+This relatively to access it because it would have to go over the shared link
+
+11:42.360 --> 11:45.560
+And fetch it from the other block of RAM over there
+
+11:45.960 --> 11:48.280
+It would still appear to be the same memory system
+
+11:48.760 --> 11:52.680
+But we've now got the situation where the access to it depends
+
+11:53.240 --> 11:58.680
+On which cpu is trying to access it. So we have what's called a non uniform memory access system
+
+11:58.840 --> 12:01.560
+Now originally non uniform memory access systems were the sort of
+
+12:01.960 --> 12:07.240
+Domain of high-end cluster system and sort of sgi type workstations and things but these days
+
+12:07.320 --> 12:10.680
+You've actually seen it drop down on to sort of workstation type machines
+
+12:11.000 --> 12:14.360
+Some of the amd thread ripper some of the higher end intel clusters are all
+
+12:15.000 --> 12:21.720
+Numer based systems and what this means is if you want to run that cpu at the fastest possible speed
+
+12:22.360 --> 12:25.720
+You need to write your software to take into account
+
+12:26.360 --> 12:29.160
+Which cpus have fast access to which bits of ram
+
+12:29.640 --> 12:34.440
+So that you can put the data that those cpus are processing and you can put the instructions that they're running
+
+12:34.920 --> 12:42.040
+In that block of memory and have the cpu date the cpu instructions and the data that's being executed on these cpus
+
+12:42.600 --> 12:44.360
+In this block of memory over here
+
+12:44.360 --> 12:48.440
+So they can all access it very very quickly and you only have a very small amount of data
+
+12:48.760 --> 12:53.720
+Which is needed to synchronize things and keep things working passing over the shared memory network
+
+12:54.520 --> 12:56.520
+Now you can do it and it works great
+
+12:56.840 --> 13:00.920
+But you have to write your software knowing where things are and in fact if you look
+
+13:01.240 --> 13:04.280
+You can find papers and presentations from companies like netflix
+
+13:04.520 --> 13:09.160
+Where they're really trying to optimize the performance of their service to serve the videos to you
+
+13:09.400 --> 13:12.840
+I'm sure youtube's doing the same as well, but netflix have actually written about it
+
+13:13.160 --> 13:16.120
+Really optimized the speed of serving the videos to you
+
+13:16.520 --> 13:21.000
+So they actually have to take into all this account so that the network card is connected to one
+
+13:21.720 --> 13:22.840
+cpu
+
+13:22.840 --> 13:27.720
+gets that data and doesn't have to go and pass it over the shared memory link to another one which then passes it over
+
+13:28.200 --> 13:30.200
+to another one to fetch the data from a
+
+13:31.240 --> 13:36.040
+Hard disk and so on and feed it back to you and you get everything's passing over the slow link all the time
+
+13:36.040 --> 13:38.040
+You really have to take into account
+
+13:38.040 --> 13:40.040
+where things are
+
+13:40.200 --> 13:44.520
+Which brings us back to apple's marketing buzzword of m1 ultrafusion
+
+13:45.160 --> 13:47.880
+What have apple done with m1 ultrafusion?
+
+13:48.360 --> 13:53.560
+Well, effectively they have built a system like this. They've taken two m1 max chips
+
+13:54.040 --> 13:57.880
+And glued them together. So you've got two 10 core m1 max chips
+
+13:58.040 --> 14:01.000
+Each hacks to sing their own blocks of memory or two blocks each
+
+14:01.000 --> 14:06.200
+Which is why you can get up to 128 gig on there because you double the amount of cpu cause you can double the amount of memory
+
+14:06.760 --> 14:12.120
+That they can access and what they've built in the middle the thing they call ultrafusion
+
+14:12.120 --> 14:15.960
+It's just a very very fast distributed shared memory link between the two
+
+14:16.520 --> 14:19.320
+And I think what they've actually done is they've just made it so fast
+
+14:19.880 --> 14:25.640
+That actually the time it takes to go across from one cpu core to the other to get the value from the ram and
+
+14:26.200 --> 14:30.360
+Push it back into the cpu is so quick the latency is so low
+
+14:30.920 --> 14:35.240
+That effectively it behaves as if it was the uniform memory access system
+
+14:35.240 --> 14:38.040
+It's fast enough that when the cpu requests the data
+
+14:38.440 --> 14:42.120
+It gets it before it actually needs it in which point it doesn't slow it down
+
+14:42.760 --> 14:47.160
+So it's a nice system because it means as a programmer. We don't have to worry about where
+
+14:47.800 --> 14:51.320
+The data is in relation to the cpu cause which one's attached to which
+
+14:51.720 --> 14:54.760
+Core and things to make things run as fast as possible
+
+14:55.160 --> 14:58.920
+We can just write our programs and let the operating system and the design of the hardware
+
+14:59.320 --> 15:02.840
+Sort out the hard problems of executing it as fast as possible
+
+15:04.520 --> 15:07.000
+Chunks and do them all at the same time
+
+15:07.640 --> 15:13.400
+So one way for example to make sandwiches faster is that you butter the bread faster
+
+15:13.400 --> 15:15.880
+You put the filling in faster. You put the bread faster the other person
+
+15:15.880 --> 15:20.440
+It's also got an analysis of where I went wrong says Fred Brooks
+
+15:20.440 --> 15:23.480
+Why did he make his name with that and what was it all about?
+

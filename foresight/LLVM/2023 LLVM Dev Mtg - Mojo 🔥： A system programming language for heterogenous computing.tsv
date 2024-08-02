@@ -1,0 +1,927 @@
+start	end	text
+0	9880	We're very happy to be here and talk a little bit about what we've been up to.
+9880	12780	So we'll start with what is Mojo?
+12780	18240	At a glance, the top-level points of Mojo is that it's a Pythonic systems programming
+18240	19600	language.
+19600	20600	So what does that mean?
+20600	23960	That means we're here to do really cool things with systems and compilers, and it happens
+23960	28460	to look like Python, but forget everything you know about Python, please, please.
+28460	31740	So this thing is about one year old, so it's still pretty early, it's still in development.
+31740	35540	It's still quite interesting and doing some cool stuff, though.
+35540	36700	We also have a vibrant community.
+36700	38500	We have over 150,000 users.
+38500	42960	We have a big community in Discord, and there's a bunch of excitement around this.
+42960	47020	So we'll dive today into why did we do this in the first place?
+47020	48940	That's often something we're asked.
+48940	51700	We'll talk about how we approach designing a new language from scratch.
+51700	55020	We'll talk about internal implementation details, including some of the horrible things we did
+55020	56460	to LLVM.
+56460	61100	Talk about what this means for accelerators and compute, and then wrap things up.
+61100	63220	So first, why?
+63220	64500	Why, why, why, why, why?
+64500	68940	So many of you are working on AI, and if you work on AI, the question I will ask of you
+68940	75420	all is, if AI is so important to the world, why is all this offer so bad?
+75420	78900	This is a huge question, a huge problem, and I think that many of us who have been working
+78900	82620	in this industry for a while have been struggling with solving this problem in many different
+82620	83620	ways.
+83980	88620	And so for me, when I look at this, I think that the challenge is really fragmentation,
+88620	89620	complexity.
+89620	93260	It's all these systems that do not work very well together, that are being built by well
+93260	98380	meaning people in different groups and areas, but they don't really actually work together.
+98380	101420	And so for a user, this is a huge pain point.
+101420	102420	And why is this?
+102420	103420	I'll speak for myself.
+103420	107060	If you're enabling a chip, you're focused on the chip.
+107060	111220	So many of us are paid to solve one specific problem, we're not here to solve an industry
+111220	113500	scale problem, and you can't afford to do it.
+113500	117020	You don't have the time, you don't have the schedule, you don't have the headcount, whatever.
+117020	120700	Often the organization that you're within, in my experience, makes it very difficult
+120700	122620	to solve some of these problems.
+122620	128740	And so our approach at Modular is that we need fewer things that work better.
+128740	131380	And so that's what led us to building Modular in the first place.
+131380	135500	It's really kind of an organization that can span across many different of these problems
+135500	140180	and invest for the long term in building and hopefully lifting the industry over time.
+140180	141180	So how do we do this specifically?
+141180	143580	Well, we're building what we call the AI engine.
+143580	148860	Well, the AI engine, if you look at modern ML stack, a lot of folks are trying to throw
+148860	152380	layers of Python on top of all this AI tech that has been built up.
+152380	157380	We're tackling it at the Herber software boundary, reinvesting, no surprise, and compilers.
+157380	161500	And so what we want to do is we want to unify and integrate all these low level technology
+161500	165500	systems so that innovation can happen up on top with programming models and frameworks
+165500	167460	and all that kind of stuff.
+167460	169740	Our approach is to meet people where they are.
+169740	172300	So people use PyTorch, people use Jax, people use TensorFlow.
+172300	173300	That's awesome.
+173300	176660	These all have pros and cons, and there's other stuff as well.
+176660	179420	And very few people actually want to rewrite all their code.
+179420	182860	And for us, it's very important to be drop and compatible, meet people where they are,
+182860	185140	and work with their existing systems.
+185140	188820	The other thing is that this is not a research project, like there's a lot of really interesting
+188820	193060	and cool things that have been built over the last eight-ish years of AI infrastructure.
+193060	196180	It often gets fragmented out into all these different systems.
+196180	199420	We've learned from many of them, and so what we're doing is we're pulling this back together
+199420	204340	and doing hardcore engineering, not research, to build a production quality system that
+204340	206900	we hope can scale for the world.
+206900	207900	I'll go through this super quickly.
+207900	208900	It was an AI engine.
+208900	210700	Well, it's really two things.
+210700	213220	One is this operator graph.
+213220	217660	The operator graph in the interesting case is heterogeneous.
+217660	221580	So people often focus on, for example, the GPU, and how do I make matrix multiplications
+221580	222580	go fast?
+222580	224180	And that's a super important problem.
+224180	230140	But often folks forget that AI today is a distributed problem, involves the host, involves
+230140	233380	the accelerator, involves pre-processing, data loading, this whole thing.
+233380	237100	And so you can't really solve the AI problem for a user unless you really tackle this whole
+237100	238100	problem.
+238100	241260	And furthermore, this is really heterogeneous.
+241260	244180	As we've seen, there's all kinds of different accelerators, there's all kinds of different
+244180	245180	hardware.
+245180	249820	When you have a cluster, lots of machines, micro-architectures don't always match.
+249820	252300	There's a lot of complexity in this space.
+252300	255980	So many of us have been working on this, again, for a long time.
+255980	257860	And so we've seen the rise of kernel libraries.
+257860	260580	This is how many of these systems were first built.
+260580	263900	And one of the challenges that I won't go into in depth, many of you probably already
+263900	267340	agree, is that kernel libraries don't scale.
+267340	271860	And so many of us, for multiple years now, have been building AI compilers.
+271860	276220	And so there's lots of these, lots of different approaches, online kernel fusion, lots of
+276220	278540	cool algorithms getting vented and used.
+278540	280700	We can talk about all the different pros and cons of trade-offs.
+281140	286300	But the thing I want to claim is that neither of these approaches scale.
+286300	290700	Kernels don't scale, hopefully many people understand that, but neither do ML compilers.
+290700	295140	And to a compiler audience that maybe is more controversial than to a kernel audience.
+295140	298940	So I thought I'd dive a little bit into why this is and the challenges that we see with
+298940	303220	this led us to our approach with Mojo and the system.
+303220	305180	So the first is generality.
+305180	310980	I mean, empirically today, ML compilers are not very general, right?
+310980	315260	Generality includes not just matrix multiplication, again, data loading, preprocessing, all this
+315260	317860	stuff, but also dynamic shapes, varsity.
+317860	322980	There's better and worse systems out there, and there's definitely progress in this area.
+322980	327540	But if you're coming at it from a user's perspective, they want things to just work.
+327540	334020	And if they don't just work, then they'll move on and spend their time something else.
+334020	339820	Generality is also important because if you're, again, coming from a hardware enablement perspective,
+339820	343780	you don't really have time to invest in all the other parts of the problem.
+343780	347380	And so it makes sense that many of us working on bring up the chip don't actually focus
+347380	350740	on the big picture parts of the problem.
+350740	351900	Another one is community.
+351900	354220	So you all are wonderful compiler nerds.
+354220	356420	I love you all, obviously.
+356420	359420	And myself, a pretty big compiler nerd.
+359420	362060	But the problem is that nobody can hire a compiler engineer.
+362060	363780	This is pretty well known.
+363780	368420	And so with AI compilers, this becomes even worse, because how do you hire somebody who
+368420	373460	knows compilers, who knows AI modeling and all the different exotic new model of the
+373460	376820	day, who knows all the numerics and the data types and knows all the specialized hardware,
+376820	381380	and how do you find that unicorn person that knows all of these things together?
+381380	383300	It's very, very difficult out there.
+383300	388100	And if you need a compiler engineer to be in the loop of novel research, there's very
+388100	392100	few companies in the world that can afford or attract to do that.
+392100	397420	And so I believe that you cannot have a compiler-first approach to this problem simply because there's
+397420	398580	enough talent out there.
+398580	402580	I mean, I love you all, and you're all very valuable, but this is very difficult, particularly
+402580	405260	for the scale of what AI research is today.
+405260	408500	Second, if you're a compiler engineer, it seems really weird that we're re-encoding
+408500	411900	all of compute into IR builders and sanding out all this stuff.
+411900	414420	And so you feel like there must be a problem here at some point.
+414420	417180	Finally, there's this fragmentation problem.
+417180	420860	If you want to solve and build a heterogeneous compute system, we have to face the reality
+420860	425500	that AI developers, researchers, are in Python.
+425500	428580	The frameworks, the host-side compute, it's all in C++.
+428580	432500	The device-side is in CUDA, in SQL, and other things.
+432500	435540	And so if you want to build a system that can scale across all these different levels
+435540	439900	of abstraction, there's a huge fragmentation problem here, and we need to be able to unify
+439900	440900	this.
+440900	443740	Otherwise, we can't have one system that can reason about it.
+443740	446980	And so if you want to be able to build this and solve this problem, you have to kind of
+446980	449740	come back and look at the big picture of what's going on here.
+449740	452260	And the nature of compute has changed.
+452260	455460	So this is what has led us to Mojo.
+455460	457180	Now how do we approach building Mojo?
+457180	460460	I mean, you know the outcome, and we'll talk a lot more about how it works, but how do
+460460	461460	we even get here?
+461460	467140	Well, when we started Modular, we started with a thesis, a hypothesis.
+467140	474060	We believed that we could get to state-of-the-art performance against a lot of vendor systems
+474060	478220	and do so with a single source of truth in our code for numerics.
+478220	479820	This hasn't really been done before.
+479820	482420	There's definitely systems that have been around in the space.
+482420	488820	But this thesis, if true, can enable and unlock a huge amount of innovation in the industry.
+488820	493420	And so what we did was we said, okay, let's go invest in some very fancy compiler stuff,
+493420	498620	generalized fusion, and caching integrated distributed compilation, like lots of cool
+498620	499620	stuff.
+499620	503300	Let's figure out what we want to do, and then let's go validate that.
+503300	507580	But for validation, we didn't actually care about syntax.
+507580	508580	So what did we do?
+508580	510860	Well, we went, and we actually went and built the thing.
+510860	514100	We went and built a compiler and completely ignored syntax.
+514100	515100	All right, why?
+515100	516600	Well, MLR is great.
+516600	517780	You can write MLR by hand.
+517780	519280	You don't need a front-end.
+519280	522620	And so what we could do is we could actually go build major kernel libraries and things
+522620	523620	like this and validate.
+523620	527540	Architecturally, we could deliver the performance that we wanted to, show that the compiler
+527540	532260	worked, iterate rapidly on the compiler without having to change a dependency, and go and
+532260	533260	do this.
+533260	535580	And what we found, fortunately, is that it works.
+535580	537620	The technology we built actually is good.
+537620	538620	It worked.
+538620	539740	It was proven out.
+539740	543500	And then immediately, we figured out that writing large amounts of MLR by hand is maddening
+543500	548100	and doesn't scale, and there's no way a real normal user could actually do this.
+548100	552460	And so, but this validation of the algorithms of the compiler tech of the low-level system,
+552460	557140	which is very novel, and Jeff will talk about later, was really important to building our
+557140	559660	system and doing so without being anchored on syntax.
+559660	565060	I think it was very good for both focus, but also for the ability to iterate.
+565060	568300	So once you get that, you get to the point of saying, what about syntax?
+568300	570020	Syntax actually does matter.
+570020	574060	And so the three major approaches we looked at are, do we take an existing language like
+574060	576580	C++ or Swift or something like that?
+576580	578180	Do we do an EDSL?
+578180	580020	Do we do a new language?
+580020	585300	And so when we were talking about this, we came back to our core principles, our values,
+585300	588580	our goals, which is that we wanted to meet people where they are.
+588580	594180	And whether you like it or not, AI developers, but also most software engineers are all in
+594180	595180	Python.
+595180	596180	Right?
+596180	601380	Python is pretty arguably the most popular programming language in the world.
+601380	605660	And so if you're coming from a Python viewpoint, arguing with people, trust me, I've been there,
+605660	608780	to try to get them to switch to a different thing, is a huge amount of work and it doesn't
+608780	609900	really go anywhere.
+609900	614340	And so we realize and believe we had to go with Python, and what that meant is that
+614340	619940	meant that suddenly a bunch of existing systems are just off the table, like C++ is not Python,
+619940	620940	Swift is not Python.
+620940	622100	These things are not Python.
+622100	627300	And so that really allows us to focus our frame.
+627300	628300	What about EDSLs?
+628300	629820	Well, EDSLs are super common.
+629820	632380	They're super popular and they exist for lots of good reasons.
+632380	633940	They're relatively easy to implement.
+633940	639180	We've had several talks at the conference about how to use Python so that you can extract
+639180	641980	and build IR from Python ASTs and things like this.
+641980	645060	It means you don't have to build tooling, you don't have to retrain, you can get to
+645060	646860	market fast.
+646860	650060	The problem is that they provide a really bad developer experience.
+650820	652340	You don't get a debugger.
+652340	655340	This really can't fit into the existing systems.
+655340	659980	If you care about host performance and generality, Python's not there, at least not the level
+659980	662020	of performance that we care about.
+662020	667660	And so what we really want is we want a system that allows us to innovate at all layers of
+667660	668660	this stack.
+668660	670660	Okay, well, how about a new language?
+670660	674100	Again, you know kind of where we're going with this, but a new language has the advantage
+674100	678340	of you get the best quality result, you can control everything, you can invest in things,
+678340	682140	you can target CPUs with high performance, which is quite important to us.
+682140	685140	But what you need is a strong vision for what you're trying to do.
+685140	688940	You need a long-term commitment because the demo is easy, but production quality thing
+688940	689940	is hard.
+689940	692340	You need to be able to pay for it, you need to be able to track people, you need to be
+692340	697820	able to have a big target of developers that makes it worth doing in the first place.
+697820	704060	And so this is actually well known to be ridiculously expensive, like building new programming
+704060	707900	language is not a simple thing that you should reach for as your first outcome.
+707900	712420	But as you know, yes, we want a baby little mojo to be built and what we decide to do
+712420	714500	is actually do this.
+714500	715500	And why?
+715500	719300	Well, it's because it's the only way to achieve our goals, to achieve the best quality of
+719300	725380	result for AI developers and many other developers worldwide and be able to lift the industry.
+725380	728700	There are many point solutions that demonstrate many different capabilities, but we really
+728700	732380	want to go beyond this and integrate and unify the world.
+732380	736140	And so if you come back to what we need to do, we think that we have all the constituent
+736140	739540	ingredients here with a good vision, we think we know what we're doing.
+739540	741180	We also know how hard this is.
+741180	746140	So I personally built several major programming languages that are used in production and
+746140	749420	have seen the entire journey and made many mistakes and have learned from them.
+749420	755180	And so with full knowledge, we step into this and say, okay, let's do this.
+755180	757220	So I'll give you the high level design points of mojo.
+757220	759500	As you know, it's a member of the Python family.
+759500	763100	Over time, it will grow into being a full superset because we don't want to do a Python
+763100	766620	two to three thing anymore to Python programmers.
+766620	771260	As we said before, it's focused on system programming, high performance, working backwards
+771260	775260	from the capability, the speed of light of hardware, definitely not working forwards
+775260	778380	from what Python can do today.
+778380	782700	Also lots of hardware, anything with the program counter can apply.
+782700	786100	But coming back to this also, and we'll talk about this a little bit, it's about unlocking
+786100	788380	the modular compiler stack.
+788380	792620	And so instead of talking about the high level fluffy stuff, I'll introduce Jeff and he can
+792620	795500	tell you a little bit more about how it actually works.
+795500	798380	Thanks Chris for the introduction.
+798380	803500	So we are started off by de-risking the core hypothesis and we have an MLIR based compiler
+803500	807220	that is different a little bit from the systems that predated it.
+807220	809420	And we've proven that we can be state of the art.
+809420	814540	The problem is that we've got like 50,000 lines of handwritten MLIR.
+814540	818460	And handwritten MLIR is like write once, read never.
+818460	822260	It's so verbose, you have to write the types every time you use an SSA value.
+822260	827420	It's pretty hard to actually write incorrect code, but then it's not readable, it's unmaintainable
+827420	831420	and the new people being brought into the company are like, what is this?
+831420	832420	So we need syntax.
+832420	836060	We need a programming language for MLIR.
+836060	837540	Why all MLIR?
+837540	841460	Well it turns out that modern computers are getting really complicated.
+841460	843180	Modern types are getting really complicated.
+843180	844740	Look at just floating points.
+844740	847420	Most languages, give or take, have a flow and a double.
+847420	852620	But MLIR has things like float 8, E4, M3, FNUS.
+852620	854860	I'm sure it's useful, okay?
+854860	856740	And that means that we need to have access to it.
+856740	859940	There's probably a piece of hardware somewhere on it that uses this data type and it's very
+859940	860940	fast.
+860940	863140	That's just the tip of the iceberg.
+863140	867940	MLIR is such a vast ecosystem with many different kinds of hardware targets, domain specific
+867940	869460	dialects and so on.
+869460	872420	And we would like Mojo to be able to take advantage of all of that.
+872420	876340	So we need syntax trigger for MLIR in general.
+876340	878700	And then how do we approach something like that?
+878700	880700	Well we start with the types.
+880700	884700	In a programming language, types tend to be the most load bearing element.
+884700	887380	You need types to do computations on them after all.
+887380	890900	So let's start by focusing on a library-based language.
+890900	894860	That means that we write all the parts of the language in the library.
+894860	897740	And the good news is anybody can write libraries.
+897740	902380	So this scales the effort of engineering to everyone in the world who can write Mojo.
+902380	904620	Not just a couple of people who work on the language.
+904620	907660	And that's really important because we don't want built-in types in the language to be
+907660	912180	special or be more performant than what you can enable in the library because that bottlenecks
+912180	916020	performance and the scalability of the system to the people who work on the language.
+916020	921780	So we need to give people who use the programming language library authors the same power as
+921780	924620	language engineers.
+924620	929140	It turns out actually that Python has a really extensible type system.
+929140	933740	You could argue that user-defined types in Python are actually much more powerful than
+933740	936780	the built-in types like interfloat.
+936780	942460	And the reason is because Python provides this kind of ability to encapsulate type semantics
+942460	946060	behind Dunder methods, which are really syntactic wrappers.
+946060	948140	So let's just use that in Mojo.
+948140	952220	We use a struct, which is like a class, but it's densely packed in performance, to wrap
+952220	953220	an MLR type.
+953220	958900	And then we use Dunder methods as well as class methods to wrap MLR operations.
+958900	961660	And what you get is any MLR type will work.
+961660	963620	Any MLR operation will work.
+963620	969580	And so now we have 1 plus 2, Dsugar is to an MLR op index.add.
+969580	972900	The other important aspect is we need to make sure that these user-defined abstractions
+972900	975820	feel native, that they're zero cost.
+975820	977340	So how does Mojo do that?
+977340	981700	Well, it has a couple of bells and whistles to tell the compiler that treat this type in
+981700	985740	a specific way, effectively giving a built-in-like experience.
+985740	989980	And one of these is they always inline no debug, which will always inline the function,
+989980	991460	no question about it.
+991460	994780	And for a better debugging experience, it nukes out all the debug info, so you don't
+994780	998020	step into a plus of an integer.
+998020	1003020	So we put this all together, just these pieces of basic types, so you have a simple while
+1003020	1004020	loop in Mojo.
+1004020	1008220	Well, the parser will then spit a bunch of source-level IR, right?
+1008220	1012380	But then Mojo has guaranteed optimizations that run all the time, such as the always-inliner
+1012380	1014180	and memtoreg.
+1014180	1018980	And then this gets desugarred down to IR that is pretty close to what we would have written
+1018980	1019980	by hand.
+1019980	1024660	And that's important because it, from the get-go, provides a predictable IR-gen model
+1024660	1030780	for the programmer, and it helps us get an off-ramp from all the handwritten MLIR.
+1030780	1034980	But so it turns out we've actually discovered what MLIR really stands for.
+1034980	1039780	It's Mojo Fire Emoji Language Intermediate Representation.
+1039780	1042700	And the best part is your dialect works, too.
+1042700	1047340	So this is zero cost abstraction around any MLIR, so let's say you have a shape dialect
+1047420	1054020	with a mosh.ape type, and it implements plus to concat and subscript to getDim.
+1054020	1057060	Well, now you can write shape functions in Mojo.
+1057060	1060660	It spits out some IR that's been desugarred to, and then you can ingest this IR and do
+1060660	1063620	cool compiler stuff like shape inference.
+1063620	1066700	And the best part is all of the language tooling just works.
+1066700	1071940	So you get code completion, you get doc generation, you get syntax highlighting, and even debugging
+1071940	1074300	if that's relevant.
+1074300	1077380	But MLIR just forms the bottom level of the language.
+1077380	1081220	It's how we talk to the hardware, it's how we talk to the various dialects.
+1081220	1084980	Building on top of that requires high-level abstractions, and the way you do that in Mojo
+1084980	1086780	was metaprogramming.
+1086780	1091020	So Mojo needs to build hardware generality, and the way we do that is with metaprogramming.
+1091020	1095540	So you can write a kernel without caring about what the vector length is, and then, say,
+1095540	1098740	in this example, ask the compiler to pick one for you.
+1098740	1101500	It turns out that metaprogramming is also pretty cool.
+1101500	1106300	Texts are nice, code reuse is great, and it allows to have scalable development.
+1106300	1108660	So where can we look at for a metaprogramming system?
+1108660	1113100	Well, I actually like C++, I don't know about you, and C++ has templates.
+1113100	1115100	And duct typing in C++ is really powerful.
+1115100	1117620	Let's see, write some pretty crazy generic code.
+1117620	1120740	The problem with that is that the usability is poor.
+1120740	1124580	I think template error messages get better every year, but there's still some room to
+1124580	1125780	go.
+1125780	1131220	And it turns out that for the kind of metaprogramming, high-performance programming needs, C++
+1131420	1132940	just aren't good enough.
+1132940	1134660	So imagine you have a tensor type.
+1134660	1136900	It has a static or dynamic rank.
+1136900	1138500	It has a static or dynamic d-type.
+1138500	1141220	It has partially dynamic shape, partially dynamic stride.
+1141220	1142940	It gets ugly pretty quickly.
+1142940	1146220	So it's not good enough, and let's see if we can build something better.
+1146220	1151780	So it turns out, once again, Python actually has really powerful metaprogramming.
+1151780	1157620	Decorators can arbitrarily modify objects and return a function where there is a type.
+1157700	1162260	And with full AST reflection in Python is what enabled all these crazy libraries, such
+1162260	1166940	as the ML frameworks like PyTorch, Jaxx, and TensorFlow, as well as things like Numba.
+1166940	1170580	The problem with the Python metaprogramming is that it happens at runtime, which means
+1170580	1175500	it's slow, it's not going to run an accelerator, and it gives zero control over the generated
+1175500	1176820	code.
+1176820	1180220	So the challenge for us is let's try to do it at compile time.
+1180220	1182020	So that brings us to mojo parameters.
+1182020	1188260	Mojo parameters are compile time values that form the backbone of the metaprogramming system.
+1188260	1189740	So structs can have parameters.
+1189740	1191500	These are compile time values.
+1191500	1195260	Functions can have input parameters, and then you can declare name parameter values with
+1195260	1196260	alias declarations.
+1196260	1200700	So you can kind of think of them as being like C++ templates, but they're a little bit
+1200700	1201700	different.
+1201700	1206300	For example, in C++ you have using declarations for type aliases and constexpr declarations
+1206300	1207820	for compile time values.
+1207820	1213660	But in mojo, types are just compile time values, and so aliases and, say, compile time floats
+1213660	1217300	and compile time ints are the same thing.
+1217300	1221060	The most important thing that gives is that the meta language is the same as the actual
+1221060	1222060	language.
+1222060	1225980	And Zig really blaze the trail here by having no distinction between the metaprogram and
+1225980	1227420	the actual program.
+1227420	1232460	In mojo, we strive to ensure that almost any user-defined type and function can be used
+1232460	1235500	and called in a parameter expression at compile time.
+1235500	1241220	And the way we do that is with an MLI interpreter that has a full memory model.
+1241220	1243940	So to really drive this point home, we have an example here.
+1243940	1247660	It's fill a vector with a bunch of integers, OK, not too bad.
+1247660	1250820	This function can be called in either compile or runtime.
+1250820	1255220	And if it was called compile time, you can even return a type instance.
+1255220	1260380	And this vector has heap allocation that is computed at compile time and then used at
+1260380	1262600	runtime.
+1262600	1263600	So when does this happen?
+1263600	1268880	When do we do, say, instantiation of parameter values, function specialization, and interpreting
+1268880	1269880	of code?
+1269880	1273000	Well, it doesn't happen in the parser like in C++.
+1273000	1278040	So in mojo, we do parameter instantiation in a process called elaboration, and it happens
+1278040	1280080	later in the compiler pipeline.
+1280080	1285240	What that means is that now mojo needs a IR representation for parametric code.
+1285240	1291000	So in this example, we have a piece of IR, and we have a parameter in the IR called value.
+1291680	1294520	Importantly, this parametric IR is target agnostic.
+1294520	1295520	It's portable.
+1295520	1299520	So that means something like size of lives directly in the IR, and it is resolved by the
+1299520	1300680	elaborator.
+1300680	1305320	So this enables something like split compilation like CUDA, and perhaps one day separate compilation
+1305320	1307880	of generics like Swift.
+1307880	1314800	So the elaboration pass is an MLIR pass that performs function instantiation as an IR transformation.
+1314800	1318640	So in this piece of IR, we've got two calls to the function print int with two different
+1318640	1319640	parameters.
+1319640	1326240	It gets stamped out into two new functions, and the callers are replaced appropriately.
+1326240	1332600	One consequence of a pass to do elaboration is that the language is late bound by design.
+1332600	1336320	That poses a couple of language design challenges, but that means that you can do cool stuff
+1336320	1341880	like autotuning, where any parameter value can be autotuned, i.e., the elaborator says,
+1341880	1345400	oh, OK, width can be 2, 4, 8, 16, or 32.
+1345400	1351080	Then we just go have five instantiations of this function, and then use some benchmarking
+1351080	1352600	to pick the best one for you.
+1352600	1356480	So this is how we get the very bottom layer of hardware abstraction, where the programmer
+1356480	1361640	can write an algorithm, and then we let the programming language pick the best parameter
+1361640	1364320	for you.
+1364320	1368480	And this also allows us to avoid some of the performance problems of C++ templates.
+1368480	1371760	For example, let's see, you have a generic function, add.
+1371760	1375360	And for generality, we pass the arguments by const reference.
+1375360	1379600	Passing it by const reference is fine for a large struct type thing that doesn't fit
+1379600	1382160	nicely in registers like a string.
+1382160	1386680	But then for something like an integer, this ends up becoming const reference to an int,
+1386680	1389280	which for a trivial type like int is not very performant.
+1389280	1392800	And so if this function doesn't end up getting inlined, what ends up happening is the ints
+1392800	1393800	get pinned to the stack.
+1393800	1397000	This is bad for performance.
+1397000	1401360	With late elaboration and mojo, we can have late ABI lowering, which basically means that
+1401360	1404200	the source code is not the same as the ABI.
+1404200	1409080	And this makes language interop slightly more involved, but it's not that big of a deal.
+1409080	1413640	But what it means is that for a generic function, like add in mojo, when the elaborator instantiates
+1413640	1417680	the generic types, it can then change the calling conventions of the types to respect
+1417680	1419680	the guarantees that it has.
+1419680	1424360	So for a heavy type like string, it stays in memory, it gets passed around as a pointer,
+1424360	1425360	it's nice and efficient.
+1425360	1429880	But for an integer, it gets passed around in registers, in SSA registers, and returned
+1429880	1433200	out as a function result.
+1433200	1436920	So that's just an introduction to how mojo metaprogramming works.
+1436920	1441320	Let's talk now about more how the cogent architecture works and some of the more unique details
+1441320	1442320	of that.
+1442320	1446760	One of them is that the entire mojo compiler stack is driven by the ORCJIT from bottom to
+1446760	1447760	top.
+1447760	1451320	And this gives us lazy on-demand compilations so you don't compile things you don't have
+1451320	1452320	to.
+1452320	1456080	It enables responsive tooling, and it turns out that having a JIT is important for something
+1456080	1458440	like auto tuning in search.
+1458440	1462440	And we get compiler caching at each stage of the pipeline, meaning that you don't need
+1462440	1469520	something like Ccache to get code compilation caching.
+1469520	1475480	Well we also use ORCJIT not actually as a JIT, we use it to generate static code, like
+1475480	1477840	static archives and executables.
+1477840	1482240	And in the ORCJIT, we've built a really dumb but fast linker that just takes a bunch of
+1482240	1487840	object files, pulls out the symbols, and slams them together into a static archive.
+1487840	1491920	For a linker, we do call into the system linker.
+1491920	1497600	As we mentioned before, we have a pre-elaboration portable IR, but that also means that we can
+1497600	1502520	serialize this into MLR bytecode, and that makes mojo packages architecturally portable.
+1502520	1508200	A mojo package will contain this parser-level, source-level IR, as well as the pre-elaboration
+1508200	1514080	IR, and optionally, you have the post-elaboration and pre-compiled code for various targets.
+1514080	1518960	So what this means is you can ship mojo packages without source code, with just the bytecode.
+1518960	1523480	The parser is able to take out this source-level IR and reconstruct metadata, like function
+1523480	1527000	signatures and type members and so on.
+1527000	1532360	And with optimized and pre-compiled code in the packages, mojo packages become portable
+1532360	1533800	build caches.
+1533800	1538280	So if you're on a common system like an M1 Mac and you pull a mojo package, it will probably
+1538280	1542600	already have the pre-built code for you.
+1542600	1544840	So what does a compilation with a package look like?
+1544840	1549160	Well, if you start by importing a function from a package, the parser goes and reads out
+1549160	1554520	the declarations from the package, it will then lower into the full pre-elaboration IR,
+1554520	1558320	and the reason why you need the full parametric IR so that you can instantiate the function
+1558320	1564080	again, and so that the elaborate can call the interpreter on pre-compiled code.
+1564080	1568240	During elaboration, we don't re-optimize and re-stantiate all the functions, we just drop
+1568240	1573440	them out with the post-elaboration IR into the MLIR module.
+1573440	1578200	So that gives us LTO and MLIR, but I mean MLIR is pretty far away from link time, but
+1578200	1579800	it's a similar idea.
+1579800	1584360	But we actually trash these pre-compiled functions out of the IR before we go to LLVM,
+1584360	1586120	and that has some interesting implications.
+1586120	1593520	So mojo is a bit of an unusual, probably slightly controversial user of LLVM.
+1593520	1595080	So LLVM is fantastic.
+1595080	1597360	We love LLVM, we love everyone here.
+1597360	1599280	But it's got a couple of issues.
+1599280	1602520	The most standout of these is that it's single-threaded.
+1602520	1607480	And what that means is on a modern system like an AWS 192 core machine, you get arbitrary
+1607480	1609040	slowdown for compilation speeds.
+1609040	1611040	You only use one core.
+1611040	1614520	The other problem with LLVM is it's got a couple of passes that don't tend to be strong
+1614520	1618320	enough for our use cases, and they're difficult to control and predict.
+1618320	1621960	A lot of the stuff in LLVM was built for something like Clang, but in mojo, we'd really love
+1621960	1626000	to be able to autotune and unroll factor.
+1626000	1628120	So the good news is that MLIR is a thing.
+1628120	1630520	So let's focus on the excellent strengths of LLVM.
+1630520	1635320	LLVM is great at stuff like scalar optimizations from instance to combine, and other function
+1635320	1638440	level optimizations like loop strength reduction.
+1638440	1643560	We ended up disabling passes like the vectorizer, the loop unroller, and even the inliner, as
+1643560	1645680	well as a couple of the other IPO passes.
+1645680	1650200	And the solution is to replace them in MLIR where we get intrapass parallelism and push
+1650200	1653560	many of these optimizations out into the library, which is something that Abdul will
+1653560	1655960	talk about in a bit.
+1655960	1660400	So what happens when you get rid of all of the IPO passes while you get to use LLVM
+1660400	1665000	as a perfunction code generator, this gives you full code gen parallelism at a function
+1665000	1667520	level across the entire stack.
+1667520	1671360	And what that means is that pretty much the entire mojo compiler pipeline is fully paralyzed
+1671360	1673640	except for the linker and the parser.
+1673640	1676600	Parser could be paralyzed one day.
+1676600	1680600	And that's really just the tip of the iceberg and what we could fit into one presentation.
+1680600	1684400	There's so much more to mojo, and there'll probably be more talks coming in the future,
+1684440	1695680	but for now I'll pass it over to Abdul to show you all how to write some fast code in mojo.
+1695680	1701520	So going back to what Chris said at the very beginning, we had a hypothesis to begin with.
+1701520	1702920	We want to write fast code.
+1702920	1706120	That's why mojo was written to begin with.
+1706120	1710440	We wrote things when MLIR, we've proven a lot of the tech.
+1710440	1714360	Let's write things in mojo and let's show the performance.
+1714360	1715600	So let's step back.
+1715600	1721200	How does existing performance libraries, how are they built today?
+1721200	1725680	Well, the short answer is whatever it takes to get performance.
+1725680	1733360	There's no style guide or anything like that that's usually maintained.
+1733360	1738120	That also means there's a lot of suffering because there's lack of tooling, et cetera.
+1738120	1740680	So what people do is they write things in assembly.
+1740680	1742320	Oh, great.
+1742640	1743960	Please don't.
+1743960	1747960	It's not a super productive programming language.
+1747960	1751760	Others build compilers as C++ templates.
+1751760	1756560	And God forbid, you mess like one of the sevens becomes a six,
+1756560	1761360	and you get some nasty error message.
+1761360	1766680	Others build C++ DSLs that generate ASMs.
+1766680	1771560	Others write Python programs that generate assembly.
+1771600	1777080	Others write Python templates that generate C++ templates that you feed into client.
+1778400	1781200	And these are not research projects.
+1781200	1784120	These are production libraries that are used today.
+1784120	1786280	You probably used one already.
+1786280	1788800	These are by the big companies.
+1791080	1793800	And as a result, you're kind of losing a lot of things.
+1793800	1797560	You lose on maintainability, debugging, tooling, and
+1797560	1801040	becomes hard to develop and iterates on these performance libraries.
+1801040	1803560	And that's why they call them performance ninjas, right?
+1803560	1808080	You lock them in a room, give them some coffee, and then they give you speed up.
+1809280	1810360	And we don't want to do that.
+1810360	1811520	We want to reduce suffering.
+1812800	1816760	The other thing is what happens is these performance libraries are pre-built and
+1816760	1821120	shipped as kind of black box binaries.
+1821120	1825400	And what that means is you've encoded, when you built ahead of time,
+1825400	1830080	you've encoded all the hardware semantics, tile factors, etc.
+1830120	1833440	In the library, you've made it into a black box, so
+1833440	1837800	other higher level things in the stack, like a graph compiler,
+1837800	1841200	cannot reason about what the library is doing.
+1842200	1847480	You've also encoded specialized patterns, popular things like a resonant block or
+1847480	1849960	a transformer block into your library.
+1849960	1856000	And what happens if there's a transformer version two or a resonant 53?
+1856000	1857760	You're kind of screwed in that domain.
+1858120	1861440	There's other things, like there's no consistent API.
+1861440	1866440	There's BLOSS, there's BLIS, there's 1DNN, etc.
+1866440	1868680	And the distribution store is even worse.
+1868680	1871120	There's a 1DNN and there's a ZNDNN.
+1871120	1875760	But then if you are on ARM, you have to use something else as well.
+1875760	1877960	So we want to solve all of these things.
+1877960	1880200	And that's the reason why we built Mojo.
+1880200	1884240	We built it to solve our problem of writing high performance libraries.
+1884800	1890000	And the first thing we want to make sure is the developer is happy.
+1891440	1894960	And they have all the tools that they need to be productive.
+1894960	1898120	So rather than, as kind of Chris mentioned,
+1898120	1901080	a lot of developers are not compiler engineers.
+1901080	1907240	They can write libraries, they probably cannot go and write a pass and so on.
+1907240	1909160	So let's put optimizations in the library and
+1909160	1911440	I'll have some examples later on.
+1911440	1914440	Let's also leverage what computers are good at.
+1914440	1920160	So when I was in grad school, a lot of grad students were essentially
+1920160	1921600	grid searchers.
+1921600	1924640	They would just enumerate everything, try 50 things.
+1924640	1927520	You lock them again in a room for a month and
+1927520	1930920	they say, oh, the best tile factor is six and four and so on.
+1931960	1933760	Let's not do that, let's use computers.
+1933760	1935800	Computers are great at these sort of things.
+1935800	1939160	They can scan things, you can do smart searches and so on.
+1939160	1940640	So let's use auto tuning.
+1940640	1943880	Let's use algorithmic selection and let's build that in the language.
+1945000	1949800	And let's make sure that we have tooling to make these people productive.
+1949800	1955600	Debuggers, how do you debug the Python template that generates C++
+1955600	1958560	template that does something else?
+1958560	1961960	It's hard to begin with to debug C++ templates.
+1965000	1969760	Let's also build a language that's aware of the 21st century.
+1969760	1973240	So SIMDs are a thing.
+1973240	1975280	So let's be SIMD first.
+1975280	1980320	Let's have scalars to be a degenerate form of SIMD, a SIMD of length one.
+1980320	1981760	And make the SIMD parametric.
+1981760	1986360	Let's also make the library, the one we ship, the standard library.
+1986360	1989520	Have first class support for SIMD types.
+1989520	1991680	Also multi-core is a thing.
+1991680	1993440	So let's build parallelism and
+1993440	1995200	asynchronous into the language as well.
+1995200	2001280	And finally, we can have these nice things.
+2001280	2005880	But sometimes people are like, I want my assembly back.
+2005880	2008000	Or I want to use the LLVM intrinsic.
+2008000	2011800	Well, all of this is built on top of MLIR and LLVM.
+2011800	2015840	So you can get any of the intrinsics that you want.
+2015840	2017800	You can reach into them.
+2017800	2022360	You can also write inline assembly, which is kind of interesting given that
+2022360	2025640	you're in a Python syntax language.
+2027240	2029040	And you can target any LLVM back end.
+2029040	2032000	So we're not like, we're standing on the shoulders of giants.
+2032000	2037280	So we're leveraging all LLVM and MLIR back end infra to do that.
+2037280	2038720	Let's also not build a DSL.
+2038720	2042320	So even though some of our use cases is AI,
+2042320	2044240	the programming language should be general.
+2044240	2048560	I should be able to do some operations in Mojo, but
+2048560	2053360	then do the plotting through our Python integration.
+2053360	2055640	And that requires a general purpose programming language.
+2057840	2062040	So one of the things that we made a decision on is let's make the kind of
+2062040	2066280	compiler lean and let's move a lot of the optimizations and
+2066280	2072360	the infra to be kind of functions in the Mojo library.
+2073480	2077280	So we use very limited number of dialects in MLIR core.
+2077280	2079640	And I know this might be controversial.
+2079640	2083960	So we're not using vector, arith, lin-alg, or any of these dialects.
+2083960	2086240	MVVM, any of these dialects.
+2086240	2088360	We're only using the LLVM and index dialect.
+2089640	2091600	And there's a bunch of reasons for them.
+2091600	2093680	Sometimes they're not general enough.
+2093680	2096400	Sometimes they don't fit in our use case.
+2096400	2098560	They bring in a lot of code that we don't care about.
+2098560	2102720	And there's like, for the lack of better terms, sometimes like cyclic
+2102720	2103680	dependencies and so on.
+2104640	2108960	And we, having a lot of the functionality in Mojo code means you
+2108960	2110400	could iterate a lot more quickly.
+2111440	2116760	So let's implement something like a vector dialect type of thing in Mojo.
+2116760	2121440	So we have the simd type and we have a function called reduce max.
+2121440	2125120	And if the size of the width of the simd vector is one,
+2125120	2126640	we're just gonna return the scalar directly.
+2127760	2132280	If we're on x86, it ends up like there's a LVM has an instruction for
+2132280	2135240	horizontal addition or horizontal max.
+2135240	2137960	That's not great for Intel.
+2137960	2140040	So we could do a kind of a tree reduction thing.
+2141360	2144320	But if it's floating points, we use a different algorithm and
+2144320	2146120	we call it directly to an LLVM intrinsic.
+2147640	2151520	This is compared to how the vector dialect lowers.
+2151520	2155240	You're writing essentially the same stuff minus the special case for
+2155240	2158560	x86 in essentially C++ code.
+2158560	2160360	So we'll lower our directory to the LLVM dialect.
+2160760	2165560	We could also do similar things like transforms.
+2165560	2169160	So as Jeff mentioned, we disabled the LLVM vectorizer.
+2169160	2174080	And instead, we have folks be kind of opt in to the vectorizer.
+2174080	2178240	And we've implemented a vectorizer in these five lines of code.
+2179240	2185120	So in one case, we've parameterized the function on the simd width.
+2185120	2188880	And we're gonna call it for the specific simd width.
+2188880	2192680	And in the leftovers, we're gonna call the function with a value of one.
+2195960	2198320	So what does this mean to the developers?
+2198320	2201000	It means that when you're trying to do an optimization,
+2201000	2204440	when you're trying to add a new feature or target a new hardware,
+2204440	2207280	the first thing is not, I'm gonna need to write a dialect or
+2207280	2208960	I'm gonna reach into TableGen.
+2208960	2211400	The first thing is, I'm gonna reach into Mojo and
+2211400	2213360	I'm gonna do experiments and so on.
+2213360	2217200	You can invent new optimizations, weird ones, incorrect ones.
+2217200	2220880	Or maybe even point to optimizations that only works in this function,
+2220880	2222320	in this domain, in this context.
+2224600	2228320	This is all fine, but I care about performance.
+2228320	2231760	I'm also a compiler engineer, but I ultimately care about performance.
+2231760	2233320	So let's look at the performance of Mojo.
+2234960	2238160	So one thing that people anchor on is the Mandelbrot set.
+2238160	2243160	The Mandelbrot set, we have a blog post that was recently published.
+2243160	2245240	But essentially, at the end of the blog post,
+2245240	2248320	you end up with this 10 lines of code.
+2248320	2254200	And if you run this 10 lines of code, you get 68,000 times faster than Python.
+2256120	2258200	And you can kind of see the progression.
+2258200	2262880	You can look at the blog post after this presentation.
+2262880	2270720	There's a progression how to go to 90x faster all the way to 68,000 faster.
+2270720	2273600	But at the end of the day, this is the code that you're gonna see.
+2275320	2277640	But nobody cares about Mandelbrot.
+2277640	2279880	You can just waste a cheat in Mandelbrot.
+2279880	2282760	We're not cheating here, but nobody cares about Mandelbrot.
+2282760	2284480	So let's solve a hard problem.
+2285680	2287840	So let's look at matrix multiplication.
+2287840	2292600	So matrix multiplication has been studied since a lot of us have been born.
+2292600	2299240	There's also a lot more papers that were published this year about matrix multiplication.
+2299240	2300400	It's also difficult.
+2300400	2305720	The problem is dependent on the cache size and micro-architecture.
+2305720	2310520	It's also a core part of LA-PAC and the ML system,
+2310520	2314600	which means hardware companies to go in the top 500 supercomputers,
+2314600	2316320	they have to optimize MathMol.
+2316320	2320600	Or to be on the top of the ML perf, they need to optimize MathMol.
+2320600	2325680	So a lot of effort goes into optimizing MathMol.
+2326240	2332520	And these libraries have been developed for decades before some of us were born as well.
+2332520	2339960	But we also don't want to write the Python template that generates C++ template that
+2339960	2342600	maybe goes to Python again and so on.
+2342600	2345120	Let's be principled.
+2345120	2349000	So let's have a few kind of core things that we want from our MathMol.
+2349000	2351040	We want a single source of truth.
+2351040	2354240	We don't want to have multiple files.
+2354800	2358040	We want to have one implementation.
+2358040	2363080	We want it to be as fast or compete with state of the art.
+2363080	2367320	Even though we can read assembly and we can program C++, let's not do that.
+2367320	2369320	Let's write everything in mojo.
+2369320	2374440	Let's make it fusible and do fancy stuff, support dynamic shape,
+2374440	2376720	and work on multiple architectures, et cetera.
+2376720	2380160	Our core hypothesis from the very beginning.
+2380160	2382640	And here's what we ended up with.
+2382640	2385800	So this is, again, a blog post from a few months ago.
+2385800	2387320	We're actually faster than this now.
+2387320	2392920	But we can compare against the best in class on their hardware.
+2392920	2399320	So we're 1.4x faster than Intel on Skylake systems.
+2399320	2400800	And this is fully dynamic.
+2400800	2402240	We're not specializing on shape.
+2402240	2404560	We're not doing prepacking.
+2404560	2408000	I wish we were doing tricks.
+2408000	2410400	It's easy to get these results if we were doing tricks.
+2410400	2412080	But that's what we're doing.
+2412080	2414000	And we have no inline assembly.
+2414000	2418680	Unless we run the same code, but now on Intel, or sorry, on AMD,
+2418680	2420560	we're 1.6x faster.
+2420560	2426280	Do the same thing, but on ARM, we're 1.2x faster.
+2426280	2431040	In fact, our implementation is about 2,000 lines of code.
+2431040	2434800	This is a toy implementation, but this is putting everything together.
+2434800	2437320	The interesting thing about this toy implementation
+2437320	2441280	is this is what the llama.mojo, there's a public GitHub
+2441320	2443840	repo that's using this.
+2443840	2446280	And this implementation, using this,
+2446280	2450880	they are beating the llama.cpp implementation that's public.
+2450880	2455080	So with that, we've validated our hypothesis.
+2455080	2462160	You can build portable performance libraries with less suffering.
+2462160	2465960	And with that, I'm going to hand it off to Chris.
+2465960	2466460	Right.
+2466460	2468160	Give it to him.
+2468160	2469160	Awesome.
+2469160	2472960	So to wrap things up, Mojo is still early in development,
+2472960	2473760	as we talked about.
+2473760	2476280	There's still a lot more that is yet to be done.
+2476280	2478480	One of the things we're doing that's, I think, pretty cool
+2478480	2480120	is we're developing this all in public.
+2480120	2481120	And so we have a roadmap.
+2481120	2482800	You can go see what we're doing.
+2482800	2485280	We have new releases that come out very frequently.
+2485280	2487240	Now, one of the questions we get asked all the time
+2487240	2490760	is, does a modular open source anything, right?
+2490760	2492960	And so the answer comes in twofold.
+2492960	2494040	One is yes.
+2494040	2496000	We have upstream stuff all of the time,
+2496000	2499000	including tons of core improvements to MLR.
+2499000	2501960	Apparently, the interpreter that Jeff was talking about on Tuesday
+2501960	2504200	is very popular, and so we can work on that.
+2504200	2509360	And so we're very good open source systems from that respect.
+2509360	2512400	Mojo itself, I think we'll take a little bit longer,
+2512400	2515120	but we want to start the open source process later this year.
+2515120	2516440	And so we'll start working on that.
+2516440	2518200	And I expect that to take some time,
+2518200	2520400	because we want to make sure that we get the core design really
+2520400	2520760	right.
+2520760	2523560	And not everything is best done with design by committee,
+2523560	2525520	but we really want to see this thing scale and go
+2525520	2528360	and have a big impact for the world.
+2528400	2530080	So coming back all the way to the beginning,
+2530080	2532920	we talked about AI and the AI engine and this kind of stuff.
+2532920	2534880	Now, we don't have time to talk about it today,
+2534880	2538040	but the cool thing about what Mojo means for the AI engine
+2538040	2540240	is that you can actually tackle these heterogeneous compute
+2540240	2542520	problems, because you can finally scale across lots
+2542520	2544080	of different hardware.
+2544080	2546000	And this is really cool.
+2546000	2547640	We don't have time to talk about it today.
+2547640	2550320	If you're interested, we have a keynote at the NURPS conference
+2550320	2554040	later this year, where we'll talk about more about this in detail.
+2554040	2555760	So with that, I think that's the end of our talk,
+2555760	2557720	and we're very happy to take any questions.
+2557720	2559720	If you'd like to check out Mojo, you can go to the web page,
+2559720	2562160	read about it, download it, and use it today.
+2562160	2562660	Thank you.
+2562660	2563160	Thank you.
+2569880	2572200	Thank you, Chris, Abdul, and Jeff.
+2572200	2573200	Are there any questions?
+2573200	2575720	Do you have mics in the alleys?
+2575720	2576720	Good timing.
+2576720	2579200	Yeah, thanks.
+2579200	2584480	Thanks for the great talk.
+2584480	2587160	My question is, I haven't seen anything
+2587160	2589880	about GPU offloading in your slide.
+2589880	2595480	Is that in plan, or what are you intent to do with it?
+2595480	2597600	So there is one bullet point, actually,
+2597600	2599320	on that there's so much more.
+2599320	2603160	And yeah, Mojo does actually support GPU offloading
+2603160	2605480	and split compilation like CUDA, but it's something
+2605480	2607480	that we did not talk about in the presentation,
+2607480	2609760	which we'd like to talk about in the future.
+2609760	2610260	Yeah.
+2610260	2612880	Thank you.
+2612920	2613760	Hi.
+2613760	2616360	You mentioned that you don't need to use Ccache,
+2616360	2618880	because you kind of mentioned that.
+2618880	2620440	Can you elaborate that a little bit?
+2620440	2622520	How are you guys dealing with caching?
+2622520	2625560	So it turns out that MLIR has a nice serializable format
+2625560	2627560	called bytecode.
+2627560	2629880	But bytecode provides a predictable hashing.
+2629880	2632000	And so we can use MLIR bytecode as the form
+2632000	2636040	to hash and cache compiler transformations across the stack.
+2636040	2636540	OK.
+2636540	2637040	Thank you.
+2637040	2639600	We also didn't have time to talk about this whole distributed
+2639600	2641520	cache backing this thing.
+2641520	2644360	And there's a whole bunch of fancy stuff put into it.
+2648320	2650480	How are you doing the autotuning?
+2650480	2653360	Is it offline, or is it dynamically online?
+2653360	2658160	And how do you define the objective function for the search?
+2658160	2659880	Yeah, so you have a choice.
+2659880	2661640	You could do it offline or online.
+2661640	2665560	If you compile to that O file, you've done it offline.
+2665560	2668680	The objective function right now is something
+2668720	2672720	that the user provides, because it's data size,
+2672720	2676080	dependent, hardware dependent, and so on.
+2676080	2677960	So it's up to you to define that.
+2677960	2681240	We do provide a benchmark module so that it
+2681240	2684360	makes benchmarking a lot simpler.
+2684360	2686800	And that allows you to do that.
+2686800	2690360	If you're doing it online, how do you control for variation
+2690360	2691760	in data, or do you rely on?
+2691760	2694200	So the benchmark library that we provide
+2694200	2700000	has a good number of iterations and so on
+2700000	2702120	until you get stability and so on.
+2702120	2703720	So it handles that.
+2703720	2707400	Oh, so it's not actually in production autotuning?
+2707400	2711800	We use autotuning today, so I don't know what.
+2711800	2714880	So there's core capabilities, then there's future stuff also.
+2714880	2716680	I mean, one of the things that it's designed for,
+2716680	2720280	but we haven't actually done, is send the IR to an FPGA
+2720280	2722680	and do evaluation remotely, and then pull it back,
+2722680	2723560	and things like this.
+2723840	2725520	Or a simulator.
+2725520	2726520	Exactly.
+2730520	2734640	There was a point in the slide about optimization in the,
+2734640	2736600	providing optimization in the library,
+2736600	2738480	as opposed to the compiler.
+2738480	2743000	Are there any, maybe I misunderstood this,
+2743000	2746560	but from my understanding, it's possible
+2746560	2748440	to come into performance pitfalls,
+2748440	2752200	because C++ has built in likely, built in unlikely,
+2752200	2755800	and then you can, it's really easy to misuse those
+2755800	2758240	and end up in a situation where your code is slower
+2758240	2761080	than without these kinds of annotations.
+2761080	2763200	So my question would be, what happens
+2763200	2766360	if a user-provided annotation conflicts
+2766360	2767840	with something that the compiler
+2767840	2770000	would also have done at the same time?
+2770000	2772400	Well, so from a compiler design perspective,
+2772400	2773520	one of the things Jeff was talking about
+2773520	2776000	is we've removed, not all, but a lot
+2776000	2779760	of the super unpredictable things in the LVM optimizer.
+2779800	2781720	So our goal is to give full control
+2781720	2783600	and predictability to the programmer,
+2783600	2786600	which is very different from the make-spec-go-fast
+2786600	2788360	kind of approach to compiler design.
+2788360	2790040	And what that does is that gives you the ability
+2790040	2791960	to then go and design library features
+2791960	2794440	that do things like, you know, you can,
+2794440	2795280	Julian, you can talk about
+2795280	2797480	some of the crazy stuff you've done.
+2797480	2801360	What's also important is that we have these abilities
+2801360	2802680	to say, please vectorize this loop,
+2802680	2804440	please unroll this loop, and so on.
+2804440	2806920	But not everyone who's writing, say, application code
+2806920	2809040	is going to think about vectorizing every single loop
+2809040	2810520	and auto-tuning every other loop.
+2810520	2812640	So what's important is that we provide control
+2812640	2815040	to the users who care, but also provide
+2815040	2818840	a default experience that is good and optimal
+2818840	2820360	and the compiler does its best.
+2820360	2821880	But the important thing is what the user says
+2821880	2823080	will always take precedent.
+2823080	2824600	And that's how you get control.
+2824600	2826240	Sometimes a compiler does things
+2826240	2828920	and you end up with code that says, you know,
+2828920	2832600	optimize, compile the section of code with dash O zero
+2832600	2833440	type of stuff.
+2833440	2837080	And you kind of want to opt out of compiler optimization
+2837080	2840040	because it's interfering with how you laid out your code.
+2842520	2844240	Are there any plans?
+2844240	2845560	I have a follow-up question.
+2845560	2846400	Sure.
+2846400	2847600	Okay, come afterwards.
+2847600	2848800	Last question, please.
+2848800	2852560	Hi, so you mentioned that you only use two dialects
+2852560	2855960	in Mojo, LLVM and index dialect.
+2855960	2857680	Two upstream dialects.
+2857680	2858520	Two upstream.
+2858520	2860280	Okay, so you don't use other things
+2860280	2862520	like affine and stuff, which means that
+2862520	2866520	if you want to use hardware specialized libraries,
+2866520	2868880	then the programmer has to do different tiling
+2868880	2873160	for ampere versus hopper versus Volta and so on.
+2873160	2875080	So isn't that just pushing the burden out
+2875080	2877400	from the compiler and high level stuff
+2877400	2879640	into the programmer?
+2879640	2883480	Because you're going to now have very hardware specialized
+2883480	2886640	performance libraries and then people who write this thing
+2886640	2888360	would have to understand the architecture really,
+2888360	2889880	really well.
+2889880	2893120	I think the thing is that they're more likely
+2893120	2895000	to understand the architecture really well
+2895000	2897720	than the compiler engineer, right?
+2897720	2900720	The compiler engineer has to have two things,
+2900720	2905240	writing C++ on CPUs that target GPUs.
+2905240	2909360	This is like, I'm a CUDA programmer, I'm laser focused,
+2909360	2910680	let me target hopper.
+2910680	2912880	So that means that the people writing high performance libraries
+2912880	2914840	for very specialized accelerators,
+2914840	2917680	they need to be experts at those accelerators, right?
+2917680	2919880	Right, so they need to be expert in one area,
+2919880	2920920	not two areas.
+2920920	2924360	So the goal is give the current programmer superpowers.
+2924920	2928200	But that's our approach to it.
+2928200	2930280	As Jeff talked about, Mojo can talk to any dialect
+2930280	2931240	if you want to.
+2931240	2933360	You can use that find in Mojo.
+2933360	2935600	We can plug and extend the system with dialects as well.
+2935600	2936800	So that's always an option.
+2936800	2938920	So that is a conscious decision.
+2938920	2940960	That's really the conscious decision you're making
+2940960	2944040	is that you're going to get experts to do the performance
+2944040	2947440	library and they will just work.
+2947440	2950200	Well, so this is the thing.
+2950200	2952800	Current libraries don't scale because of the magnitude
+2952840	2955120	of the problem and the cross product
+2955120	2957360	of all the different integrations and all of the stuff
+2957360	2959320	that current libraries struggle with.
+2959320	2961160	But there are more current programmers
+2961160	2963520	and performance engineers than there are compiler engineers
+2963520	2964960	by far, right?
+2964960	2968120	And so it's really about enabling the talent
+2968120	2969680	that actually knows how to do all this kind of stuff
+2969680	2971640	versus having a compiler engineer in the loop
+2971640	2973040	that becomes a bottleneck.
+2973040	2974440	Thanks.
+2974440	2977240	We'll be around as well throughout the conference,
+2977240	2981000	so feel free to yank any of us.
+2981000	2982400	Thank you, Chris, Abul and Jeff.
+2982520	2983920	So let's thank the speaker again.
+2983920	2984920	Thank you.
+2984920	2985920	Thank you.
+2985920	2986920	Thank you.
+2986920	2987420	Thank you.
