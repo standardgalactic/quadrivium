@@ -1,0 +1,168 @@
+A few days ago, Mamba, linear time sequence modelling with selective state spaces, appeared on
+archive. It is causing some excitement, partly because it shows strong empirical results,
+partly because it has an interesting design, and partly because Mamba is a great name.
+In this video, I'll give a high level summary of the paper. To understand the motivation for this
+work, it's helpful to go back in time to the distant memories of 2020, and in particular,
+the Long Range Arena, a benchmark for efficient transformers. The starting premise was that
+transformers do not scale very well to long sequence lengths, largely because of quadratic
+self-attention complexity. Given the proliferation of efficient alternatives to transformers that
+were emerging at the time, this work proposed a benchmark specifically focused on evaluating
+model quality under long context scenarios. There were tasks like long list ops, where the model
+is given an input consisting of a long list of nested operators, and needs to calculate an answer,
+and fun tasks like pathfinder, where the model gets a flattened image that looks like this,
+and needs to determine whether the two circles can be joined. This is a positive example because
+they can. This is a negative example because they cannot. Broadly, they found that if you wanted to
+maintain performance encapsulated here in this LRA score, it's quite hard to do much better than
+the vanilla transformer. Independently, and a little earlier, a creative approach to tackling
+the Long Range Dependency problem was introduced in this work on Legend Memory Units, in the context
+of recurrent neural networks. As a refresher, Legend polynomials are these beautiful creatures.
+You can construct them by making a sequence of polynomials that are orthogonal to each other.
+By projecting values onto a basis of these polynomials, you can efficiently store a history
+of the inputs to your system. That's the key idea in this funky looking equation.
+You can reconstruct the input U by reassembling it from the components of the memory vector,
+denoted here by M. This idea can then be baked into a layer where the memory block is implemented
+with simple linear operations. Building on that idea, and others, Hippo, recurrent memory with
+optimal polynomial projections, had the insight that we can phrase memory as a technical problem
+of online function approximation, where a function is summarized by storing its optimal
+coefficients in terms of some basis functions. Using this insight, the authors constructed a
+simple model based on Legendre polynomials that worked well on tasks like permuted MNIST,
+outperforming other sequence model-based baselines like LSTM and dilated RNN. This was
+followed by the work, combining recurrent convolutional and continuous time models
+with linear state space layers, which proposed a unifying framework for sequence modelling
+based on a standard state space representation. This work showed how, starting from an implicit,
+continuous time state space model, you could discretize to produce a system that can be
+interpreted as a recurrent network with the benefit of efficient inference, or as a convolutional
+model which benefits from parallelizable training. Unfortunately, a naive implementation of these
+models requires a massive amount of memory. In fact, for reasonably sized models, such as when
+the state dimension is 256, the linear state space layer uses orders of magnitude more memory than
+comparably sized RNNs or CNNs. That brings us to the S4 model introduced in efficiently modelling
+long sequences with structured state spaces. What we'd really like to be able to do is use the
+convolutional interpretation we've just seen to efficiently train our state space model.
+Now, if we want to train state space models using the convolutional representation, we can do a
+little bit of unrolling and a little bit of vectorization to get this L-dimensional kernel,
+where L is the sequence length. The scary part here is this A raised to the power of I term.
+Harking back to your linear algebra classes, as soon as you see this, you may feel a strong
+and appropriate urge to try to diagonalize A. The authors discuss diagonalization.
+Unfortunately, it cannot be used directly for the hippo matrix due to numerical issues.
+Specifically, it has entries exponentially large in the state size. However, we can address the
+hippo matrix with an adjustment. The authors note that although the hippo matrix is not normal,
+it can be decomposed as the sum of a normal and low rank matrix. Even this is still not useful
+by itself. An additional three new techniques are needed. First, instead of computing the kernel
+k-bar directly, they instead compute its spectrum, then determine k-bar by applying an inverse FFT.
+Next, we use everyone's favorite low rank trick, the Woodbury identity. That lets us perform an
+efficient matrix update. Third, it is shown that the diagonal matrix case is equivalent to the
+computation of a Cauchy kernel, a well-studied problem with stable, near-linear algorithms.
+All of this comes together in theorem three. It says that given any step size delta, computing
+the state space model convolution filter k-bar can be reduced to four Cauchy multiplies,
+requiring only big O of n plus l operations, ignoring logarithmic factors, and big O of
+n plus l space, where again, l is the sequence length and n is the state size. Empirically,
+the proposed S4 architecture does very well on the long-range arena, even doing well on the path
+x task, where the model must determine if two points are connected on a fairly large image.
+This task is not too hard when the input is arranged as an image, but it's pretty difficult
+when it's a flattened sequence, as evidenced by the fact that many other models fail on this task.
+If you'd like to gain some intuition for how S4 works, I highly recommend the annotated S4
+by Sasha Rush and Sid Karamchetti, just as with the legendary annotated transformer blog post
+back in 2018. The annotated S4 takes you step-by-step through the paper and provides snippets of
+code that implement the mathematics. It also includes nice visualizations to help you build
+intuition for how state-space models work. All of this brings us back to Mamba. This work builds
+on the state-space model approach with a few key contributions. First, a selection mechanism. Since
+previous state-space models lack the ability to efficiently select data in an input-dependent
+manner, they design a simple selection mechanism by parameterizing the state-space model parameters
+based on the input. Unfortunately, this change makes it hard for us to use the efficient convolutional
+trick we saw in S4, so the second contribution is a hardware-aware algorithm that computes the
+model recurrently with a scan instead of convolution. This leads to an implementation that is faster
+than previous methods, both in theory, scaling linearly in sequence length compared to pseudo-linear
+for all convolution-based SSMs and on modern hardware, up to three times faster on A100 GPUs.
+Spicy. The third contribution is to simplify prior deep-sequence model architectures by
+combining the design of prior state-space model architectures with the MLP block of transformers
+into a single block, leading to a simple and homogenous architecture design called Mamba
+that incorporates selective state-spaces. By building on a state-space model foundation,
+Mamba is related to many previous state-space model architectures. In addition to the models we
+met earlier, there is Linear Attention, which can be viewed as a degenerate linear SSM, the gloriously
+named Hungry Hungry Hippos or H3, Hyena, RhettNet, and RWKV. The core motivation behind Mamba is to
+use selection as a means of compression. The authors point out that you can view various
+sequence models as making different trade-offs when tackling a fundamental problem of sequence
+modeling, i.e. compressing context into a smaller state. At one extreme, we have Attention, which
+is both effective and inefficient because it explicitly does not compress context at all.
+At the other extreme, recurrent models are efficient because they have a finite state,
+but their effectiveness is limited by how well this state has compressed the context. To explore
+this trade-off, the authors focus on two synthetic tasks. One previously well-studied task is copying.
+The job of the model is to copy color sequences in the input into the output, delayed by some
+constant offset. Standard convolutional models with fixed kernels can solve this without any
+problem. The first of the harder tasks they consider is selective copying. This time, we have
+random spaces symbolized by the white blocks in between the input sequence elements. To successfully
+copy the color outputs to the output while ignoring the white blocks, we need a mechanism that behaves
+differently at different inputs. The second task they look at is induction heads. Here,
+in order to predict the appropriate color at the question mark block, the model needs to be able
+to perform retrieval back over the input sequence based on the context provided by the black square,
+in order to predict that blue is the next color in the sequence. To build a model capable of solving
+these tasks, the models start from the S4 state space model, which uses parameters a, b, c, and
+delta, which don't depend on the input sequence. Now, for the proposed algorithm, to allow the model
+to behave differently on different inputs, b, c, and delta are altered to be time-varying. They now
+depend on the input sequence. This gives the model more power, but means we can no longer use the
+efficient S4 convolution trick. To get around this, the authors develop a selective scan based on
+hardware-aware state expansion. In effect, the two big challenges to be tackled once we give up on
+convolution are the sequential nature of recurrence and the large memory usage. There are three
+techniques that come into play, kernel fusion, parallel scan, and recomputation. A key idea for
+getting around the sequential processing problem comes from simplified state space layers for
+sequence modeling, or S5, which highlighted the benefits of using parallel scans to maintain
+efficiency while avoiding the use of convolutional tricks used in S4. Mamba uses this parallel scan
+idea in combination with efficient use of memory. In particular, instead of preparing the scan input
+in GPU high bandwidth memory, they load the state space model parameters directly from the slow high
+bandwidth memory to fast SRAM, where they perform the discretization and recurrence. Then they write
+the final results back to high bandwidth memory. Last, recomputation is used to reduce the memory
+requirements. This allows them to avoid saving the intermediate states, which are necessary for back
+propagation. Putting this all together, here is the selective state space model with hardware-aware
+state expansion. The first thing we see is that BT, delta T, and CT all depend on the input
+XT via the selection mechanism. The second thing we see is that the parameters are loaded into fast
+GPU SRAM, indicated in this diagram by the color orange, where the update is performed. Then the
+output is ultimately stored back into GPU high bandwidth memory, shown in green. Next, we come to
+the simplified state space model architecture. Here, the authors combine the Hungry Hungry Hippos
+block with a gated MLP block to produce their Mamba block. The shapes here indicate that the
+dimensionality is expanded inside the block. This block is repeated and interleaved with standard
+normalization and residual connections to form the Mamba architecture. I'll mention a few other
+model details. The authors note that most prior state space models use complex numbers in their
+state, but it has been empirically observed that completely real valued state space models seem
+to work fine, and possibly even better, in some settings. So, they use real values as the default,
+which work well for all but one of their tasks. Next, we come to the empirical evaluation. First,
+we have the synthetic tasks described earlier. First, as a bit of notation, the authors abbreviate
+selective state space models as S6 models, because they are S4 models with a selection mechanism,
+and computed with a scan. That's a lot of S's. On the selective copying task, S6 works well with
+every architecture, but S4 and Hyena work comparatively poorly. On the induction heads task,
+Mamba, shown in brown, appears up here at the top, where we see it succeeds on test sequence lengths
+of up to a million tokens, which is 4,000 times longer than it saw during training,
+while none of the other methods compared to generalize to beyond twice their training length.
+Next, we have experiments on language modelling, which follow the training recipe described in
+the GBT3 work, and train on the pile dataset. Here, the metric on the y-axis is perplexity,
+so lower is better. We can see that across a sequence length of 2,048, and a sequence length
+of 8,192, that Mamba, shown in purple, outperforms the other baselines, and matches Transformer++,
+which is highlighted in orange, and represents the strongest Transformer recipe that the authors
+know of, based on the palm and llama architectures. That means rotary embeddings, swigloo MLPs,
+rmsnorm instead of leonorm, no linear bias, and higher learning rates. On zero shot downstream
+evaluations, there are lots of comparisons, generally we see Mamba achieving an average
+of baselines at twice the model size. Next, there are studies on DNA modelling. On human genome
+data, Mamba, shown in orange, scales better than Hyena DNA, shown in blue, and Transformer++,
+shown in red, when you scale up the number of parameters. It also scales better than Hyena DNA,
+when you scale up the sequence length. Mamba models also do well relative to a Hyena DNA baseline,
+when fine tuning for a species DNA classification task. Here, the metric on the y-axis is accuracy,
+so higher is better, with longer sequences as we move to the right along the x-axis.
+We see the orange and green Mamba curves rising. I won't go through them in detail,
+but there are other experiments showing that Mamba mostly works well on audio modelling and
+generation. However, there is one ablation in the appendix, identifying a case when a naive
+application of Mamba with the selection mechanism seems to hurt performance. Here,
+lower is better, and the orange line denotes the default Mamba configuration. The authors suggest
+that this may be a case where audio waveforms actually benefit from linear time-invariant
+models which have a matching inductive bias. Next, we have speed and memory benchmarks.
+The authors provide an implementation of the scan operation that is pretty fast.
+They compare the scan versus convolution and attention on an A100 GPU. Here, the y-axis measures
+time, so lower is better. We see the red line representing their implementation is considerably
+below the other mechanisms at longer sequence lengths. In terms of inference throughput,
+where higher is better, we find that Mamba, shown in blue and green, can achieve five times higher
+throughput than Transformers, benefiting from its recurrent nature. In terms of limitations,
+the authors highlight that there is no free lunch on the continuous discrete spectrum.
+The selection mechanism overcomes the weaknesses of prior state space models on discrete modalities
+such as text and DNA, but this can impede their performance on data that linear time-invariant
+state space models excel on, which we saw with the audio ablation. They also note that the empirical
+evaluation is limited to small model sizes, below the threshold of most strong open-source
+LLMs. Therefore, it remains to assess whether Mamba still compares favourably at larger sizes.
+That's it, we've reached the end. If you'd like to try it out, the authors have released code on GitHub.

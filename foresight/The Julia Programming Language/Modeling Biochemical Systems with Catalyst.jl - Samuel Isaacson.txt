@@ -1,0 +1,173 @@
+Let me get going. What I'm going to talk about, like I said, Catalyst.jl today, and this is
+really a set of two kind of software libraries. Catalyst is a DSL for biological systems,
+and it's built on top of Modeling Toolkit, and a lot of people have worked on these packages.
+Chris and Torkle have done a lot of the Catalyst work with me. Nicholas has also done some,
+and then Shashi and Yingbo, who aren't here today, have both done a lot of Modeling Toolkit work that
+we leverage. So what is Catalyst.jl? So it's a Modeling Toolkit-based symbolic
+representation for chemical reaction systems, which in the lingo here are stored as reaction
+systems. So it allows us to build a symbolic representation of a chemical reaction system.
+It also is a domain-specific language that sits on top of that that allows us to easily specify
+chemical reaction networks and systems in a very clean notation. So it's kind of these two core
+components, one that you can use programmatically, and one that you can kind of use to quickly map
+out or type up reaction systems. And then it supports conversions to a large variety of other
+modeling Toolkit symbolic models, like ODEs, SDEs, and jump processes, so that you can actually
+simulate various reaction models from your reaction system. And it also includes an API
+for querying and manipulating reaction networks. And so I think showing is always better than
+telling, so I thought I would just show you some simple examples to illustrate things today.
+So here, for example, is a classical what's called the repressilator model. Here's the DSL for
+specifying the reaction network, where we type in all the different reactions and their corresponding
+rate functions or rate constants. And you can use Nicholas's nice LaTecafi package to get a nice
+display of what those reactions actually are once you build the model. But the point is that
+this generates a nice modeling Toolkit based symbolic model of this chemical reaction system
+for us. And this is just what those reactions actually are. So you can do things like look
+at graphs of the network using GraphViz. So we use some well very nicely put together code developed
+by Catlab that we've now integrated and that we use to do GraphViz base rendering. So here you
+can see a little graph showing the different species of our chemical system in blue. And then
+the little orange nodes correspond to reactions and the inputs and outputs show the stoichiometry
+for a given species going in and out of the reaction. And this is one thing that we've
+gotten together in more recently and hopefully in the future we can expand to more other types
+of graph representations. So why should you use Catalyst? So I have a ton of reasons here which
+I realized if I try to go through them all we'll eat up most of my time. So I just want to mention
+a few of the reasons and I'll show you some more with examples as we go. So what is it gives you
+a nice way to generate symbolic modeling toolkit models for mass action type ODE models but you
+can also have custom rate law so you don't have to have mass action rate laws, non-linear systems
+of equations to solve states, chemical Langevin SDE models, the less speed type jump process
+models, i.e. master equation models. And recently this has started to be leveraged by people out in
+the broader community. There's a really what looks like a really nice package that just became
+available this week on doing moment closures that lets you take a Catalyst network as among other
+input sources and from it generate a variety of modeling toolkit based symbolic ODE moment
+closure models that you can then solve numerically using further tooling. Because it's built on top
+of modeling toolkit we all we get all the great things that Chris and Yingbo and Shashi and others
+have built like we can generate ODE right hand side functions that have certain optimizations
+like being multi-threaded and other types of optimizations for the generated code by doing
+analysis of the symbolic code. We can get automated Jacobians. One place where it's really helpful
+is for jump systems so for jump process models many of the simulation algorithms require what are
+called dependency graphs that show if a given reaction occurs what reaction should be updated.
+All that kind of stuff can be generated for you in an automatic way by going through modeling
+toolkit and then converting from our reaction system into jump systems. And of course at the
+end of the day what you end up with are nice compiled ODE SD jump process models that you can
+throw into all the other great Siam L tooling for sensitivity analysis parameter estimation
+bifurcation analysis using Roman's package as he'll talk about in the next talk and so on so for
+okay. So I just wanted to show you how simple this is. So we have that repressor repressor
+later model that I started the talk with. So here's how you convert it from a reaction system
+into a symbolic ODE model you just say convert and then we can use La Techify to see what the ODE's
+we get are and this is the system that we get. And so you see here these kind of hill function
+terms for the production of the mRNAs you've got your constant production terms you've got
+degradation terms which it looks like they've got a little number one that we need to get rid of
+but otherwise it gives us a nice way to kind of view what the ODE model is quite easily from our
+reaction system. And then solving it is very little more work than that we just specify the
+parameters of the model the initial condition the time window to solve over we construct an ODE problem
+which is where the symbolic ODE model actually is going to get generated and converted into a
+function that can be compiled and actually evaluate the ODE derivative right hand side
+and then we can solve that using any of the differential equations.jl solver so here I'm
+using the SIT5 Runge-Kutta method and we end up getting you know our nice classical oscillatory
+repressor later system like we would expect. So that's an ODE model jump process models are also
+very easy to do. So here you can see how to generate a jump process model and like I said
+before the nice thing about going through this mechanism of building it in catalyst and then
+converting it to a jump system and modeling toolkit is that everything we need for the jump
+process solvers will be done for us so dependency graphs for more sophisticated solvers will be done
+and also inside the underlying jump process solvers we have different ways of representing
+jumps that increase in performance so if you have a jump that has an explicit time dependence so
+explicit dependence on t in its rate function that's going to be a variable rate jump if you
+have a jump that doesn't have such a dependence you'll be a constant rate jump if you have a jump
+where your reactions are just mass action reactions it'll be a mass action reaction jump and by having
+that classification we can get improved performance for each of those specific jump types and that
+binning of which category a jump should go into is done completely automatically for you
+when we generate the symbolic jump system or I should say when the symbolic jump system that I
+create here is converted into the actual method that we solve and so here's how we actually
+take the symbolic jump system we've converted our catalyst model to we define an initial condition
+which needs to be integers since we're working with the number of proteins in the system we make a
+discrete problem to say that that's we're going to solve a discrete system and now we make our jump
+system our jump problem on top of it and that will be where actually the jump system will get
+converted into compiled functions for evaluating the rate the various reaction intensities or
+propensities that define the jump process and here I specify that I'm going to use the rejection
+ssa method my dependency graph that it needs gets generated automatically for me and then I can solve
+the whole thing and I get out a much noisier looking version of the repressilator model
+so those are kind of the quick and dirty of how we can generate catalyst models and convert
+to other types of mathematical models I just wanted to point out that this works very flexibly
+now by being on top of modeling toolkit so for example you can define custom rate laws that are
+essentially you know very general Julia functions and this is a this is a very simple example where
+I've built a neural network to approximate 1 over x plus k where x is my species and k is my
+McHouse-Mitton constant I you should never mimic what I've done here this was not intelligently
+designed in any way this was like what can I just quickly put together as an illustration
+but the point is that I can build a function neural network of x that evaluates an approximation
+to this I can register it so modeling toolkit knows about it and then I can throw that in as
+my rate law that I use for the reaction and so here this says that the rate law is going to be
+s times this whole rate here vm times the neural network evaluated on s which would be s over k
+plus s which is our McHouse-Mitton approximation and then from there it's just the same thing
+create the od problem and solve it and sure enough we get something that looks like the
+McHouse-Mitton reaction in fact to make sure that I didn't mess it up oh I guess I don't have that
+code well you can take my word that I ran it with the McHouse-Mitton and it looked identical so
+these qualitatively that worked just fine though I would not recommend mimicking how I did that that
+was not a smartly designed neural network so one of the nice features we have is of course
+typing in all those reactions by hand if you have a system with a lot of structure can get kind of
+annoying so the DSL sits on top of the modeling toolkit reaction system model which means that
+you can programmatically construct reaction systems when you have networks with a lot of
+structure so here for example is what's called a reaction diffusion master equation model where
+I have two species A and B that hop on a lattice so A at site one can hop to site two with rate one
+over H squared A at site two can hop back to A at site one with rate one over H squared
+and so on so forth the B's do the same and then A's and B's at the same location can react
+with some rate lambda to annihilate so they're basically the molecules are all hopping around
+and when they're in the same site there's some probability per time they can react
+and this is super easy to generate with using the reaction system directly so I just give my
+number of lattice sites I specify that my parameters are going to be time and the lattice
+spacing I build in modeling toolkit two array variables for the A at each location in the B
+at each location I make a vector to store all the reactions I want and then I just loop through
+and create the reaction so I have reactions for an A going from site I to site I minus one
+I to I plus one and you know A I and a B I annihilating and then I just create a reaction
+system from my list of reactions and that's it now I've got all my reactions and I got my
+modeling toolkit model the same code as I had before I can convert it to a jump process
+representation I can make a discrete problem um and a jump problem from that which lets me
+actually simulate it here I simulate it using the composition rejection direct method which
+is good for spatial systems and you end up getting it something like this so here I start with 10,000
+A's at one end 10,000 B's at the other end I've cut off the top just so to keep the axes fixed
+you let it go over time you see the molecules diffuse inward and of course this bottom graph
+is showing the total number of molecules remaining in the system so it shows you how many have
+annihilated to get you know to go away and you see as time goes on they diffuse inward and they
+react to go away this is not real time because actually it was much slower to make the movie
+in plots.jl I found than it was to actually run the simulation so I had to pre-record that
+okay so we've how far have we actually pushed this in practice
+so we've built I could you can build decently sized spatial systems like the one I just showed
+where you have a lot of spatial hopping reactions but uh but of course another question is how big
+of a purely reaction system where all the reactions are physical can you do and so the largest that
+we've looked at so far is a is a model for B cell signaling that has about 1100 chemical species and
+almost 25,000 different reactions it comes from this paper by Barua and all and it's a model for
+the early stages of B cell signaling we have a package reaction network importers that can take
+bio net gen models and import them into catalyst and so this model is available as a bio net gen
+model so we could import it in in that way and then at that point you can convert it from the
+catalyst model to your symbolic ODE or jump models and solve them using differential equations.jl
+and just to show you what ends up happening for this example so here's how it actually all works
+it's very compact we load in the reaction network using bio net gen so we get initial conditions
+parameters and then in part of loading it in we generate the catalyst symbolic model
+and then just like before I convert to a system of ODE's I create an ODE problem which takes that
+symbolic model of the of the whole system and generates essentially the compiled functions
+for the ODE solvers and then I can solve it and we get quite good performance I think
+the performance we get is as good or better than what we were getting in sundials though I haven't
+benchmarked that super recently but we were we were matching CV ODE in fact at one point beating
+it a little bit and you can see here this is just one particular species the activated syk protein
+in the system and what's nice about this example is it's very it's a quite stiff system that also
+has fairly large populations so it's good it's kind of a good benchmark for both the ODE solvers
+and for the jump process solvers okay so the last thing I just wanted to mention in my last minute
+is a little bit about Diffie Q jump so SyML has you know fantastic and amazing diversity of ODE
+solvers but one thing that maybe is less well known is the jump process solvers which is something
+that I've worked on and one nice thing like I said about catalysts is it generates everything you need
+to use any of the jump process solvers so in particular we have a library of about eight
+solvers and these include some very recent methods so there's the classical Gillespie direct method
+there's methods like Gibson and Bruck's next reaction method that's very popular though people
+who've benchmarked it know it actually is often not very fast so in many cases it's not a good
+choice and we have more sophisticated methods like the composition rejection method which works very
+good for spatial systems the recent rejection ssa which for that B cell system I showed you is
+something like oh I forget 150 times or more faster than trying to use it it takes like three
+seconds to solve it with the rsa method versus 10 000 seconds to solve it with Gillespie's direct
+method so it's a huge huge speed up to use these kinds of methods for it and then more recently
+we got the rejection ssa with composition rejection which is very good for spatial systems we found
+and so these are the interesting thing is which method one should use is highly dependent on the
+system one studying direct Gillespie's direct method works great for very small systems these
+other ones are really good for larger systems with sparse reaction networks but the point is
+this catalyst gets you set up to use any of them with very little work on your part so okay so I
+can see I'm basically out of time so let me just mention there's a lot of things we're thinking
+about working on for the future in particular compositional models optimizations for large
+networks and network analysis tooling spatial models is something that hopefully this summer
+we'll get a nice kick on uh and so on and so I'll just end there and thank everyone who's
+worked on contributing to catalyst and modeling toolkit and mentioned my support and thank you all
+for coming

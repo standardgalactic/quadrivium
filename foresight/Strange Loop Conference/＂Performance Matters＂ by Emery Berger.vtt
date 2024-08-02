@@ -1,0 +1,1313 @@
+WEBVTT
+
+00:00.000 --> 00:10.800
+Hi everybody, so I'm Emory Berger. I'm going to be talking today about performance matters.
+
+00:10.800 --> 00:15.480
+This is joint work with my former PhD student, Charlie Kersinger. So I'm going to tell you
+
+00:15.480 --> 00:23.400
+a story that happened a short time ago in a valley far, far away. Not actually this one,
+
+00:23.400 --> 00:31.720
+in fact, this one. So the story is about a character who we're going to call Luke. Luke is
+
+00:31.720 --> 00:37.440
+our hero. Of course he's a hero in Silicon Valley because Luke has an idea for an app. Alright,
+
+00:37.440 --> 00:43.440
+so here's Luke's genius idea for an app. Basically you use your smartphone and you take pictures
+
+00:43.440 --> 00:49.680
+of things and then it goes and finds matches like and returns them to you and he's got a great name
+
+00:49.720 --> 00:55.000
+for it as well. It's going to call it Ogil. And he's pretty sure Ogil is going to totally
+
+00:55.000 --> 01:00.840
+disrupt image search. Nobody has told him about Google image search yet, but anyway. So he sets
+
+01:00.840 --> 01:06.600
+about building it. So he makes the prototype Ogil. So the prototype Ogil works like this. Take a
+
+01:06.600 --> 01:14.440
+picture. It gets sent off to the Ogil data center. If it is new, it gets added to the database. And
+
+01:14.440 --> 01:19.800
+then at the same time it goes and finds similar pictures and sends them back to the user. Alright,
+
+01:19.800 --> 01:24.960
+so this is pretty straightforward. You can kind of abstract out this flow. If you think of it as
+
+01:24.960 --> 01:30.240
+follows, you get a request. The request comes in. It essentially spawns two threads. One of them
+
+01:30.240 --> 01:35.760
+goes and takes the image and let's say compresses it and then saves it to a three and a half inch
+
+01:35.760 --> 01:43.360
+floppy as one does. And then at the same time it does some indexing to look up matches, right,
+
+01:43.400 --> 01:49.200
+so it does a search after doing some feature extraction and then sends it back to the user via
+
+01:49.200 --> 01:54.360
+paper airplane, which is the most effective method known to man. And then eventually these two threads
+
+01:54.360 --> 01:59.240
+join up. Alright, so this is obviously a simplification. I've alighted certain things like
+
+01:59.240 --> 02:05.320
+for example locks. So when you have locks, right, there's some database for example, you can't be
+
+02:05.320 --> 02:09.360
+modifying the database simultaneously, blah, blah, blah. But anyway, this is essentially at a
+
+02:09.360 --> 02:16.320
+high level how Ogil is going to work. So Luke goes and ships it off to the app store. It gets
+
+02:16.320 --> 02:21.520
+approved and you know users start coming and Ogil is working, right? He's disrupting image search.
+
+02:21.520 --> 02:28.840
+But then as the number of users kind of like mount, it turns out Ogil starts getting slow,
+
+02:28.840 --> 02:34.440
+right? So it takes a long time for Ogil to load, right? So this is too bad. He's not happy about
+
+02:34.480 --> 02:40.600
+this. He's not really sure what to do. So, but before we get into that, let me talk about another
+
+02:40.600 --> 02:45.400
+version of Luke. This is also Luke. This is the cool hand Luke, if you will, with his glasses.
+
+02:45.400 --> 02:50.960
+Alright, but really this is Luke in the 80s. Alright, so he's got the 80s glasses to match and
+
+02:50.960 --> 02:56.280
+of course those of you old enough to know or who have watched TV know that there were no smartphones
+
+02:56.280 --> 03:02.040
+in the 80s. There were instead computers with big CRTs. So this is what Ogil looked like in the 80s.
+
+03:03.040 --> 03:07.640
+So you'd have some ASCII art and you want to go out and it would connect via some modem,
+
+03:07.640 --> 03:14.400
+let's say, search the database. This is version 1.0 of Ogil 84. And it comes up with its matches and
+
+03:14.400 --> 03:20.120
+this is your user interface. So I hope you liked it. Alright, now of course back in the day,
+
+03:20.120 --> 03:27.800
+1984, computers were really slow, right? Really slow. And so actually this Luke today who was
+
+03:27.840 --> 03:34.040
+like Ogil is too slow, well things were really bad in 1984, right? But it turns out things were
+
+03:34.040 --> 03:39.600
+also kind of better in a way. So performance used to be really easy. So I'm sure all of you have
+
+03:39.600 --> 03:44.320
+seen this kind of graph. What I'm going to show you is on the left, the number of transistors,
+
+03:44.320 --> 03:51.520
+as years progress on the x-axis, if they go up, you'll notice it is a log scale. And on the right
+
+03:51.520 --> 03:57.200
+you have clock speed, which roughly corresponds to computing performance. And so basically for
+
+03:57.240 --> 04:01.560
+years and years and years, we had this situation where the number of transistors were increasing
+
+04:01.560 --> 04:07.520
+roughly at doubling every 18 months. This is famously Moore's law. And this generally had the
+
+04:07.520 --> 04:13.040
+effect of allowing clock speed to increase. And so you had smaller features. This meant that your
+
+04:13.040 --> 04:20.000
+programs would actually run faster. And in fact, you could just literally wait, right? If you buy
+
+04:20.000 --> 04:25.520
+new hardware, in fact to the upgrade cycle every year or so, like if you bought a new computer,
+
+04:26.000 --> 04:31.160
+everything would run much faster. Now things were slow, right? So don't be so excited about how
+
+04:31.160 --> 04:37.720
+great it was back then. It was bad. 33 megahertz to 66 was awesome back then and kind of terrible
+
+04:37.720 --> 04:43.720
+today. But it did change the landscape of what it meant to be somebody who works on performance
+
+04:43.720 --> 04:52.400
+improvement because this is what you would do. So there really, in a way, was no sense trying to
+
+04:52.400 --> 04:57.160
+squeeze out any performance out of something when it was going to double in 18 months, right? The
+
+04:57.160 --> 05:01.680
+chance that you in 18 months were going to squeeze out double the performance pretty slender. So
+
+05:01.680 --> 05:06.960
+you might as well just sip mojitos on the beach, all right? I can tell you that this was, well,
+
+05:06.960 --> 05:12.800
+maybe the mojitos and beach part, notwithstanding, this was actually kind of a strategy that was
+
+05:12.800 --> 05:17.680
+recommended for high performance computing. People would literally say, we're just going to upgrade
+
+05:18.000 --> 05:23.200
+the computers next year or in two years. So focus on something else. Don't focus on performance,
+
+05:23.200 --> 05:30.920
+right? Now, unfortunately, that's not the current state of affairs, right? So today, as all of you
+
+05:30.920 --> 05:36.880
+know, when you upgrade a computer, it does not get faster anymore. Maybe it gets lighter. Maybe it
+
+05:36.880 --> 05:47.040
+has improved battery life. Maybe not. But basically what happened is eventually Moore's law kind of
+
+05:47.040 --> 05:52.080
+ran out of steam. The reason that it did is not actually true that Moore's law ran out of steam.
+
+05:52.080 --> 05:59.760
+This is technically a problem called denard scaling. And so denard scaling ran out. And so right
+
+05:59.760 --> 06:05.120
+now, we're in a situation where basically, if we clock things up, we no longer can dissipate the
+
+06:05.120 --> 06:10.560
+heat on chips effectively enough to make them run faster. So transistor counts actually are still
+
+06:10.560 --> 06:15.600
+increasing, which is why we have multiple cores. So we have a bunch of transistors. What are we
+
+06:15.680 --> 06:21.040
+going to do with them? Let's just stamp out more of the same thing, right? So that's great. But it's
+
+06:21.040 --> 06:25.440
+also not super awesome because if you have a program that is not parallel, it's not going to run any
+
+06:25.440 --> 06:33.040
+faster. So everything now has multicore. Your phone has multicore. But it turns out it's still a
+
+06:33.040 --> 06:41.280
+problem. So these are actual screenshots from app store updates. Every app store update practically
+
+06:41.280 --> 06:48.880
+is about performance or bug fixes. And so here's one that says under the hood updates for better
+
+06:48.880 --> 06:55.760
+performance, as opposed to the over the hood updates. Okay. Here's bug fixes and performance
+
+06:55.760 --> 07:01.360
+improvements, bug fixes and important performance improvements. And then this one, I like love
+
+07:01.360 --> 07:06.800
+this one a lot. So they're App Engine calibrations because it sounds cooler. So they've calibrated
+
+07:06.800 --> 07:12.480
+the App Engine. All right. Okay. So why does this keep happening? Why is it like every update is
+
+07:12.480 --> 07:16.240
+like, oh, God, we got to improve the performance. We got to improve the performance. Why is this
+
+07:16.240 --> 07:22.560
+so hard? Why didn't they get it right the first time? And it turns out, unlike bugs, so code is
+
+07:22.560 --> 07:28.320
+always buggy, right? And it's hard to debug programs, but it's like this thing produced the
+
+07:28.320 --> 07:34.000
+wrong result. That's pretty clear. But if you have something and it just runs slower, you don't
+
+07:34.000 --> 07:39.360
+really know where or what to change, right? So it can be really complicated. So what I'm going to
+
+07:39.360 --> 07:44.240
+talk about are two things in this talk. One is performance analysis. So I'm going to explain
+
+07:44.240 --> 07:49.920
+how to do performance analysis, right? It turns out that the thing that we, including myself, have
+
+07:49.920 --> 07:55.680
+often done is not really very rigorous. And you can draw the wrong conclusions. And then I'm going
+
+07:55.680 --> 08:00.720
+to talk about a new approach for performance profiling that will show you how to do it better.
+
+08:00.720 --> 08:06.720
+All right? So first, I'm going to talk about performance analysis. So here's Luke. Luke has
+
+08:06.720 --> 08:11.840
+his code. And Luke is like, it's too slow. Ogil is too slow. What am I going to do? And so Luke
+
+08:11.840 --> 08:17.360
+has an idea. And Luke's idea involves some sort of new, you know, I'm going to do this first,
+
+08:17.360 --> 08:20.480
+and I'm going to change this code. I'm going to change this function, blah, blah, blah. I make
+
+08:20.480 --> 08:25.600
+a bunch of changes, right? And eventually I end up with A prime, all right? The new version of A.
+
+08:25.600 --> 08:29.680
+And so now I want to know, did it work, right? So I've made this change. I thought it would
+
+08:29.680 --> 08:35.040
+make things faster. So I go and I take my code, and I have some set of inputs, some benchmarks,
+
+08:35.040 --> 08:42.480
+let's say. And I go and I say, run A. And A takes 90 seconds, which is clearly too long for your
+
+08:42.480 --> 08:47.440
+App Store thing to run. But anyway, notwithstanding that, let's say there's something that takes
+
+08:47.440 --> 08:55.200
+90 seconds in his test, right? And then he runs A prime. 87.5 seconds. Fantastic. Success, right?
+
+08:55.280 --> 09:02.640
+2.8% faster, all right? Time for Mojito, okay? So this is great, right? And clearly, you know,
+
+09:02.640 --> 09:09.120
+what Luke went and did had a big impact, big impact, all right? The question is, like, is it
+
+09:09.120 --> 09:15.520
+really faster, right? So if you go and you plot, like, here's a bar graph with, I'm kind of giving
+
+09:15.520 --> 09:22.720
+away the game here, one execution of A prime and A. It turns out that A prime is 2.8% faster,
+
+09:22.720 --> 09:26.720
+looks good. But there's maybe a problem here. So what's the problem?
+
+09:30.080 --> 09:34.160
+Right, so there's this problem called variance, right? Like, when you run a program once,
+
+09:34.160 --> 09:37.920
+you're going to get some result. But if you run it again, maybe the result will be slightly
+
+09:37.920 --> 09:42.320
+different, and you want to account for that. Great. So now we'll run it 30 times. 30 is the
+
+09:42.320 --> 09:48.560
+magic number, by the way. So we're going to run it 30 times, and we get this graph. And so they're
+
+09:48.560 --> 09:54.080
+pretty tightly distributed, and you can see it's still 2.8% faster, right? So seems plausible,
+
+09:54.800 --> 09:59.760
+like, I think everybody here would probably be like, looks like A prime is faster. Great. So
+
+09:59.760 --> 10:04.160
+the question you have to ask yourself is, why is it faster? So you might think, well, of course,
+
+10:04.160 --> 10:10.640
+the reason is the code change, right? So I, as Luke, I'm the developer, and I go and I'm a genius,
+
+10:10.640 --> 10:16.720
+and I have my great idea, and it pays off 2.8%, right? Well, it turns out changing the code
+
+10:16.720 --> 10:22.240
+can actually lead to all sorts of knock-on effects that have nothing to do with your intended change.
+
+10:22.240 --> 10:28.480
+So it could totally be an accident. So let me explain why. So there's this wonderful paper
+
+10:29.280 --> 10:35.520
+that is, it appeared in ASPOS in 2009 by Todd Mitkiewicz and a number of other people. I highly
+
+10:35.520 --> 10:40.560
+recommend you read it. It's something like, how to do things wrong without really trying, something
+
+10:40.560 --> 10:47.520
+like that. And the conclusion is that the layout, like where the code and data end up in memory,
+
+10:47.520 --> 10:52.080
+has a pretty big impact on performance, all right? So when you go to measure something,
+
+10:52.080 --> 10:57.600
+those measurements are biased by depending where things kind of fell, right? So here are a few
+
+10:57.600 --> 11:02.080
+things that can have an impact on layout, and I'm going to talk about more. So one is link order.
+
+11:02.080 --> 11:07.680
+So if you're in cc++ land, and you have a make file, and the make file has a bunch of,
+
+11:08.000 --> 11:12.400
+this link step and has a bunch of dot-os, depending how those dot-os are arranged,
+
+11:12.400 --> 11:16.880
+you can get different performance, okay? You might think, fine, all right? Your environment
+
+11:16.880 --> 11:22.960
+variables. So when you go to execute your program, your environment variables, whether it's in cc++
+
+11:22.960 --> 11:27.520
+or even managed languages, they somehow get copied in and everything else gets shifted.
+
+11:28.480 --> 11:36.080
+So in c and c++, this moves the stack. So this actually has an effect on layout. These two alone
+
+11:36.080 --> 11:45.200
+can lead to shifts in performance of plus or minus 40%. Okay? So that's not great. So what is
+
+11:45.200 --> 11:49.600
+happening? Like, why is this happening? This is a huge shift. This is literally larger than the
+
+11:49.600 --> 11:59.120
+impact of dash o3 over dash o0. Okay? Yes, you laugh, but as well you should. So why is a prime
+
+11:59.120 --> 12:05.600
+faster than a, right? So what is going on? Why could this happen without actually trying? So part
+
+12:05.680 --> 12:11.600
+of the problem here is that basically modern processors have become insanely complicated
+
+12:11.600 --> 12:17.840
+in their zeal to increase speed. So what do they do? So they have caches, right? Add data
+
+12:17.840 --> 12:23.520
+and instructions, get mapped to the cache. Well, it turns out for good reasons, these things are
+
+12:23.520 --> 12:29.200
+binned up into these things called sets. If they map to the same set, you can have a conflict. So
+
+12:29.200 --> 12:33.520
+if you have hot code, a lot of hot code that is mapping to the same set, then it's not going to
+
+12:33.520 --> 12:39.040
+necessarily fit in cache, and your code will run slower. By luck, you could be in a situation
+
+12:39.040 --> 12:44.480
+where when you changed a prime, you actually disrupted this conflict. And so now you have no
+
+12:44.480 --> 12:49.840
+conflict, right? These two things, one is the hot code and one maps to nothing. So no conflict.
+
+12:49.840 --> 12:55.600
+Boom, it ran faster. All right? So that sounds great. So it could be the cache, but it could also
+
+12:55.600 --> 13:01.600
+be the branch predictor, which actually, again, is based on the addresses of your branches,
+
+13:01.600 --> 13:05.520
+and if these branches collide, then you can end up with things running slower.
+
+13:06.160 --> 13:10.720
+There's also this thing called the TLB, the translation look-aside buffer, which maps
+
+13:10.720 --> 13:14.720
+virtual addresses to physical addresses. If things don't fit in the TLB because they span
+
+13:14.720 --> 13:19.920
+two pages instead of one, suddenly things become slower. There's also a branch target predictor.
+
+13:19.920 --> 13:26.000
+There's a prefetchor. There's more. All right? So this is pretty bad. So all of these things can
+
+13:26.080 --> 13:32.240
+happen. You might think, all right, link order is fine. The code thing is a little weird, but,
+
+13:32.240 --> 13:38.640
+you know, hey, it's faster, right? It's 2.8% faster. That, like, I don't care. It's all good, right?
+
+13:38.640 --> 13:44.320
+Now, it may not be faster on every machine, but it's faster today, right? So here's the problem.
+
+13:44.320 --> 13:50.400
+Like, anything you do can disrupt this. So what could happen? One more malloc changes layout,
+
+13:51.040 --> 13:55.600
+right? Like, you've shifted everything over, one more or less. If you upgrade anything in
+
+13:55.600 --> 14:00.560
+your system, this is going to change layout, right? So that's bad. Okay. So those things,
+
+14:00.560 --> 14:04.400
+all right, I'm not going to change libc, and I guess I'll never malloc again. Fine.
+
+14:06.640 --> 14:13.120
+Whatever. All right? So here's something that may be surprising. Running it in a new directory.
+
+14:13.120 --> 14:17.760
+So it turns out that your current working directory goes right into your environment
+
+14:17.760 --> 14:23.840
+variables, right? So that's weird, right? So, you know, if Vader tries to run your software,
+
+14:23.840 --> 14:30.400
+it's not going to work as fast because it's one character longer than Luke, okay? This is a real
+
+14:30.400 --> 14:35.920
+effect. This can really happen. It has actually bitten me. I had a student who wrote something.
+
+14:36.800 --> 14:42.240
+He has a long Indian last name. My username is just five letters long. It's just Emery.
+
+14:42.880 --> 14:47.360
+And he did something. He's like, oh, it doesn't run any faster. It actually runs slower. And it's
+
+14:47.360 --> 14:52.720
+like, that makes no sense at all. And eventually, we whittled it down, and it was like, if I run it
+
+14:52.720 --> 15:04.480
+as me, it's faster. Okay? That's right. All right? Changes your layout. So the solution is obvious,
+
+15:04.480 --> 15:11.920
+right? Run everything. All right. So I should add, you know, all of this is, you know, like,
+
+15:11.920 --> 15:15.360
+the whole talk is really oriented towards, I'm going to improve my performance. But
+
+15:15.360 --> 15:19.760
+everything I'm talking about today can be viewed in reverse for performance regression. Like,
+
+15:19.760 --> 15:26.800
+I made a change, and things run 2.8% slower. Oh, God, roll back. Maybe not, right? Maybe
+
+15:26.800 --> 15:32.560
+the next thing you do is going to actually undo that change, right? So basically, layout is super
+
+15:32.560 --> 15:38.640
+brittle. And like you've seen, layout biases measurement. So one of the questions that we
+
+15:38.640 --> 15:43.520
+wanted to know is, is it possible to eliminate the effect of layout? So we can actually understand
+
+15:43.520 --> 15:48.800
+the performance of things kind of without having to think about, well, one malloc less or more,
+
+15:48.880 --> 15:54.720
+or, you know, Luke versus Vader. So the answer is yes. We built a tool that we call stabilizer.
+
+15:55.360 --> 16:01.040
+So stabilizer addresses this problem that I've just explained to you. Pardon me. And it eliminates
+
+16:01.040 --> 16:09.440
+the effect of layout. So this is a way to actually measure programs where you can kind of actually
+
+16:09.440 --> 16:14.160
+know whether the regression you had is real or whether the optimization you had is real
+
+16:14.160 --> 16:19.520
+and not just an accident. So how does this work? How is this even possible? So the way that
+
+16:19.520 --> 16:26.480
+stabilizer works is that it randomizes layout. So it randomizes a lot of things. It randomizes the
+
+16:26.480 --> 16:32.800
+function addresses. It randomizes stack frame sizes. It even randomizes heap allocations. But not
+
+16:32.800 --> 16:38.480
+only does it do those things, it does it over and over again. So while your program is running,
+
+16:38.480 --> 16:42.800
+it's literally doing randomization. And this turns out to be important, and I'll show you a graph
+
+16:42.800 --> 16:49.920
+that we'll explain why. But basically, if you do this, then there's no way layout can bias your
+
+16:49.920 --> 16:55.680
+measurement because a completely random layout can't bias the results. That's just how things work.
+
+16:55.680 --> 17:01.520
+That's why we run randomized control trials. You've eliminated something as a possible cause.
+
+17:01.520 --> 17:07.440
+The only other cause that remains is whatever change you made. So let's walk through what you
+
+17:07.440 --> 17:12.400
+would do with stabilizer. So with stabilizer, again, clearly you're supposed to run your program
+
+17:12.400 --> 17:17.760
+a bunch of times. But notice what happens to the execution times. Here the execution times are no
+
+17:17.760 --> 17:23.280
+longer tightly bound around this one very small measurement. The reason for that is that when
+
+17:23.280 --> 17:28.720
+you were running that program 30 times, it was sort of like you were going to do a survey of 30
+
+17:28.720 --> 17:34.320
+people, but you just ask one person. Because it's the same layout over and over again. So you did
+
+17:34.320 --> 17:40.880
+an experiment on 30 executions, but what you really did is you just repeated 30 on one. So the only
+
+17:40.880 --> 17:46.400
+noise that you're eliminating is the noise that comes from network demons waking up or some other
+
+17:46.400 --> 17:51.600
+random event, maybe some thermal issue in your computer, but it's not really altering layout.
+
+17:51.600 --> 17:57.760
+It's always the same layout. So here it's not, and you get these very nice bell curves. So now I'm
+
+17:57.760 --> 18:02.640
+going to ask you the question. So this is an audience poll time. Is A prime faster than A? I just
+
+18:02.640 --> 18:09.200
+want you to raise your hands if you think that A prime is faster than A. All right, great. Now keep
+
+18:09.200 --> 18:14.800
+your hands up. Don't set them down. But set them down if you change your mind. How about now?
+
+18:17.680 --> 18:26.400
+How about now? There's still a few like hardcore. So what you all are doing is what I like to refer
+
+18:26.400 --> 18:33.920
+to as eyeball statistics. And so you're kind of like, looks close to me. That's too close.
+
+18:34.640 --> 18:43.040
+Right. But it turns out this is not actually a thing. So if you, yeah, it's not really statistics
+
+18:43.600 --> 18:49.520
+when you just eyeball results. So this is a bit of a refresher for some of you, but I'm going to
+
+18:49.520 --> 18:55.040
+walk you through this and how this all fits in with stabilizer. So in actual statistics, and today
+
+18:55.040 --> 18:59.920
+I'm just going to talk about one flavor of statistics, which is called null hypothesis
+
+18:59.920 --> 19:04.800
+significance testing. There are others, notably Bayesian approaches. Happy to talk about that
+
+19:04.800 --> 19:10.640
+offline. But basically the way it works is you just assume that the things are the same. You say
+
+19:10.640 --> 19:17.440
+what is the likelihood of observing this difference by chance? All right. So it turns out that this
+
+19:17.440 --> 19:22.000
+is something that's just convenient. It's very easy to compute these probabilities for the normal
+
+19:22.000 --> 19:27.120
+distribution, which you all remember from school. These graphs are normal. Awesome. It turns out
+
+19:27.120 --> 19:31.760
+that stabilizer happens to make normal graphs or normal distributions. And I'll explain why.
+
+19:32.720 --> 19:36.000
+So how are we going to do this? We're going to run stuff with stabilizer.
+
+19:36.000 --> 19:41.520
+We're going to pick some probability below which we're like, okay, good enough. Right. So
+
+19:41.520 --> 19:46.240
+if it's only a one in 20 chance, I see this probability like the, I see this event occurring.
+
+19:46.240 --> 19:51.040
+I'll be like, okay, that's good enough for me. You could be harsher. You could say one in 100,
+
+19:51.040 --> 19:59.520
+one in 1,000. It's pretty standard to say one in 20. This is the p value of 0.05. So the idea is
+
+19:59.520 --> 20:04.560
+if there's a low enough probability, you reject the null hypothesis, the null hypothesis being
+
+20:04.560 --> 20:08.880
+that they're the same. And you conclude that the speed up is real. It's not due to the effective
+
+20:08.880 --> 20:14.960
+memory on memory layout. All right. So why re-randomization? The reason for re-randomization
+
+20:14.960 --> 20:20.800
+is that just randomizing once doesn't give you enough randomization. So this is an actual program.
+
+20:21.040 --> 20:26.960
+You can see the distribution is pretty wacky. It's very far from normal. You can't intuitively
+
+20:26.960 --> 20:32.720
+explore much of the space when you just randomize at startup as opposed to randomizing during
+
+20:32.720 --> 20:38.480
+execution. This is in fact the kind of distribution you get when you randomize all the time. And
+
+20:38.480 --> 20:42.720
+these are normal distributions. So why do I keep saying that they're normal distributions?
+
+20:42.720 --> 20:50.000
+The reason is essentially, again, going back to like freshman stats, stabilizer generates a new
+
+20:50.000 --> 20:56.960
+random layout every half second. That is to say it's a completely independent version of the program
+
+20:56.960 --> 21:01.680
+right from half second to half second to half second. It's all randomized. And it's the same
+
+21:01.680 --> 21:06.880
+program the whole time. So it's identically distributed. And then we're adding them all up.
+
+21:06.880 --> 21:13.200
+And there is this nice result, a key result of stats, which is the sum of a sufficient number.
+
+21:13.200 --> 21:17.760
+So if you run a program for long enough of independent identically distributed random
+
+21:17.760 --> 21:22.560
+variables, it's approximately normally distributed no matter what the underlying distribution was.
+
+21:22.560 --> 21:27.200
+This is the central limit theorem. So this makes execution times normally distributed,
+
+21:27.200 --> 21:32.000
+which is cool in other ways because you actually know how likely it is that you're going to see
+
+21:32.000 --> 21:35.840
+some very weird execution because you know what the distribution looks like.
+
+21:35.840 --> 21:39.920
+All right, great. So now we have this thing in hand and we're going to do something insane.
+
+21:40.640 --> 21:46.800
+We're going to see whether optimizations actually matter. And we know some of them matter. So we
+
+21:46.800 --> 21:50.880
+have a suite of benchmarks that we're going to evaluate it on. We're going to evaluate them
+
+21:50.880 --> 21:54.800
+individually and then across the whole benchmark suite. And I'll show you how we do it. So you
+
+21:54.800 --> 22:00.880
+build the benchmarks with stabilizer. Stabilizer is a plugin for LVM. If you just compile it as such,
+
+22:00.880 --> 22:05.600
+it goes and randomizes everything. But you can actually just randomize things independently
+
+22:05.600 --> 22:10.400
+if you wanted, like just code, just heap, and just stack. So now we run the benchmarks,
+
+22:10.400 --> 22:15.600
+we run them as usual. We drop them into one of my least favorite programming languages ever.
+
+22:16.880 --> 22:22.480
+And then we decide what the result is. So again, we don't ask questions like this
+
+22:22.480 --> 22:26.400
+because that's eyeball stats. Instead, we ask a question like this,
+
+22:26.400 --> 22:30.080
+pretend they're equal. How likely is it we'd observe this much of a difference?
+
+22:30.560 --> 22:39.680
+So I also have to say that you should not assume normality like almost ever in my humble opinion,
+
+22:39.680 --> 22:43.920
+unless you have very good reasons for doing so. Here we have very good reasons for doing so.
+
+22:43.920 --> 22:49.680
+So we can use really powerful statistical tests like the student's t-test. So this is the test
+
+22:49.680 --> 22:55.120
+that you used to actually measure this difference. So if the p-value, the likelihood of this event
+
+22:55.120 --> 22:59.200
+occurring, is less than some threshold, which as I mentioned before is 5%, we're going to reject
+
+22:59.200 --> 23:04.880
+the null hypothesis. That is to say, it's not because of random layout, the difference is real.
+
+23:05.520 --> 23:10.080
+Everybody's on board, I hope. So now we're going to do it. You'll be shocked to learn
+
+23:10.080 --> 23:18.160
+that dash O2 versus dash O1 makes a difference. Good. I would be weird if the result were otherwise.
+
+23:18.160 --> 23:22.320
+So you can see that there are statistically significant improvements, right on the right.
+
+23:22.320 --> 23:27.760
+There's some that are statistically significant but don't matter. And by God,
+
+23:27.760 --> 23:34.720
+there are statistically significant performance drops. So it turns out that compiler people
+
+23:34.720 --> 23:39.440
+run these same benchmarks and overfit the way that they do these optimizations,
+
+23:39.440 --> 23:43.760
+and some of them lead to layout changes. And it wasn't actually the code change.
+
+23:44.560 --> 23:49.200
+And so we can actually distill out this effect. All right, great. By and large,
+
+23:49.200 --> 23:57.920
+it looks like O2 over O1 is a win. How about O3 versus O2? Ready? It's amazing. Okay.
+
+23:59.920 --> 24:03.360
+So I actually have to change the axes so we can see a lot of these values.
+
+24:03.360 --> 24:08.720
+So I'm going to zoom in. Instead of it being 0 to 10, like the range is negative 10 to 20,
+
+24:08.720 --> 24:15.200
+I'm going to make it 0 to 1.5. Okay, so now we can see them. So they're pretty small effects,
+
+24:15.920 --> 24:20.960
+but some of them are significant and some of them are not. Again, statistically significant,
+
+24:20.960 --> 24:27.760
+1.75% decrease in execution time. Great. A bunch of things where it's not significant
+
+24:27.760 --> 24:32.320
+and a couple decreases, but really very minor effect sizes. So what do these results mean?
+
+24:32.960 --> 24:38.560
+I mean, you can't actually look at an individual benchmark. Like there's 30 of them, right?
+
+24:38.560 --> 24:42.240
+So drawing a conclusion about all 30, you actually have to do something different.
+
+24:42.240 --> 24:46.880
+You have to collect all of them. You get a bunch of these graphs, and this is what you don't do.
+
+24:46.880 --> 24:53.360
+Like, okay, this one is slower. This one's faster. This one's faster. This is just eyeballs everywhere.
+
+24:54.160 --> 24:59.200
+Okay? I mean, they're spooky and nobody wants to see those. So again, we're going to do the
+
+24:59.280 --> 25:03.360
+same thing, but to test a bunch of things simultaneously, you do this thing, which is
+
+25:03.360 --> 25:08.160
+terribly named, called analysis of variance, and you plug it into R with this awesome incantation,
+
+25:08.880 --> 25:13.120
+and then you do, again, the same test. If the p-value is less than or equal to 5%,
+
+25:13.120 --> 25:18.720
+we reject the null hypothesis. All right? You ready? All right, here we go. Here's the p-value.
+
+25:18.720 --> 25:22.880
+So it has to be less than or equal to 5% or else we're going to conclude that dash
+
+25:22.880 --> 25:32.640
+o3 versus dash o2 is nothing. All right? So the p-value is 26.4%. That means that one in four
+
+25:32.640 --> 25:38.480
+experiments will just show a random effect, right? Just literally randomly. We do not consider
+
+25:38.480 --> 25:44.160
+this enough evidence to reject the null hypothesis. So we're, we cannot reject the null hypothesis,
+
+25:44.160 --> 25:49.840
+which is that the effect is indistinguishable from noise. All right? Okay. So this is all
+
+25:49.840 --> 25:57.280
+terrible news for people like Luke who wanted optimizations to work, and I've actually seen,
+
+25:58.400 --> 26:05.120
+I've actually seen projects. It makes, it kind of breaks your heart. Like projects I committed,
+
+26:05.120 --> 26:13.600
+like on GitHub, where it literally says dash o9, and I feel like why not dash o11? There's no,
+
+26:13.680 --> 26:19.280
+there's no dash o9 or 11. It's just kind of bottoms out. But you know, hope springs eternal.
+
+26:20.000 --> 26:25.680
+All right. So great. So what are we going to do? So what people do when they can't speed things up,
+
+26:25.680 --> 26:29.920
+right? They run a profiler. So there's these profilers, they all basically work the same way.
+
+26:30.720 --> 26:34.800
+You go and you get some result, and it says, hey, here's where my program spent its time.
+
+26:35.440 --> 26:40.880
+You get the number of calls to every function, runtime for each function, and this captures
+
+26:40.880 --> 26:45.360
+intuitively, maybe for most of us, like this is what a profiler should do, right? What do I care
+
+26:45.360 --> 26:50.720
+about? There's frequently executed code or code that runs for a long time. That's where I should
+
+26:50.720 --> 26:56.160
+be focusing my optimization efforts. All right. It seems intuitively appealing. This is the way
+
+26:56.160 --> 27:01.120
+profilers have been written since prof, back, you know, back from like, I don't know, late 60s,
+
+27:01.120 --> 27:07.120
+early 70s. So would this in fact speed up Google? So we're going to do this experiment. We're going
+
+27:07.200 --> 27:11.760
+to go and find the thing that runs for the longest amount of time and where it spends all of its
+
+27:11.760 --> 27:17.600
+time running. And so we're going to run it. And so we go and we do this. And basically,
+
+27:17.600 --> 27:23.200
+it makes the loading thing flash faster. Okay. So, well, guess what? That's frequently executed.
+
+27:23.840 --> 27:30.800
+And in fact, it's the code that runs for the longest time, right? So this is not really great,
+
+27:30.800 --> 27:36.880
+especially if Luke spent like more than a minute optimizing that code. That's a shame. All right.
+
+27:36.880 --> 27:42.480
+So basically in some profilers were developed in an era where everything was synchronous and there
+
+27:42.480 --> 27:48.320
+was a single core. All right. That's not today. Today things are asynchronous or parallel or
+
+27:48.320 --> 27:53.840
+concurrent or a mixed thereof. And profilers don't do a good job in these contexts. So we need to
+
+27:53.840 --> 27:59.600
+do better. So what would be really cool is if we could have something like this. So this is what
+
+27:59.600 --> 28:06.320
+I call a causal profile. So a causal profile tells you visually, like, if I were to speed up this
+
+28:06.320 --> 28:13.040
+component by this much on the x-axis, then the whole program will speed up by this much. All
+
+28:13.040 --> 28:18.800
+right. So this is really nice. Like, if I had this graph, I would know I could spend a little
+
+28:18.800 --> 28:24.960
+effort on the yellow search component and I'll get a big bang for my buck. Eventually, it's going
+
+28:24.960 --> 28:30.240
+to bottom out or top out at like, you know, like 70, 80%. And the red one, I could just keep going,
+
+28:30.240 --> 28:34.240
+right? Like, it gets faster and faster the more I work. And the blue one, I should never,
+
+28:34.240 --> 28:39.120
+never optimize ever. All right. It would be cool to know this, right? It's essentially like an
+
+28:39.120 --> 28:44.880
+oracle coming and telling you, this is the code you should work on, Luke. I don't know where I
+
+28:44.880 --> 28:49.920
+got that way of talking. Anyway. All right. So the question is, how would we know this? Like,
+
+28:49.920 --> 28:54.400
+how would we get this information? Like, how would we know that this change would cause this effect?
+
+28:54.400 --> 28:59.120
+Right? We can't just go and optimize the program by arbitrary amounts and test it. That
+
+28:59.120 --> 29:03.360
+kind of defeats the purpose. So we're going to do something different. We're going to run an
+
+29:03.360 --> 29:11.440
+experiment. And it requires one ingredient here, which I'll refer to as the force. So we're going
+
+29:11.440 --> 29:16.320
+to use magic. And we're going to speed things up magically. And then we're going to measure
+
+29:16.960 --> 29:22.400
+how much the effect was of speeding up each component by a certain amount on overall program
+
+29:22.400 --> 29:28.240
+execution. Okay? So we just keep doing this, right? We get more and more points, right? And then I do
+
+29:28.240 --> 29:32.000
+it for different things. It turns out if I could speed up saving things to the three and a half
+
+29:32.000 --> 29:37.600
+inch floppy, it doesn't make a difference, right? And so on. All right? Now, unfortunately, we live
+
+29:37.600 --> 29:44.320
+in the real world where there's no magic. Sorry. Well, if there was magic, to be clear, this is not
+
+29:44.320 --> 29:50.480
+what we would do, right? I mean, obviously, there are many much better things we could do. I could
+
+29:50.480 --> 29:54.400
+think of people I would like to disappear off the face of the earth, for example. But I could also
+
+29:54.400 --> 29:59.040
+disappear all the runtime off the face of the earth. Because why not? All right? So obviously,
+
+29:59.040 --> 30:03.840
+that's what we would do. So we can't do that. We have to do something else. So what we are going
+
+30:03.840 --> 30:08.960
+to do as our trick is we're going to do something that essentially takes advantage of this notion
+
+30:08.960 --> 30:14.880
+of relativity. So we're going to do a virtual speedup. And a virtual speedup speeds things up
+
+30:14.880 --> 30:19.600
+in scare quotes by slowing everything else down, right? So everything else that's running
+
+30:19.600 --> 30:24.720
+at the same time will then be slowed down. And that will allow us to get the impact
+
+30:24.720 --> 30:30.720
+of how do we sped this thing up? What would the results have been? So here, for example,
+
+30:30.720 --> 30:38.320
+if we speed up the sending of the picture results back by a certain amount, we've slowed down
+
+30:38.320 --> 30:44.240
+everything running concurrently with it. And then that gives us a result of a slowdown, which is the
+
+30:44.240 --> 30:50.160
+same thing as the result of having sped it up. So we actually can get points on this graph
+
+30:50.160 --> 30:54.800
+just by running these experiments. So I just got a point here, and I do it for everything,
+
+30:54.800 --> 31:00.560
+and I get more points. And eventually, I get a graph like this. If I speed up indexing,
+
+31:00.560 --> 31:04.560
+I'm going to get the exact same effect. Indexing is running at the same time as the compression.
+
+31:05.440 --> 31:11.760
+So I get this result, and then bang, I get these results. And again, these are all the results.
+
+31:12.400 --> 31:19.280
+Now, I draw your attention to the one weird blue thing. So the blue thing is slower,
+
+31:20.160 --> 31:25.680
+and it turns out that sometimes optimizing things makes your program run slower. And the
+
+31:25.680 --> 31:32.240
+intuition behind this is you can actually get congestion on a lock, or congestion for a shared
+
+31:32.240 --> 31:37.600
+resource like disk or network. And so speeding things up makes things worse. You would like to
+
+31:37.600 --> 31:44.160
+know this before you get started. That would be a very, very bad day for Luke that might necessitate
+
+31:44.160 --> 31:49.120
+several sequels to recover from. All right, great. All right, so let's dig into Ogil a little bit.
+
+31:50.400 --> 31:55.600
+So what do we care about in Ogil? We care about two things. We care about how long it takes
+
+31:55.600 --> 32:01.920
+between a request and a response, a.k.a. latency. Traditional profilers don't do this at all.
+
+32:02.000 --> 32:05.680
+It's just total runtime. Oh, let me get in my soapbox for one moment.
+
+32:06.800 --> 32:10.480
+Traditional profilers are about end-to-end runtime. You know how your servers are all
+
+32:10.480 --> 32:14.880
+about end-to-end runtime? Or your browser? Like, if only your browser could quit faster.
+
+32:16.800 --> 32:20.640
+So again, like, it was all about, like, here's a program. I run at a console,
+
+32:20.640 --> 32:24.640
+and it does something, and it's done, and that's all I cared about. That's not really today.
+
+32:25.920 --> 32:29.920
+So there's latency. And then the more traditional thing is throughput. Again,
+
+32:29.920 --> 32:33.520
+this is something that profilers do a bad job of measuring because they're all about end-to-end
+
+32:33.520 --> 32:39.840
+execution time. So how fast results come back is throughput. So how are we going to do this?
+
+32:39.840 --> 32:45.040
+So with our causal profiler that I'm going to explain in a minute, we're going to introduce
+
+32:45.040 --> 32:50.080
+what we call progress points. So the notion of progress points is here's a thing I want to happen
+
+32:50.080 --> 32:56.000
+faster, or here's a beginning and an end of things that I want to happen faster. So if Luke
+
+32:56.000 --> 33:01.600
+wants responses to get sent faster, higher throughput, you just mark this particular start of this
+
+33:01.600 --> 33:07.440
+component as a progress point, and every time the code runs, you go and you get another coin.
+
+33:08.160 --> 33:13.520
+And then you can do this simultaneously, many requests for many users, and all of these things
+
+33:13.520 --> 33:18.880
+are incrementing some counter. So these progress points are measuring throughput, and then you
+
+33:18.880 --> 33:22.960
+basically are going to run the experiments and see what the effect is on the rate of those
+
+33:22.960 --> 33:28.160
+progress points being executed. So one point measures throughput. Like I said,
+
+33:28.160 --> 33:32.960
+if I speed up some component, whatever it might be, what is the effect? So now,
+
+33:33.680 --> 33:38.880
+what if I care about latency? So we do the exact same thing. We set a progress point at the beginning,
+
+33:38.880 --> 33:43.440
+a progress point at the end, and then the only thing that has to happen under the covers is it
+
+33:43.440 --> 33:47.920
+has to have a counter. And the counter here measures how many things are in the system
+
+33:47.920 --> 33:54.800
+at any one time. And it turns out that there is this awesome law that holds in a wide variety
+
+33:54.800 --> 34:00.400
+of circumstances called Little's law. And so Little's law says that the latency is essentially
+
+34:00.400 --> 34:05.520
+the number, the average number of transactions in a system divided by the throughput. We already
+
+34:05.520 --> 34:09.840
+know how to measure throughput, so we just take advantage of Little's law and we can translate
+
+34:09.840 --> 34:16.320
+this into latency. All right, great. So we have built a causal profiler for Linux. It already
+
+34:16.320 --> 34:21.520
+ships with Debian and Ubuntu, so if you're using one of those systems, you can install it quite
+
+34:21.520 --> 34:28.960
+easily. So it's just cause-profiler. It's quite easy to run. So you say cause run dash dash dash
+
+34:28.960 --> 34:32.960
+and whatever your program is in its arguments and it fires it off and it starts doing performance
+
+34:32.960 --> 34:38.560
+experiments. All right, I should add it's not entirely true. You do need to place progress
+
+34:38.560 --> 34:42.880
+points. If you don't place any progress points, it will act like an ordinary profiler measuring
+
+34:42.880 --> 34:47.600
+end-to-end execution time. But if you do put in progress points, then it will actually do its
+
+34:47.600 --> 34:53.200
+magic. All right, and this is just some macro, like progress begin, progress end. All right,
+
+34:53.200 --> 34:59.280
+so let's apply this to Augell. All right, I didn't actually build Augell. Neither did Luke,
+
+34:59.280 --> 35:02.960
+but we're going to build it out of pieces like any good programmer would do. So it turns out
+
+35:02.960 --> 35:08.480
+there's this suite of parallel applications that's kind of ready-made for this task. So there's a
+
+35:08.560 --> 35:14.320
+deduplicator that does compression. There's an image comparator. And then there's a database,
+
+35:14.320 --> 35:20.320
+SQLite. That's not in Parsec, but we'll use SQLite too. All right, great. So I'm going to show you
+
+35:20.320 --> 35:24.720
+some fun things we did. This is a well-studied set of applications. People have already tried to
+
+35:24.720 --> 35:30.560
+optimize these and we have covered a bunch of surprising optimization opportunities. So here's
+
+35:30.560 --> 35:35.440
+Ferret. This is actually an older version of what our causal profile looks like. Now it runs in a
+
+35:35.440 --> 35:40.720
+web browser. And you can see that there's these lines of code and it says, boy, if you speed up
+
+35:40.720 --> 35:46.640
+these lines of code, then you're going to get performance increases. Conveniently, these lines
+
+35:46.640 --> 35:51.760
+of code happen to be located in separate chunks of Ferret. So the part that does ranking, the part
+
+35:51.760 --> 35:56.960
+that does indexing, the part that does segmentation. And why is this convenient? I'm not going to
+
+35:56.960 --> 36:01.920
+have to change any code to make this faster. The reason is that what Ferret does is it has this
+
+36:01.920 --> 36:08.640
+pipeline model and it assigns an equal number of threads to every stage in the pipeline. But
+
+36:08.640 --> 36:14.720
+it turns out this one really doesn't need that many threads. So we take away the threads and just
+
+36:14.720 --> 36:21.840
+by reassigning threads, we got a 20% speedup. So this is pretty cool because Caus actually
+
+36:21.840 --> 36:27.600
+predicted it perfectly. So we increased ranking, for example, from 16 to 22 threads. That's a
+
+36:27.680 --> 36:34.640
+27% increase in throughput. And on the graph, that says that that would translate to a 21%
+
+36:34.640 --> 36:43.360
+overall improvement. And that's what we got. So Caus actually works. Good. So we were pretty happy
+
+36:43.360 --> 36:51.360
+with this. We then are going to move on to Ddupe. So Ddupe is pretty hilarious. So here's Ddupe in
+
+36:51.360 --> 36:57.760
+action. I have two pictures, Grumpy Cat 1 and Grumpy Cat Meme. And so now what do I do to
+
+36:57.760 --> 37:02.720
+deduplicate these things? You can see that there's chunks that are the same. So you carve out the
+
+37:02.720 --> 37:08.080
+chunks that are the same and you separate them out into individual pieces. And then an image is now
+
+37:08.080 --> 37:15.200
+represented by the bits and pieces that make up the image. So here Grumpy Cat 1 is this piece
+
+37:15.200 --> 37:20.400
+and Fun Is Awful is this piece. And you saved a lot of memory. So that's what Ddupe does.
+
+37:21.040 --> 37:26.160
+So it does this compression via deduplication and it uses a hash function. So it throws everything
+
+37:26.160 --> 37:31.360
+through a hash table. Great. So it's a pretty standard hash table. You just have some hash
+
+37:31.360 --> 37:36.720
+table. It's an array. It's a bunch of bins. You get a bin number and then you go and you start
+
+37:36.720 --> 37:43.120
+adding stuff to that bin into the bucket. So this all seems straightforward. You hope that it would
+
+37:43.120 --> 37:49.520
+do something like this. The hash table is accessed concurrently by a bunch of threads, but they're
+
+37:49.520 --> 37:55.760
+not idiots. There's not one big lock. It's just all locks, which is naive, but it's fine. But
+
+37:55.760 --> 38:02.160
+surprisingly, cause says that the loop that accesses this list is important. Now, if you know
+
+38:02.160 --> 38:07.440
+anything about hash tables, you know that things generally end up balanced, right? And it's weird
+
+38:07.440 --> 38:11.840
+that you have this sort of situation. So we thought, all right, well, let's just make more,
+
+38:11.840 --> 38:16.560
+more hash buckets, right? But we made a thousand of them. We really should have made a million,
+
+38:16.560 --> 38:22.960
+cause, you know, a million. But anyway. So you would think this would lead to fewer
+
+38:22.960 --> 38:29.120
+collisions, but it had no effect, right? So what else could be causing the collisions? Any guesses?
+
+38:30.480 --> 38:36.320
+The hash function, exactly. Like this is one of those when all other possibilities have been
+
+38:36.320 --> 38:40.880
+exhausted, right? You pick the weirdest one. That's not an exact quote. But anyway,
+
+38:41.840 --> 38:46.320
+well, you're like, how can the hash function be broken? Like we've been using hash functions
+
+38:46.320 --> 38:51.200
+since before Canuth wrote about them. Well, turns out people like to roll their own, cause it's
+
+38:51.200 --> 38:58.560
+fun. And so we did a histogram of the number of items per bucket. So again, I told you there's
+
+38:58.560 --> 39:09.600
+a thousand buckets. This is the histogram. Yeah. Hilariously, what they did is they used the pixels
+
+39:10.240 --> 39:15.920
+that were taken from the image and they sum number of pixels and then added them. But that's
+
+39:15.920 --> 39:21.680
+actually the central limit theorem in action, right? They're random, right? They're independent,
+
+39:21.680 --> 39:26.400
+right? And you've summed them together. And so they actually formed the normal distribution.
+
+39:26.400 --> 39:30.720
+That's not the distribution you want for a hash table. You would like a uniform distribution.
+
+39:31.360 --> 39:40.080
+So literally, we changed one character. We changed the plus to XOR. So this. And we got this.
+
+39:48.080 --> 39:52.560
+So, okay. I'll take the applause, but I mean, it was only a 9% speedup. But
+
+39:53.760 --> 39:58.160
+all right. Nonetheless, it was one character. So I think it's the biggest bang for buck
+
+39:58.160 --> 40:02.800
+ever recorded in optimization effort. So what did it predict? It turned out we can
+
+40:02.800 --> 40:08.080
+also measure the accuracy of the prediction. So we knew that the blocks per bucket went from 76-ish
+
+40:08.080 --> 40:14.080
+to 2. That's a 96% traversal speedup. And again, going back to the causal graph,
+
+40:14.080 --> 40:19.120
+it predicted a 9% speedup, which is what we got, right? So it's working. All right. So finally,
+
+40:19.120 --> 40:26.320
+I'm going to talk about SQLite. So I have no time left. But SQLite is pretty awesome. It's widely
+
+40:26.320 --> 40:32.880
+used, as you all know. But it has this weird thing where it has a kind of strange virtual table
+
+40:32.880 --> 40:38.800
+that they set up at compile time. And so whenever you actually indirect through a config to execute
+
+40:38.800 --> 40:44.000
+a function like pthreadmutexunlock. So you would think, all right, why are you telling me about this?
+
+40:44.000 --> 40:49.440
+Well, everything looks like this. This is an indirect call. Could be a direct call. That would
+
+40:49.440 --> 40:57.440
+be faster. But an indirect call is not that slow. But it's almost the same cost as pthreadmutexunlock,
+
+40:57.440 --> 41:01.040
+which means that you just doubled the length of all of your critical sections.
+
+41:01.920 --> 41:08.160
+So that's not great. So in fact, when you go, so cause will highlight all of these lines and say,
+
+41:08.160 --> 41:16.640
+you should definitely optimize these. So we undid all of the actual indirect stuff and just made
+
+41:16.720 --> 41:22.720
+it so that at compile time, you change SQLite unlock to something so it doesn't do the indirect.
+
+41:22.720 --> 41:30.320
+And it sped things up by 25%. If you look at a traditional profiler, by the way,
+
+41:30.320 --> 41:35.600
+those things are like, this takes 0.0001% of time. You would never consider actually
+
+41:35.600 --> 41:40.480
+trying to optimize that code. So we did it for a bunch of programs. We got some crazy speed ups.
+
+41:40.480 --> 41:46.800
+My favorite is we got a 68% speed up by replacing a custom barrier with a standard barrier.
+
+41:47.680 --> 41:55.360
+Again, people should stop doing things at home. So anyway, so I'm going to conclude.
+
+41:55.360 --> 42:00.800
+So you can take a picture of this to jump to work from our lab, which is plasmaumass.org.
+
+42:00.800 --> 42:05.600
+I talked today about sound performance analysis and effective performance profiling. Everybody
+
+42:05.600 --> 42:08.720
+should go use the cause. All right. Thanks for your attention.
+

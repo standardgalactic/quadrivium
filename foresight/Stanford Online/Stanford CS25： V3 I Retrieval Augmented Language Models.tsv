@@ -1,0 +1,966 @@
+start	end	text
+0	11840	Hey guys, welcome to our last lecture of this quarter.
+11840	15520	And we're very happy to have Dawa here.
+15520	22120	He's the CEO of Contextual AI, the Enterprise LLM company, as well as an adjunct professor
+22120	25120	in symbolic systems here at Stanford.
+25120	29160	And previously, he was the head of research at Clicking Base, and before that a research
+29160	32520	scientist at Facebook AI Research.
+32520	37400	He received his PhD in masters from the University of Cambridge, as well as a master's in logic
+37400	42320	from the University of Amsterdam, and studied philosophy and incognitive AI in undergrad.
+42320	48040	And his work focuses on machine learning as well as NLP, specifically on developing better
+48040	54440	models for language understanding and generation, and better tools for evaluation and many times.
+54440	57480	Yeah, give it up for Adela.
+58480	60200	Thank you.
+60200	64120	So I guess I have to sort of stand here in the corner, so people can see me on this
+64120	65120	move as well.
+65120	70600	Yeah, thanks so much for having me here.
+70600	72280	So I asked Steven what I should talk about.
+72280	77000	There were a couple of things I could talk about, multi-modality or evaluation.
+77000	83520	And this was the preferred topic, I guess, because the others were already covered.
+83520	88600	So yeah, I'm very happy to talk to you about everything retrieval augmentation.
+88600	93080	I think this is really one of the coolest topics right now in our field.
+93080	97800	So I'll just give you an overview of what's been happening and what I think are the interesting
+97800	100920	questions to think about.
+100920	106520	So first of all, obviously, in case you've missed it, we are in the age of language models.
+106520	111200	And I just wanted to do a quick poll here in this not super big audience.
+111200	117120	I guess there's more people on the Zoom, but who invented language models?
+117120	120920	If you thought OpenAI, then I'm angry with you.
+120920	124280	So actually, this is a very, very old idea.
+124280	130000	So the idea is just you take a sequence and you factorize out the token probabilities.
+130000	133040	And so it wasn't invented by OpenAI.
+133040	134840	It's not like a few years old.
+134840	138000	It's actually several decades old.
+138000	141520	So I'm bringing this up because I was talking to someone and they were like, OpenAI invented
+141520	142520	language models.
+142520	145640	And I was like, they're kidding me, right?
+145640	151480	So I went back to the literature and this is the oldest one I could find actually, 1991
+151480	153720	first neural language model.
+153720	159760	There's a very nice paper from 2003 from Bengio where they actually have like word embeddings
+159760	162120	and everything already in there.
+162120	166040	So obviously, these are LLMs, not LLMs.
+166040	171000	And as it turns out, if you make them really big and you parameterize them with these massive
+171000	175800	neural nets, then you get something really powerful that really shows emergent properties.
+175800	179720	And that's why we're also excited in this stuff.
+179720	184400	So if we think about this from like a classic CS perspective, there's input output, right?
+184400	187360	There's this kind of thing in the middle, it's the generator.
+187360	192920	So we take a sequence, the input sequence, and then the task of the model is to predict
+192920	194600	the next token.
+194600	197360	Very, very simple model.
+197360	201480	And so, you know, that's why it was so easy to come up with this in 1991 already because
+201480	204080	it's like the idea is very intuitive.
+204080	209920	But for a long time, what was really broken with this was the user interface.
+209920	215160	And this, I think a lot of people kind of misunderstand what chat GPT was about.
+215160	217200	That's really what chat GPT fixed.
+217200	221840	So that initially you had to come up with these very weird prompts in order to get your
+221840	224880	language model to do what you wanted it to do.
+224880	226840	And humans are terrible at this, right?
+226840	231200	So we're much better at sort of telling people or things around us what we want, right?
+231200	236200	So if we have a dog, we say sit, we don't prompt it in a very weird way so that it sits,
+236200	237200	right?
+237200	238480	And it's the same with the language model.
+238480	243720	If you wanted to generate some red lyrics in the style of a pirate or Shakespeare or
+243720	248080	something, then you tell it generate some red lyrics in the style of a pirate, right?
+248080	253680	So that kind of instruction data actually turns out to be super, super rare in just web
+253680	254680	data.
+254680	258280	So what you need to do is you need to fix the user interface to the language model.
+258280	263560	And the classic recipe for doing that is the sequence basically that chat GPT used.
+263560	265160	So you prompt the model in a specific way.
+265160	269840	You will instruction fine tune the model and you can do some alignment or LHF, whatever
+269840	271960	you do on top of that.
+271960	272960	So that's the first thing.
+272960	277920	So now you have a working language model with a working user interface.
+277920	280560	So are we done then?
+280560	281560	Obviously we're not.
+281560	285160	So right now language models are kind of taking the world by storm.
+285160	289040	But if you talk to anyone, especially in an enterprise, for example, where they have very
+289040	294480	strict accuracy requirements, they will tell you that they can't really productionize this
+294480	295720	yet.
+295720	298680	And the reason is because there are all these familiar problems, probably a bunch of you
+298680	303480	are working on these problems right now around hallucination.
+303480	307120	So these models, they kind of make up stuff very often with very high confidence, which
+307120	311440	is even more scary in a way attribution.
+311440	315520	So we don't really know why these models are saying what they're saying stillness.
+315520	316520	They go out of date.
+316520	320320	And so this was a big problem with sort of chat GPT, not knowing anything that happened
+320320	322160	after a certain cutoff date.
+322160	324080	And they keep updating it every once in a while.
+324080	329040	But you want to have a system that's always completely up to date that never goes still.
+329040	331600	You want to be able to revise the information in the system.
+331600	337320	So if you're a European organization, you have to worry about GDPR, which means that
+337320	342240	you need to be able to remove information from the language model or maybe revise facts,
+342240	343960	which we don't really know how to do.
+343960	350040	So again, this is a very interesting area of study for a lot of folks, model editing.
+350040	353520	But so this is something that we really want to be able to fix.
+353520	357880	And then there's this big question of how do you customize these models?
+357880	359880	So different people have different use cases.
+359880	360880	You have different data.
+360880	364560	If you're a company or if you want to have a language model on your own data, how do
+364560	366840	you make it work on your own data?
+366840	372160	So one of the solutions that everybody has started using right now is to couple it to
+372160	373360	an external memory.
+373360	377200	So that's really just rag, right?
+377200	379840	This whole lecture is basically about rag.
+379840	385880	But the way to understand what is going on here is we have this generator just like before.
+385880	387800	We have the input and the prompt just like before.
+387800	392720	But now instead of just giving those two things, we give this additional context.
+392720	397600	So we contextualize the language model using things we've retrieved.
+397600	400680	And the retriever is very often pretty simple.
+400680	403600	It's just a query in the document encoder.
+403600	408040	And then you get a bunch of documents, you give them as context to the model.
+408040	411200	So super simple architecture.
+411200	416040	And I think it's useful to think about it from the perspective of these two separate
+416080	417840	paradigms.
+417840	421280	So if you've ever taken an exam, I'm sure you have, right?
+421280	424040	You can have a closed book exam where you have to memorize all of this, so you have
+424040	428600	to cram all the knowledge into your parameters, your neurons.
+428600	432160	Or you have an open book exam where you have all of this information in the book that you
+432160	434960	can access when you do the exam.
+434960	436840	So it's a very similar thing with rag, right?
+436840	440200	You can just make it an open book setting where you can give it access to this external
+440280	445920	information, Wikipedia or something else, or basically the entire internet, and then
+445920	451680	have the language model do its job without having to memorize all of it in its parameters.
+451680	456800	So Dr. I think useful distinction here is that cramming everything into your parameters,
+456800	458640	that's the parametric approach.
+458640	464120	So what we're doing with rag is we're adding this non-parametric retrieval component.
+464120	469080	So you might call this semi-parametric if you want to give this a name.
+470600	474920	All right, so why does that actually solve these issues?
+474920	479720	And so the answer is basically that if you have this separate index, right, this separate
+479720	484480	retriever, you can swap it in, you can swap it out, you can replace it with a new index
+484480	486480	so you can really customize it.
+486480	492800	And so you can customize your language model system for what the user really wants to see.
+492800	497040	And then obviously you can update this index, so it doesn't really go still and you can
+497040	501400	revise it if everything goes wrong, if anything goes wrong.
+501400	503560	The other thing you get is grounding.
+503560	507480	So that's initially why I became interested in this kind of architecture, because I was
+507480	511080	thinking a lot about grounding and multimodality and things like that, and actually one really
+511080	515760	nice way to ground things is to find some other information that you can ground your
+515760	516920	generation in.
+516920	521880	So you really want the language model to only say things that it has evidence for in this
+521880	526720	other piece of text, or even multimodal data that it retrieves separately.
+526720	530120	So if you do that, then you get less hallucination, because you can always point back to your
+530120	533160	source, it's always grounded in your source.
+533160	536080	And you get attribution, because you don't know why the model is saying what it's saying
+536080	540880	is because it founded this thing here, is that clear?
+540880	542800	All right.
+542800	549200	So for the rest of this lecture, we're going to talk about this basic architecture.
+549200	552920	And so it kind of looks like a pretty simple thing, right?
+552920	557360	But there are actually lots and lots of questions you can ask about what the system should really
+557360	559000	look like.
+559000	563200	And this doesn't even cover half the questions you can ask.
+563200	568000	So it really is about how do we optimize this entire system?
+568000	573600	So we have the separate components, the retriever, the generator, and then there are things like
+573600	578880	this query encoder, how do we encode queries, how do we do the retrieval, do we update the
+578880	583440	document encoder, or how do we actually define a document, right?
+583440	588720	Is it like a full document or is it a paragraph or a chunk or a sentence or a couple of words?
+588720	591280	So there are lots of questions to ask.
+591280	596800	And as you'll see, there are lots of possible answers to these questions as well.
+596800	601040	So this is what we'll cover.
+601040	606320	So there are lots of architectures going into these questions.
+606320	611320	And I think as we go through them, it's useful for you to think about what happens during
+611320	614440	training time and what happens during test time, right?
+614440	620720	So during training time, it's really, okay, we have the language model, we have this retriever.
+620720	621920	Which one do we update?
+621920	623040	How do we update them?
+623040	624880	How do we train this entire system?
+624880	627120	Do we maybe not train it at all?
+627120	628600	Do we pre-train it from scratch?
+628600	633160	Do we initialize it with components that were already separately trained?
+633160	636400	These are the kinds of questions that you have to answer if you want to design a system
+636400	638000	like this.
+638000	641760	And then during test time, you have this entire system, right?
+641760	647720	So actually multiple models in a way that are working together.
+647720	649800	So there's also different things you can do there, right?
+649800	654480	So give it different indices during test time or manipulate kind of how you're sampling
+654480	656760	things like that.
+656760	661360	So the starting point for all of this stuff, I think if you ask someone now, like, what
+661400	664720	is RAG, they will think of this thing.
+664720	668400	So this is frozen RAG basically.
+668400	669800	There's no training here at all.
+669800	673560	So going back to this question of train time, test time, there's only test time here.
+673560	677840	Train time happens separately with these kind of black box models that we don't necessarily
+677840	679080	have control over, right?
+679080	684120	So there's this document embedding model as whatever is currently at the top of some
+684160	686760	open source leaderboard.
+686760	694160	You use that to get some vectors that you then use to create this vector database.
+694160	698400	And then the vector database just does search and it gives the information from the search
+698400	699840	to the language model.
+699840	703720	And it just passes it as the context, right?
+703720	707800	So this only works because of in-context learning.
+707880	714240	And I think as a machine learner myself, this feels very inelegant.
+714240	721320	So what this lecture is about is, can we do better than this frozen thing?
+721320	725160	So let's start from the left side of this.
+725160	729760	OK, if we want to outperform this frozen thing itself with just the vector database,
+729760	734200	what would that look like from a retrieval perspective?
+734200	738080	And the starting point for everything retrieval is TFIDF.
+738080	741280	Does everybody know what TFIDF is?
+741280	741720	No?
+741720	743080	OK.
+743080	749400	So TFIDF is basically a sparse retrieval method where you have a score function that
+749400	753280	looks at documents and queries, so E and Q.
+753280	755280	And then there are basically two terms that matter.
+755280	760680	One is the TF, the term frequency, and the other is the IDF, the inverse document frequency.
+760720	765160	So this inverse document frequency is actually a really nice idea from Karen Spark-Jones,
+765160	766560	really underrated researcher.
+766560	769080	She's done some amazing work.
+769080	773560	But the basic idea is that you want to look at the words that are very special,
+773560	775880	so that don't occur in lots of different documents.
+775880	779440	And so the overlap between the word the doesn't really matter, right?
+779440	781520	Like the occurs everywhere.
+781520	784040	So you want to have sort of the special words.
+784040	786440	So that's what TFIDF does in a nutshell.
+786440	790040	It gives you a score for document query overlap.
+790040	793760	And then you can do all kinds of things here with how you weigh it.
+793760	797680	So there's all these weird different parameters like this B and things like that
+797680	802360	that allow you to make it better than just having the TFIDF score.
+802360	804520	So there's a couple of tweaks you can do there.
+804520	809400	So BM25, actually, in case you're wondering, stands for Best Match 25.
+809400	814000	So I tried to discover where does the 25 actually come from?
+814000	819160	That's because the preceding 24 experiments failed.
+819160	821520	So it's literally the 25th one that seemed to work.
+821520	824080	And that's why it's called BM25.
+824080	824840	Bizarre.
+824840	828760	But so this is sparse retrieval.
+828760	830000	It's just counting words.
+830000	833880	So you have this massive, massive vector of all these word occurrences.
+833880	836400	It's sparse because most words never occur.
+836400	842200	So it's sort of like a vector of vocabulary size dimensions.
+842200	844880	So most of that is obviously zero.
+844880	847120	But so that's actually kind of a nice property.
+847120	852440	If you want to do fast search on a CPU, because on a CPU sparse product,
+852440	854440	it's very easy to compute.
+854440	861160	So this is used in the system called Dr. QA, which is really one of the first
+861160	867320	neural instances of this open domain, sort of open book question answer in paradigm.
+867320	871760	So you have a question like how many of our cells in habitants, blah, blah.
+871760	875280	So you want to ask basically Wikipedia what the answer is for this.
+875280	878960	So then you have this document retriever based on the sparse.
+878960	882760	So BM25, I think in this case, retrieval methods.
+882760	885480	You pass that to this.
+885480	890640	I think this was still by LSTM at the time, a document reader model.
+890640	894280	And then that model gives you the answer.
+894280	898080	So this, I think, is really the first instance of having sort of this separation
+898080	903000	between a retrieval and a generator system that you use for answering complicated
+903000	907200	questions based on sort of open domain knowledge.
+907200	912800	So after the sparse stuff, there was a bunch of work on dense retrieval.
+912800	917080	And so the advantage of dense retrieval, so this is just like word embeddings,
+917080	920240	basically vectors, like they're dense now, no longer sparse.
+920240	924080	So they're much smaller in terms of dimensionality.
+924080	928960	And a nice advantage of dense retrieval is that it's not really about specific words.
+928960	935040	So if they're synonyms, you can still find the relevant document,
+935040	937720	which you couldn't really do with a sparse representation.
+937720	943400	So that's really the advantage of dense is that you get like semantic similarity.
+943400	946040	So you can do this over word embeddings.
+946040	947440	That doesn't really work all that well.
+947440	950240	But at the time that people started thinking about this,
+950240	951400	Bert was already out there.
+951400	954360	And Bert is really great for giving you a vector representation
+954360	956320	for an entire sequence of words.
+956320	959560	So it sent this representation or a passage representation.
+959560	965200	So there are all these cool systems like ORCA and DPR, the dense passage retriever,
+965200	971800	where they essentially use the retrieval as a kind of latent variable in the system.
+971800	976440	And the way to get the latent variable to work, to be good enough essentially
+976440	981640	to train the entire system, is to pre-train the retriever on relevant information.
+981640	985640	So for ORCA, they do something called inverse close.
+985640	990280	So they do kind of a close task where you want to find passages
+990280	993480	that are sort of relevant to the preceding passage.
+993480	996680	And in DPR, they just train it on the supervised thing.
+996680	1000840	But really, the core idea here is that, as you can see in this graph here,
+1000840	1004560	you can do better than BM25 if you add lots of documents.
+1004560	1007080	And the way you compute the score function is much simpler.
+1007080	1011000	It's just a dot product, right?
+1011000	1013960	So the nice thing about dot products
+1013960	1018760	is that you can do them very, very efficiently on the GPU as well
+1018760	1020560	if you know what you're doing.
+1020560	1025200	So what you really want to get at is Maximum Inner Product Search MIPS.
+1025200	1029160	So this is one of the kind of core ideas of a lot of this stuff.
+1029160	1034560	And you can do MIPS with ANN, Approximate Neighbor Search.
+1034560	1038960	And so there's this really brilliant piece of work out of there.
+1038960	1042200	For my colleagues at the time, I called FACE,
+1042200	1046160	which really underlies all of these modern vector databases, right?
+1046160	1050440	So all the popular ones are sort of re-implementations of this FACE idea.
+1050440	1053680	One is in Rust, one is in Go, but it's all basically the same idea.
+1053680	1056200	It's just FACE.
+1056200	1059800	And so FACE really powers a lot of this stuff.
+1059800	1062720	And whenever somebody tells you something about a vector database,
+1062720	1068200	just think about FACE, very fast dot product.
+1068200	1071080	So obviously, you can go beyond dot product.
+1071080	1071800	Yes.
+1071800	1073600	What is FACE?
+1073600	1075240	What is FACE?
+1075240	1079000	So it's an open source library, Facebook AI similarity search.
+1079000	1080280	Yeah, it's something.
+1080280	1083080	Yes.
+1083080	1086440	No, so it's just basic off the shelf, ANN algorithms.
+1090720	1093160	Yeah, so there are all kinds of different,
+1093160	1096960	I don't know if you would like product quantization and things like that.
+1096960	1100400	So you have a bunch of vectors.
+1100400	1104920	And you can just compute the full dot product, which is sort of inefficient, right?
+1104920	1109400	So what you can do is try to compress subspaces of the vector
+1109400	1113120	and then just look at the kind of centroids.
+1113120	1116560	So you can quantize sub-vectors of the full vector
+1116560	1122280	and then do much faster search over just the centroids.
+1122280	1123000	It's a good question.
+1123000	1123800	Any other questions?
+1127560	1128480	All right.
+1128480	1130640	So about this dot product idea, right?
+1130640	1135920	So what we have here is some people call this a Siamese network, I guess it is, right?
+1135920	1140720	So you have two different BERT models or whatever your encoder is here.
+1140720	1142480	And then at the end, you get these two vectors
+1142480	1145760	and then you just do dot products where you get one single score.
+1145760	1148080	But you can do all kinds of much fancier things
+1148080	1153360	if you're willing to give up on this buy encoder approach.
+1153360	1158440	So a really nice example from one of your colleagues here at Stanford is Colbert.
+1159400	1162880	So what this does is late interaction.
+1162880	1165640	So instead of just having this dot product here,
+1165640	1170560	you have a kind of more complicated version of computing score
+1170560	1175080	where you aggregate over sort of maximum similarity scores between different words.
+1175080	1177920	So I only recently actually discovered that this is called Colbert
+1177920	1180560	because of the late night show Colbert.
+1180560	1186520	So it's sort of Omar's joke actually, this name, but just so you know, if you run into it.
+1188920	1195240	So, but I think if we look at kind of where the state of the art has been going now,
+1195240	1198920	one of the nice things about inspector databases is that they're super efficient, right?
+1198920	1202120	So dot product is much more efficient than this late interaction stuff,
+1202120	1204760	especially if you do the approximate nearest neighbor search.
+1205880	1207880	But there's been some really cool work.
+1207880	1214440	So things like SPLATE, they basically have sparse meat dents in a way.
+1214440	1215960	So one of the big problems, as I said,
+1216040	1219320	with sparse is that you can't really handle synonyms and things like that.
+1219320	1223320	But what you could do is take a dense model, like a bird model,
+1223320	1226600	look at kind of this one word in your sequence,
+1226600	1229400	try to see which other words fit in the same slot.
+1229400	1230840	So that gives you the synonyms.
+1231640	1235880	So now you can give all these synonyms to a sparse vector,
+1235880	1237960	and then you can just do sparse dot product.
+1237960	1240760	And so have a much, much more efficient way to do search
+1241720	1247080	without sort of giving up on all the cool stuff that you get from a dense representation.
+1247960	1249080	So that's one thing.
+1249080	1252360	And this other idea I really like is called dragon.
+1253640	1257720	So this side, I think, is really the best generalized dense retriever.
+1257720	1259640	So if you want to take something off the shelf right now
+1259640	1261560	and just go to hugging face or something,
+1261560	1266440	then this dragon or dragon plus is probably the thing you want to use for a dense retriever.
+1266440	1271400	And the way they train this is through this progressive data augmentation strategy
+1271400	1273480	to make the model better and better over time
+1273480	1275320	by sampling very difficult negatives.
+1276360	1279480	And that gives you very good representations.
+1280840	1282520	And so the other thing about this,
+1282520	1287080	I think this is the only sort of final point about retrieval in general,
+1287080	1289400	is that what we see happening right now,
+1289400	1292040	if you look at sort of the developer community around drag,
+1292040	1294760	is that they're all doing hybrid search right now.
+1294840	1298600	So you can actually just combine the search results from your sparse,
+1298600	1301160	be in 25 or whatever thing or displayed,
+1301160	1303000	and you can combine them with your dragon.
+1303960	1307080	And then you'll get this ranking that works even better.
+1307080	1308760	So then you kind of get best of both worlds,
+1308760	1311800	but then you get all these questions about how do you combine the results.
+1313960	1315560	Any questions on this part?
+1317160	1318120	Oh, can you hear me?
+1318920	1319160	Yes.
+1319880	1320360	Oh, sorry.
+1320920	1325480	On the earlier slide, has there been any work on benchmark,
+1325480	1330920	how much less hallucination rag incurs over closed book question answering,
+1330920	1334280	for example, directly asking the large language model the question,
+1334280	1336360	has there been any benchmarking studies in this?
+1337400	1340680	Yeah, so there's a great paper, if I can say so myself,
+1340680	1343640	on the fact that retrieval augmentation reduces hallucination.
+1344360	1345880	It's from 2021, I think.
+1346840	1350040	So yeah, you can just find, if you literally look for
+1350040	1353080	retrieval augmentation reduces hallucination, then you'll find the paper.
+1353960	1354520	Oh, thank you.
+1357880	1362040	Well, let's see, is there a picture of your dance approach,
+1362040	1363640	and why do you need swaps?
+1364200	1371320	Yeah, so very often you want to have a very precise word overlap
+1371320	1373720	for things where you don't want to have the synonyms
+1373720	1375240	or the kind of nearest neighbors.
+1375240	1379480	So if there's like a brand name or something like that,
+1380040	1382520	then like let's say your brand is Apple,
+1382520	1384360	you don't want to find stuff about Paris.
+1385080	1387320	So that's what you would do with a dance retriever.
+1388360	1392040	So it really kind of depends on what you want to use it for.
+1392040	1393880	That's why hybrid is probably the way to go.
+1395720	1396440	It's a good question.
+1397400	1404040	But with a dance, it's contextualized in many ways.
+1404040	1408040	Should it realize Apple, the company, would be different from that?
+1408040	1408600	No.
+1408600	1411400	So if they were actually contextualized, then yes,
+1411400	1414200	but very often it's a frozen retrieval system.
+1415000	1417640	That's one of the problems with all the frozen rag stuff.
+1422040	1423640	I might be missing something very, very soon.
+1423640	1441160	So the sort of document and the query, they're the same, right?
+1441160	1443320	So they're either sparse or they're dense.
+1443320	1444840	But so if they're sparse,
+1444840	1447800	the components of the vector are literally the other words.
+1447800	1455880	And you just finalized when you're thinking about the thing that creates the names?
+1457800	1459640	How are you getting expressed here?
+1459640	1461160	So it literally counts, right?
+1462040	1466680	So basically it's one big matrix of documents as rows
+1466680	1469240	and the columns are the words in the documents.
+1469240	1472280	And then you just count how often a word occurs in a document.
+1473000	1474200	So that's a sparse.
+1480520	1481000	Yeah.
+1481000	1486440	And so in the field, we call them sparse embeddings or sparse retrieval
+1486440	1488280	because most of that vector is zero.
+1489560	1491880	Because most words don't occur in that document.
+1494040	1495000	Does that make sense?
+1498600	1498840	Cool.
+1499800	1504920	So let's talk about doing slightly better.
+1504920	1508840	So going back to Steven's question about, okay, we have this kind of retrieval thing,
+1508840	1514360	but how do we actually make this retriever good for the context that is going to be used in?
+1514360	1517560	And so can we contextualize the retriever for the generator?
+1518280	1522120	Even if it's a generator where we might not have access to the weights.
+1522120	1526520	So it could be a GP4 model, we just send it to some API, we get some stuff back.
+1527480	1531240	And so one paper I would like is called Replug.
+1532360	1534920	So just to kind of explain what this looks like.
+1534920	1539720	So you have this context, you have a retriever that we do the standard retrieval step with.
+1539720	1540920	This is a dense retriever.
+1541960	1546840	And now, sorry, and now you compute the likelihood.
+1546840	1551320	So basically just normalize the scores that you get for the top K documents
+1551320	1553000	to get a distribution here.
+1553000	1559080	And then you'll give each one of the retrieved documents separately to this generator,
+1559080	1560600	to your language model.
+1560600	1565320	So you can look at the perplexity of the correct answer for that language model.
+1566040	1570280	So now we have these two probability distributions, or two likelihoods essentially,
+1570280	1573880	and we can minimize the KL divergence to make sure that we can actually
+1574520	1580200	retrieve the documents that lead to the lowest perplexity on the right answer for the language model.
+1581400	1584920	So super simple idea, works really, really well.
+1586360	1590920	And the nice thing about this is completely agnostic of what happens upstream.
+1590920	1594600	So this will work for any sort of encoder decoder for any language model.
+1595720	1601320	What you need is a perplexity score, but for most language models you can get that,
+1601320	1602520	not necessarily all of them.
+1603080	1603880	So that's one thing.
+1603880	1606280	And then there's this other really nice approach.
+1607000	1617400	So in the retriever, you're literally updating the dense representations,
+1618040	1618280	right?
+1618280	1620840	So your encoder basically for your dense representation.
+1620840	1622920	That's a good question, we'll get into that a little bit more.
+1624600	1629800	So there's another paper on in-context retrieval augmented language models,
+1629800	1635400	where the whole paper is basically about just doing BM25 and just giving stuff directly
+1635400	1637960	through the context of the language model and things kind of work.
+1637960	1644280	So it's sort of frozen rag, but even more primitive in a way where the retriever is
+1644920	1648120	this very old sparse algorithm, but it works really, really well.
+1648920	1653160	But then they have this really awesome section where they show that you can just
+1653160	1660200	have this reranker on top of the BM25 results, and you can backdrop into this reranker.
+1660200	1663160	So now you still keep the language model completely fixed.
+1663160	1666680	So that's sort of this part of the loss here.
+1666680	1669320	So you have kind of a stop gradient on the parameters data.
+1669320	1670680	That's just your language model.
+1671240	1676920	But now you have this kind of rank function here that you can backdrop into, right?
+1676920	1678200	So that's your reranker.
+1678200	1681720	It's basically it can be a burden model or anything like that that works on top of the things
+1681720	1684040	you initially retrieved from your BM25.
+1684040	1687240	And now you have this birth reranker that you can backdrop into.
+1688760	1691320	So this also works really, really nice.
+1691320	1696760	So we're slowly progressing towards having a system that is much more optimized for
+1696760	1701960	being properly retrieval-augmented in a way where it's useful and contextualized for what
+1701960	1702920	you want to use it for.
+1704840	1708280	So yeah, just to point out kind of what that looks like with this reranker.
+1708280	1710840	So you just have this extra step essentially, right?
+1710840	1714920	So we have our retriever, then we have our reranker, then we have our generator and our output.
+1716600	1718680	Any grades to the language model?
+1719800	1721000	No, not necessarily.
+1722280	1725400	So for this one, you do, yeah.
+1725400	1727160	But so for a redeplug, you don't, right?
+1728680	1729560	Yeah, for this one.
+1729560	1731960	Yeah, yeah, yeah.
+1731960	1733880	So basically, yeah, you need to get-
+1733880	1735560	Do you guys provide them?
+1735560	1736200	Not all of them.
+1737160	1741080	Some of them do, but yeah, there are all kinds of tricks you can do on top of that.
+1743960	1749240	So basically, the question is how do we get sort of gradients flowing into this, right?
+1749240	1754040	So if you don't actually have access to the full parameters of the model so that you can backprop
+1754040	1760120	all the way through it, then you can do a reinforce style loss on the retrieval,
+1760120	1764360	and then you just pass the kind of log likelihood if you have access to that,
+1764360	1766040	or some other kind of black box function.
+1771480	1779080	All right, so the next thing you can do is to optimize both the retriever and the generator.
+1780200	1786600	And so this really starts getting to the proper kind of contextualization of the entire architecture
+1786600	1788840	where you want everything to work together, right?
+1788840	1793240	So rather than having this frozen thing where everything is basically not aware that the other
+1793240	1794040	part exists, right?
+1794040	1795240	It's like two halves of the brain.
+1795240	1796760	They're not talking to each other.
+1796760	1798920	One is your retriever, the other is your language model.
+1798920	1799720	There's no connection.
+1799720	1803400	They're just like sort of like something is thrown over the fence and then you hope for the best.
+1803960	1807160	So instead of that, we have everything much closer and learning together.
+1808120	1816280	So one of the first ways of doing this with the generator was ragged retrieval augmented
+1816280	1819160	generation, which we did at fair in 2020.
+1820440	1823720	And it's very similar to what we've already seen.
+1823720	1827320	We basically have this retriever here that works over different documents.
+1827320	1833560	You get some score function that gets given to this generator that generates the answer.
+1833560	1838040	And now you want to backdrop all the way and update your generator as well, right?
+1838040	1841880	So in the previous two architectures, we saw you keep the generator fixed,
+1841880	1846040	you backdrop into your retriever, but here we update everything.
+1846600	1852280	Well, not exactly everything as you'll see, but we'll also update the part of the retriever
+1852280	1853080	and the generator.
+1854440	1859080	So in this ragged model, we actually have two different ways of doing this.
+1860040	1862360	It's probably something that when we talk about this,
+1863480	1867880	if you think about this long enough, then you'll think like, okay, but when actually do I need to
+1867880	1874120	retrieve? Do I retrieve every time I generate a new token or do I just retrieve once and then
+1874120	1880600	generate an entire sequence, right? Or maybe I want to retrieve every end tokens, right?
+1880600	1883400	So these are hypergrams, or maybe I want to learn when to retrieve,
+1883400	1885720	as we'll see that's also something people have done.
+1886360	1888840	So these are two different ways to do it.
+1890040	1895000	And what we do in this paper, basically the whole point of the paper is that this frozen thing
+1895000	1897320	doesn't really work all that well, right?
+1897320	1902920	So I think what people call rag now is usually referred to the frozen thing,
+1903480	1907320	but the whole paper basically would never have been accepted anywhere if we had just done the
+1907320	1912280	frozen thing, right? The whole point of the paper is that you want to optimize it.
+1912280	1916920	And so at my company contextual, we call this frozen thing Frankenstein's monster,
+1916920	1920280	because it's really like you cobble together these different pieces, right?
+1920280	1924600	You sort of, yeah, it's really like Frankenstein, you just put it together and then it sort of
+1924600	1928600	walks, you know, but it doesn't really have to solve, it doesn't really actually work,
+1928600	1933640	because not the real thing. So that's great for everyone here, I think,
+1933640	1937960	because there are so many opportunities to do better than what most people are using right now.
+1937960	1946680	So one of the limitations of the original rag architecture is that it only supports a very
+1946680	1952360	small cave. So if you have lots and lots of documents, then the problem is that you have
+1952360	1958040	to fit all of them in the context, but how do you really get that to fit, right?
+1958040	1965080	So one thing you can do is you first encode things so that you get one single representation,
+1965560	1969720	or only diffuse for the top level representations, then you concatenate those,
+1969720	1975880	and then you just feed them to the decoder. So this is FID fusion and decoder. And as you can see,
+1975880	1983960	this scales to a much higher number of passages. And that leads to corresponding improvements in
+1983960	1990520	the scores that you care about. So that's a really cool idea. And so we're slowly moving
+1990520	1995240	towards more decoder-only architectures. So in rag, we have this barred model,
+1995240	1999400	it's sort of an encoder-decoder architecture, but here you just have this decoder that
+1999400	2008520	does some fancy attention over stuff that you retrieved before. And so another pure decoder
+2008520	2016600	language model architecture is this one, KNNLM, which I think is very elegant in its simplicity.
+2016600	2022040	So it's basically, you just have a normal language model, but you interpolate the normal
+2022040	2028360	language model weights with things that you retrieved. So basically, you have some sort
+2028360	2034040	of prompt, right? So like Obama's birthplace is, you go to your big corpus, you find similar things,
+2034760	2040360	you look at the words that come next to the similar things, you rank that thing,
+2040360	2046200	you sample your top K, you renormalize that. So now you have a bunch of scores, and now you
+2046200	2051800	can just interpolate between your retrieved kind of non-parametric memory scores and your
+2051800	2056600	parametric language model scores. So this is very late fusion in a sense, right? At the very
+2056600	2062040	end, you combine these two, and it allows you to reweight the pure language model probabilities
+2062040	2067960	or like this. So this works really well, and it scales especially well if you have a huge
+2068920	2073560	retrieval corpus. And so if you have trillions and trillions of tokens in there, you can have
+2073560	2079160	a much smaller language model that does not that much heavy lifting because you can really rely on
+2079160	2085880	this big source corpus that you're working from. And so that idea was exploited by this paper called
+2085880	2092680	Retro out of DeepMind, where they showed that you can have a 25 times smaller retrieval augmented
+2092680	2098360	language model trained from scratch, so really pre-trained entirely from scratch, that outperforms
+2098440	2103880	this 25 times bigger language model on the same data in terms of complexity, which is pretty
+2103880	2109800	impressive. So this architecture is much more efficient than a parametric model because you
+2109800	2115640	can rely on this external memory. So if your external memory is big enough, you can get pretty
+2115640	2122120	huge gains. So there was a lot of excitement about Retro when it was announced, but this is a DeepMind
+2122120	2127320	paper, so there's really no open source, nothing really to validate that this actually works.
+2128600	2133720	And so very recently, there has been a bit of work from NVIDIA called Retro++,
+2135320	2140760	where they have this hybrid between the Retro architecture and then they do basically RAG,
+2140760	2146440	sort of they put the top one or the top K results in the context of the language model after all.
+2146440	2151880	So it's sort of a crossover between RAG and Retro, and they showed some really nice results here,
+2151880	2157880	but I think it's sort of pointing to this big flaw, I think, is that why is there still no
+2157880	2163880	good open source Retro model? It probably tells you something about whether it actually really
+2163880	2169800	works. I spent a lot of time in my career trying to reproduce DeepMind papers that didn't necessarily
+2169800	2177640	always work. And so I think the same is true for Retro, and that's why we need to do this
+2177640	2180680	in-context RAG on top of Retro to actually get it to work.
+2192680	2197880	So doing retrieval over that big corpus is not that difficult, actually.
+2199480	2204680	So there are even distributed face packages, you can just do everything yourself.
+2205640	2211480	Yeah, so in terms of compute, it's actually not that hard anymore to reproduce something like this,
+2212280	2216280	but I've tried several times and it's not really reproducible.
+2217240	2221400	So the only way to get it to work is if you do this in-context RAG on top of the Retro thing,
+2221400	2226040	and then as you can see here in the results, then it actually gives you a gain over the pure GPT
+2226040	2230920	model. So it starts from a GPT and then they kind of retrofit as they call it the GPT model.
+2231880	2236600	So in short, I think there's still a lot of work to be done in pre-training these systems,
+2236600	2241640	really from scratch. And Retro kind of showed that it might be possible, but we don't necessarily
+2241640	2246440	know exactly how to do it the right way. And this is really one of the interesting open questions.
+2248360	2249560	Any questions on that?
+2253880	2254360	Online?
+2258920	2259400	No? Okay.
+2261160	2271880	Then we'll move on. So let's go all the way with the contextualization now. So with Retro and with
+2271880	2279080	RAG, what we actually did is we only updated the query encoder. So updating the document
+2279080	2286280	encoder is very expensive. So one of the first papers, actually kind of the OG of the non-frozen
+2286280	2291880	dense retrieval augmented methods is this paper called Realm. This is really like visionary
+2291880	2299240	work. This was basically the first kind of version that did this properly, where they updated it
+2299240	2305480	all the way, including the document encoder. So can someone explain to me why it's expensive to
+2305480	2313960	update the document encoder? So let's say we have a trillion tokens in our corpus.
+2314920	2321000	So now we go all the way. So we basically do a forward pass. We get a gradient at the end.
+2321000	2325160	Now we back propagate the gradient through the retriever. We update the query encoder.
+2325160	2330040	Now we have to update the document encoder. So what do we then need to do after we've updated
+2330040	2336760	the document encoder? We need to re-encode the entire internet. So basically every single gradient
+2336760	2342920	update, we have to re-encode whatever our index is. So if this is like trillions of tokens, it's like
+2342920	2347480	re-encoding the internet after every batch update. So that's not very efficient.
+2349240	2354680	Well, I think it does look like we've got a very general international change. So if you learn
+2354680	2360040	digital or other sort of stuff, like if you basically take your old activations and that sounds
+2360040	2364120	like a long, unpredictable change to your entire business. Yeah.
+2366920	2371960	Yeah, that's one way to do it. So there are a bunch of different ways to update the
+2371960	2377880	document encoder. So what they do in Realm is they basically do it for te batches.
+2378520	2382680	Then they stop, they re-encode the entire internet, and then they train again.
+2383400	2388520	So it's sort of asynchronous updates. They have this very fancy sort of sharding mechanisms
+2388520	2394520	where they take down certain parts of their entire index and then update them kind of on the fly.
+2395720	2399880	So you can do it. It's just very expensive. So one of the things that a lot of people have been
+2399880	2406360	thinking about, not exactly the Laura idea, but similar versions of that are around, like,
+2406360	2410760	can you make it more efficient so that you don't have to do this asynchronously?
+2412920	2418600	So one of the downsides of this Realm architecture is that it's really just a BERT model, but then
+2418600	2422360	you do this retrieval augmentation on a BERT model with other BERT models. So it's not really
+2422360	2428200	generative. It's not really gen AI in the modern paradigm. But if you want to read one paper
+2429160	2435320	on this topic, like, this is a very good one to read. The other one that is really, really good
+2435320	2444520	to read is this paper called Atlas. So Atlas is, so this is out of fare with a bunch of folks,
+2444520	2451080	the folks who did, like, RAG, and the folks who did FID, and really a brilliant set of people.
+2451080	2457160	And this is really a comprehensive analysis of everything that's happening in this architecture.
+2457240	2461160	So the first question they really look at is, how do we train this retriever? So we've seen
+2461160	2467080	a couple of versions of this, but which one actually works better? They haven't really
+2467080	2472200	been compared in a head-to-head setting. So one thing is we have this FID style sort of
+2472200	2478040	attention distillation. So that's really too complicated to go into detail here, but the
+2478040	2485320	others are actually very simple. So one is this loss we've basically seen before. So we've seen
+2485320	2490200	this, I think, with the in-context RAG one. So we have a stop gradient on the language model,
+2490200	2496200	and then we update the retriever. The other one is what we've seen with Replug. So this is basically
+2496200	2503480	exactly the Replug loss. So we have the KL divergence of the documents and sort of the
+2503480	2508920	improvement that you see when you give it that document. The other thing they have is basically
+2508920	2514520	the inverse of that one. So if I take this one document out, how does that affect my
+2515560	2522360	perplexity of the language model? And so this one I think is actually quite elegant because
+2522360	2528280	that really gets to like, how valuable is this one single document for me answering this question
+2528280	2537000	correctly? So they compare all of these different versions, and what you can see is that the kind
+2537080	2541640	of Replug style loss and this leave one out loss, they performed a lot better than all of these
+2541640	2546120	others. So this fixed retriever or no joint pre-training, these are really kind of the
+2546120	2552520	baseline sort of frozen RAG models or closed book. And as you can see, you can do really a lot better
+2553160	2558920	if you optimize things. And so this leave one out thing is probably the best I would say.
+2560040	2565000	So then the other question is how do you actually like train that entire system? Like what data or
+2565000	2570600	what tasks do you train this on? So they also experiment with a bunch of different versions.
+2570600	2577960	So one is doing prefix lm, if you're familiar with that. So they basically take a chunk that
+2577960	2583240	occurs somewhere on the internet, and then they predict the next chunk from that chunk. So it's
+2583240	2588280	really like sentence to sentence. So maybe like skip thought back in the day, but now you have
+2588280	2594680	this retrieval step where you predict the next sentence. Then they just do T5 styles or denoising.
+2594680	2600200	So that's mass language modeling if you're familiar with T5. And then they have this title for section
+2600200	2606120	generation piece. So I think the takeaway from this table is basically that whatever you do here,
+2606120	2611160	so they're using T5 models. So whatever you do here needs to be the same that your language
+2611160	2620440	model expects. So for T5, that's T5 style loss. And then the next sort of final question that
+2620440	2625480	they look into going back to what we talked about, how exactly do we update this retriever?
+2626200	2631560	So do we have to update the document encoder? Or do we maybe have to do some sort of re-ranking?
+2632200	2638360	Or do we maybe just update the query? And quite surprisingly, I think they find that just updating
+2638360	2644360	the query. So like in your original RAD paper is actually already basically good enough in many
+2644360	2650040	cases. So that's nice because it's much more efficient if you don't have to update your documents
+2650040	2656520	all the time. I think the real question here though is like, how good is your document representation
+2656520	2661720	to begin with? So you need to have a very, very high quality embedding model for this to work.
+2661720	2666440	If you don't have that, then this will not work. But if you do have that, then you get a very nice
+2666440	2676280	kind of query site fine tuning thing. So the Atlas paper is about trying to do few shop
+2677240	2681720	sort of language modeling tasks. So it's how many examples are given in the context.
+2686680	2692680	Yeah, so the main takeaway here is that if you compare like the close book equivalent model
+2692680	2701000	to the retrieval augmented model, you see very big improvements. That's really the only takeaway
+2701320	2709480	of this entire section. But I think that that's really saying something in terms of what we should
+2709480	2720360	be thinking about. How much time do I have until? Okay. All right. Other questions?
+2720360	2737080	Yeah, so there can be different. So in Atlas, the Atlas basically tries everything. So they also
+2737080	2742520	tried to see what happens if I train this on Wikipedia, but I swap in like a sort of common
+2742520	2749560	crawl index. And I think so in Atlas, but also in retro domain finding is just the more the better.
+2750760	2756040	So it's really just like the bigger your index, the more likely you are to find the exact
+2756040	2759480	right thing and then make the right prediction.
+2765080	2771320	Any other questions on this? Oh, yeah. Sorry. This is a question about the generator in the,
+2771320	2780760	I guess, the RAG system. So recently I saw a paper on Mistral 7B. So it introduces a lot of these
+2781400	2786680	new architectural changes like the sliding window attention to handle longer sequences at a smaller
+2786680	2792840	cost and the group query attention for faster inference. I'd like to like know your thoughts on
+2793400	2799560	designing a generator specifically for RAG, leveraging, for example, where Mistral 7B
+2799560	2804440	currently is. Because for example, like the sliding window attention, I could see how that
+2804440	2811240	could be adapted to the RAG case. Yeah. So maybe you're agreed on sort of what makes Mistral's
+2811240	2815720	special is a bit different from mine. So I don't think that the sliding attention window thing is
+2815720	2819880	actually that interesting. The reason Mistral works so well is because it's trained on a lot of data.
+2820680	2824520	You can do that more efficiently because you have sliding window attention. So you don't need to
+2824520	2831960	attend to everything. But so to answer your question, I guess you're asking sort of about the
+2831960	2837640	architecture of the generator if you know that there's going to be a retriever. So I think
+2838360	2845560	that's basically what Retro tried to do. So Retro actually, some of the people on the Retro paper
+2845560	2852760	are at Mistral now. So they have this chunk cross attention idea here. So you basically
+2852760	2857800	have a language model, but the way it does attention over the things you retrieve in your
+2857800	2866280	Retro architecture, they kind of get integrated into a model, not using the standard attention
+2866280	2873160	mechanism, but using this slightly different chunk cross attention. Okay. So I think the
+2873160	2879480	sliding window attention point I was trying to get at was that it uses a fixed window so that
+2879480	2885720	whenever you're doing the query key computation with the query vectors and the key vectors,
+2885720	2893480	you're using a fixed window attention. So I think my idea was to actually, one, use a dynamic window
+2893480	2900360	because for example, the rag case, if you use a fixed window when you're doing attention, it is
+2900360	2907240	possible that you actually are leaving, you're only looking at a fixed span of information. So if you
+2907240	2913320	could maybe adapt Mistral so that you could make it better for the rag case in, for example,
+2913320	2919400	the making the fixed window size, the dynamic window. Yeah. Yeah, I think it's an interesting
+2919400	2926840	idea. So for me, what Mistral is doing with the sliding window, that's basically like a confnet.
+2927400	2932280	So we had all these convolutional like light confnets where we would have word embeddings,
+2932280	2937080	and you would do confolutions over it and then pull, and then you would still get the information
+2937080	2942120	out. So it's not that the sliding window prohibits you from looking earlier, it's just that that
+2942120	2950760	happens higher up in your transformers. So I think that definitely is an interesting
+2950760	2958440	direction to think in. Yeah, so I think it's like not too crazy to say, are there any architectural
+2958440	2963320	changes that we can introduce into these seven billion parameter models so that they could be
+2963320	2972200	better adapted to the rag case? Yeah, so there might be. Yeah, I think one question is just how
+2972200	2978760	do you do the attention over things you've retrieved, which is what you're doing. Yeah, thanks.
+2980600	2987560	So just to make sure I understand, I mean in this retro model, you're retrieving each block,
+2988520	2993960	and when you struggle about putting a retrieval in the context, are you saying that you'll need to
+2993960	3000520	do it at the beginning and you don't do it at the block? Yeah, so in context, so it's not exactly
+3000520	3009160	every layer, so it's every token, so every step basically, not every block, so it doesn't make
+3009240	3018360	sense. So it's not every layer that you're doing a retrieval. Yeah, so every step. So this is kind
+3018360	3024600	of like what rag token is, so you retrieve every token, so you generate and then you can retrieve
+3024600	3029640	again, or in the case of retro, you can generate like a chunk and then you retrieve chunks again.
+3031080	3035480	If you look at the in-context case, you retrieve once at the beginning and then you give it.
+3036200	3051800	So here you don't actually give it as context at all, like directly to the model, right,
+3051800	3056040	so here you let the decoder kind of attend over it.
+3056040	3066600	Yeah, so I don't think cross-attention really works, yeah.
+3071800	3072600	Other questions?
+3073800	3079560	Yeah, inside the in-context case, the retrieving of the retriever is not necessarily,
+3079720	3086840	because of the large distribution loss, so I'm wondering inside of the cases, like what cases
+3087640	3094120	are really necessary need to evenize updates, or anyways updates for this argument.
+3095160	3100520	Yeah, so you do want to update the retriever, right, but only part of the retriever is necessary to
+3100520	3109400	be updated for a lot of these cases, but so I think it, so these are very specific data sets,
+3109400	3114920	right, natural questions, Wizard of Wikipedia and Fever, so they're really very kind of knowledge
+3114920	3121640	intensive tasks, so in that case, if you already have a very good system like DPR that is specifically
+3121640	3127640	pre-trained for those tasks, then you only need to update the query encoder, but so I would expect
+3127640	3133320	that if you move beyond this to kind of general language modeling things like retro, then you
+3133320	3138200	probably do want to update the document encoder, at least in a way where you can skate it.
+3139400	3147320	So I believe that in this part, it's very knowledge intensive, and actually a couple of
+3148120	3157080	very important topics, as long as we have a good office around knowledge of what
+3157960	3166600	many of the documents by those good models. Yeah, but so you need to learn how to kind of query
+3166600	3173400	into that index, right, so if you don't do that, then yeah, you don't get really good
+3173400	3177880	performance, so that's sort of like your closed book performance, right, if you just have the
+3177880	3182680	language model and you're just like, what does the parametric model on its own without the
+3182680	3187400	retrieval, what does it actually know? As you can see, there are pretty big gaps there, right.
+3187720	3195320	Other questions? Otherwise, I will cover other questions.
+3198840	3205880	No? Hello? Yeah, go for it. Okay, question, like so what about like more hierarchical retrieval,
+3205880	3210120	like I suppose there'll be methods trying to not just retrieve a single chunk, but there's some
+3210120	3215160	kind of like groups of chunks or something, or some rise versions. There's been some
+3215160	3220040	interesting work on doing that where you first tried to find, so you can have multiple indices
+3220040	3223720	and they can kind of cascade, right, so first you want to find the relevant document,
+3223720	3227480	so you have some document representation and then within that document you want to find the
+3227480	3233000	relevant chunk, so you can do it sort of that direction, you can also do it in reverse, I think
+3233000	3237480	I have something on a slide there where you can find the chunk and then sort of expand
+3238360	3244120	the context around it and then give that to the language model. So I think yeah,
+3244120	3246200	there are all kinds of interesting things you can do there.
+3248360	3254520	Cool, thanks, I guess another thing just like can you compare RAG versus like long context
+3254520	3260200	so efforts, so like there are lots of things like around just having a really long context and the
+3260200	3268120	extreme it could replace RAG, but I don't know like if it takes. Yeah, so everybody understands
+3268120	3273160	this question, right, so there's a trend where we want to have very long context language models,
+3273160	3277960	so that basically you can like take Harry Potter or something, just put it in the context and then
+3277960	3282920	ask a question like what is the name of like Harry Potter's owl or something, right, and then it can
+3282920	3289320	just attend over the entire thing. So attending over all of Harry Potter to answer that one question
+3289320	3295800	is super inefficient, right, so most of Harry Potter has nothing to do with the owl, so but you
+3295800	3301080	are still kind of reading it if you do it with the long context window, so that's why I think
+3301080	3306200	the doing it the RAG way where you have this non-parametric component is a much more efficient
+3306200	3310920	way to solve this problem, and if you actually look at the literature on long context windows,
+3311800	3317800	the way they solve the problem of scaling the attention mechanism is by making it very sparse,
+3318440	3322600	so they're basically turning it in, so that's a different kind of sparse, but they're turning
+3322600	3328200	it into a non-parametric retrieval problem kind of behind the scenes, so they're not actually
+3328200	3332440	all that different, if you want to scale long context then you're going to move towards a RAG-style
+3332440	3342600	architecture. Cool, thanks. All right, so let's talk about some other interesting questions,
+3343240	3349560	so one thing and I already alluded to this is when do we actually retrieve, so very if we're
+3349560	3355720	doing like if we want to like retrieve every token that's also very inefficient because I probably
+3355720	3361480	don't have to retrieve to generate the, right, I can probably do that on my own with the language
+3361480	3367160	model, it's sort of a waste to go and retrieve stuff, but if I only retrieve once at the beginning
+3367160	3373000	of the sequence that's probably also not great, so what we ideally want to be able to do is to say,
+3373000	3376680	okay sometimes I want to retrieve, sometimes I don't want to retrieve and I'm going to learn
+3376680	3384600	when I want to kind of expend the compute budget on doing the retrieval, so a nice paper where they
+3384600	3389480	have a stab at, this is called FLARE for active retrieval augmentation where they basically have
+3389480	3394840	the language model decide when it should do a search and what it should do the search for,
+3396520	3402440	so I think this fits in a general trend that you can see in the field around kind of agents,
+3402440	3409160	so we can talk a little bit more about that too. So this other question that I think we've also
+3409160	3413720	kind of covered already here is how do we train this at scale, so we can do these asynchronous
+3413720	3419560	updates, we can do re-rankers, we can do query side only, there's this really nice paper which is
+3419560	3427400	quite close I think to the idea you proposed where you first use BM25 to create a batch basically
+3427400	3434440	where everything is very similar in terms of what you've retrieved and now you have this kind of
+3434440	3439480	in-batch update, so it's sort of like a re-ranker where you encode the information that is just in
+3439480	3444840	your batch using this other model and now you can update this model on the fly, so you don't have
+3444840	3450600	to worry too much about doing the full kind of document side update and again here what really
+3450600	3454840	matters is like how big is your index, if you have an amazing index you can basically solve
+3454840	3460600	any problem just by looking it up, so rather than cramming it into your parameters you can just find
+3460600	3470120	it. This is a really nice paper called SILO, so one of the interesting things I think that's going
+3470120	3475000	to happen in the next year or two around language models is there and you've seen this already,
+3475000	3479880	there's a bunch of lawsuits against OpenAI and other places around where does the data exactly
+3479880	3487560	come from, so one very elegant solution I think is to have a RAG system that you train on data that
+3487560	3494120	you know is safe, so you can train that thing on Wikipedia but now during test time you can give it
+3494120	3500280	a data store that has maybe slightly riskier information in it, so this massive index of
+3500280	3506760	all the stuff on the internet including some things that are maybe higher risk, you can still
+3506760	3511720	have them in your index but your language model, your retrieval augmented language model I should
+3511720	3515640	say, you know that that thing is safe because it was trained on data that is public domain,
+3516360	3520360	so that's what they do in SILO and they show that that works really well, so that's
+3521240	3526520	one possible solution to a lot of the kind of compliance and legal risk around language model
+3526520	3536920	deployments. There's a great paper also from one of your colleagues around context getting lost in
+3536920	3541160	the middle, I think this is also kind of a fascinating phenomenon, this is on a frozen RAG system
+3542120	3549800	but language models are very similar to humans in what things they pay attention to, so if you
+3549800	3554680	give them a bunch of things that you retrieve, what they will look at are the first things you
+3554680	3560040	list and the last things you list and they will sort of ignore the middle, so if it actually
+3560040	3565240	respected the rank function then this curve would get down all the way, but it sort of goes up,
+3565880	3572040	so I think that's a very interesting observation which kind of shows that how brittle
+3572760	3578120	these these systems can be, so if you have a frozen RAG system it can be very very brittle where
+3578120	3582680	like the order of the retrieved context matters a lot in whether you get the right answer or not.
+3584520	3589960	It doesn't work on treating this as a very funny problem in the sense that the colleagues come back
+3589960	3595400	or those of like specifically going towards the interpretation, I'm going to try it out for that
+3595400	3607080	period that's going to inter-product with just the RAG. Yeah, so what I just described, somebody
+3607080	3611720	asked like how do you actually, so I said there are other ways to do this and then the question
+3611720	3618040	was how do you do that, so the way you do that is using reinforce, so yeah there has been work on
+3618040	3623480	doing that, so some of the older papers were playing with this, but one of the big problems with,
+3625400	3630440	so I think the replug solution is sort of more elegant for solving that problem
+3631000	3635640	because you actually do signal from the language model and if you just do reinforce it's very
+3635640	3641480	high variance, so it's going to be super finicky if you don't want to destroy your index,
+3643080	3644040	but people have tried it.
+3649000	3656920	So there's some really nice work from OpenAI where they basically show and again we're sort of like
+3656920	3662440	thinking more and more about agents here, where they show something very similar to the flare
+3662440	3666840	results from earlier with active retrieval that doesn't necessarily have to be some index that
+3666840	3672520	you only can read just some web search, and obviously in this case you don't really have
+3672520	3676840	access to the web search necessarily, so Bing or whatever they use here is not going to update
+3676840	3682200	these parameters, but I just wanted to kind of put this in your mind like this is another thing
+3682200	3688600	you can do, and if we take this really to the general form then you can think of language
+3688600	3695000	models as just tool users, so rather than just retrieval augmenting language models we can tool
+3695000	3699640	augment language models and retrieval is just one of the many tools that language models have access
+3699640	3706440	to, we can have re-rankers and things on top of the outputs of these tools, and so one of the big
+3706440	3712920	questions I think is how do you actually get the system to learn stuff, so we're going to need RL if
+3712920	3721880	we want the system to really learn how to take these actions properly, and so yeah this has been
+3721880	3727320	taken to the extreme in this sort of self-reg architecture where they have this sort of retrieval
+3727320	3732280	step and it's active and then you criticize it and then you basically do some natural language
+3732280	3736840	inference and all of that just with one language model to answer the questions.
+3738760	3743080	So the other missing piece, so I'm just kind of going through a bunch of open questions
+3743640	3748280	that people have looked at, but feel free to interrupt me if there's anything you want to know,
+3749400	3753880	but so instruction tuning we established at the beginning of the lecture that this is pretty
+3753880	3760600	important for getting things to work, so fixing the user interface, but the instruction tuning
+3760600	3764920	has almost always only happened on the language model and not on the entire system,
+3764920	3769880	so I think one of the interesting things that people are looking at now with things like RADT
+3769880	3774360	and Instruct Retro is how can we instruction fine-tune an entire retrieval augmented system,
+3774360	3779720	so all the way into the retrieval step can we generate data so that that also follows the
+3779720	3783720	instructions properly, which currently doesn't happen in any of these model architectures.
+3783720	3790040	And then finally, I think I would be remiss if I didn't really talk about
+3790760	3794840	what people call advanced RAG, so like the developer community has been really doing
+3794840	3800360	some awesome stuff, so like frameworks like Lamaindex and Langchain and there's all these
+3800360	3804920	open source vector databases like Chroma and Weaviate and they're all sort of about making
+3804920	3810280	RAG really easy, but this is all frozen RAG, right, but even with frozen RAG you've been
+3810280	3816120	really doing incredible things, so we mentioned some of these already, so child-parent recursive
+3816120	3821480	retrievers, so you find small parts and then you give the big parts around it to the language model,
+3821480	3826200	you can do hybrid search where we use reciprocal rank fusion, so we have like different search
+3826200	3830360	results that we didn't combine before we give the final thing to the language model.
+3831000	3835800	There's zero shot like a large language model remanker, so basically the score function is not,
+3835800	3839000	it doesn't come from your retrieval, it comes directly from the language model,
+3839960	3844840	and then hypothetical document embeddings which I think is a really cool idea, so you just,
+3845560	3851400	basically you fix hallucination through hallucination, so you get a question, then you let
+3851400	3855720	the language model hallucinate a bunch of possible answers, then you go and search for
+3855720	3860120	nearest neighbors to the possible answers and you give those as context and then it gives the right
+3860120	3866040	answer based on that, so it was really like hallucinating answers, I think it's a brilliant
+3866120	3872840	solution, so there's a lot of stuff happening in the kind of frozen rack community too that I think
+3872840	3880440	is very interesting to look at, so just to wrap up, kind of looking at the future of this stuff,
+3881640	3885960	there are still lots of very interesting open questions, so if you're a student thinking about
+3885960	3894200	how to solve any of these, I think you can have quite a lot of impact, so how exactly do we do
+3894200	3899240	the pretraining of this architecture and do we even need to pretrain, I think even retro kind of
+3899240	3904840	shows that you don't necessarily have to pretrain, so maybe there's something wrong with how we do
+3904840	3909800	that, what do skating laws look like, so I think there's a really interesting question here around
+3909800	3915560	if I have a huge index and a very rich encoder of all the information in that index, maybe I can
+3915560	3920760	move, so basically decouple all the memorization to this index, so I have a language model that
+3920760	3925240	doesn't know anything, it just speaks English, it just sort of reasons on top, but it has no
+3925240	3929480	knowledge because that always comes from this retriever, if you can do something like that then
+3929480	3934600	you get very interesting scaling trade-offs, so you can have a tiny language model and do your
+3934600	3939880	retrieval to do a lot of the heavy lifting with your retrieval, which is nice because that's a
+3939880	3945160	cached computation, so you already have the embeddings, you just need to do the dot product,
+3945960	3949240	so it's much more efficient than kind of self-attention in the language model.
+3950840	3957000	Can we move beyond by encoders, so vector databases, I like people who build vector
+3957000	3963720	databases, but I'm not sure how long we're going to keep vector databases, because I think
+3964280	3969400	re-rankers probably work just as well and the N25 is much more efficient than a vector database,
+3970920	3977560	so I don't really see why we need dedicated vector databases, so what we're seeing, but maybe
+3977560	3983480	this is a bit of a critique of Silicon Valley investment strategies and things like that, but
+3983480	3989000	a lot of these vector database companies are basically becoming database companies now,
+3989000	3994680	so they are adding all this sparse stuff because the dense thing is not enough, and as it turns out
+3994680	4000280	there are a lot of pretty good sparse databases out there already, like Postgres and things like
+4000280	4006200	that, and there are also all adding vectors to their databases, so I think that's all going to
+4006200	4015080	kind of coalesce into databases. So I think there are some interesting things to look at
+4015800	4021960	for kind of the data, so through this instruction problem, can we generate much better data for
+4021960	4027080	training RAG systems synthetically, and then I think there's this massive open question around
+4027080	4031560	how we actually measure whether the RAG system is any good, so right now we just look at downstream
+4031560	4037720	performance, which is sort of okay, but if you mess up the retrieval it's very hard to measure,
+4038920	4043800	but how to measure whether your retrieval is right is also very difficult, so there are some
+4043800	4048520	frameworks where they try to take like the harmonic mean of your retrieval accuracy and your language
+4048520	4054040	model accuracy, but I think those are also very shoddy because we don't really have very good
+4054040	4058840	data sets to measure that on, so I think that's a very cool problem to work on as well.
+4059720	4065720	So the other problem that I personally am always very excited about is multimodality,
+4067000	4073720	and so why would we stop with RAG systems with just text, so you can do the same with images,
+4074280	4079320	you can augment language models with vision, so we did this work on lens where we have a
+4079320	4085720	language model enhanced to see, where you can just give kind of a computer vision pipeline,
+4085720	4090040	just like a retrieval pipeline and give that to a frozen language model and pass it to the
+4090040	4095320	context and that system actually is an amazing visual question answering system. It's close to
+4095320	4100760	state-of-the-art sort of flamingo from DeepMind, which is also very hard to reproduce because
+4100760	4108840	there's no open source version of that, so we've done some early work on this in 2021 where we
+4108840	4114280	have this cross-modal retrieval and there's some more recent work out of FAIR where they also look
+4114280	4118920	at this, so I think that's really like if you look at the trend in the field like multimodality
+4118920	4123560	with GPD4 or V and things like that is really a hot topic, so everything is kind of going in
+4123560	4132040	that direction, so it's an interesting thing to think about. So overall I think it would be nice
+4132040	4138280	if everybody sort of moves away from RAG 1.0, the frozen Frankenstein RAG and moves towards this much
+4138280	4143960	more kind of optimized version RAG 2.0, so it's really about systems over models, right, it's
+4143960	4147800	not just your language model when you're retriever and they're kind of separate, it's about thinking
+4147800	4152600	from the from a system's perspective about the entire thing and the problem you're trying to solve
+4152600	4157640	and so I think that really is the way that in deep learning things have always progressed,
+4157640	4162360	where if you optimize the system end-to-end that's always going to win out, like back in the day in
+4162360	4166840	computer vision or NLP, we have like parsers and scene parsers and all this kind of stuff and all
+4166840	4172600	of that just doesn't exist anymore now because we optimize the system end-to-end and so that's
+4172600	4177640	what's going to happen here too. So if we take that to the extreme, like there's a chunker thing
+4177640	4182040	in your documents, right, like cutting it up into pieces, like you could backdrop into debt,
+4182040	4189560	like why not? Somebody should really do that and so yeah, I think like trading off cost and quality
+4190360	4194200	and zero-shot domain generalization, that's really like where this stuff is going to come in, right,
+4194200	4199080	so language models right now, they're amazing but very often they're way too expensive for being
+4199080	4203800	deployed somewhere where you can actually make money from them if you're in a company. So what
+4203800	4208760	you want to do is make it much more efficient and have the right cost quality trade-off and the
+4208760	4213640	easiest way I can think of is to do it through retrieval augmentation but obviously I'm very biased.
+4215720	4222040	So yeah, that was all I had actually. So if you're interested in this, I'm at Samford so I can
+4222040	4226760	work with you on research projects on these topics or if you want you can also join contextual
+4226760	4234040	because we work on this stuff every day. Thank you. Well, sorry, I had a question from earlier.
+4235880	4241240	Yeah, I think you said something really, really, I think really super helpful earlier about
+4241240	4246600	Miss Jill 7B. You talked about, you compared the sliding window attention to convolutional neural
+4246600	4250040	networks and I do see the parallel because with convolutional neural networks you have
+4250680	4254760	several layers of, several different layers of convolutional layers and the top convolutional
+4254760	4260120	layers are able to see a larger receptive field than the bottom convolutional layers
+4260120	4267720	and with convolutional layers you're able to tune the filter sizes and the strides so you're able
+4267720	4272520	to see a different receptive field and I was wondering if you could see that same innovation
+4272520	4277960	in Miss Jill 7B by tuning because you have different transformer layers and if each transformer
+4277960	4283000	layer will have a span over a different set of tokens and you can tune I guess the transformer
+4283000	4287720	architecture the way you tune those convolutional layers, the filter sizes, the receptive field,
+4287720	4291720	perhaps we can do some optimization in the transformer realm that we have already done
+4291720	4297880	in convolution layers. Yeah, I think that's a good idea. There's a great paper on light
+4297880	4304040	convolutions I think from Michael Auli and David Gange and a bunch of people where it's basically
+4304760	4309560	this came out at exactly the same time as the transformer and the transformer is slightly
+4309640	4314840	more optimized for GPU computation but the convolutional model was actually slightly
+4314840	4321400	better than the transformer so it's definitely worth exploring. Okay, cool, thanks.
+4321400	4338520	Yeah, so it depends on the problem I think what you probably want to do is
+4338520	4344280	is sort of cast a white net with VM25 and then just narrow it down with dense search
+4345080	4349560	so you often see that kind of as a two-stage process where the first one is kind of noisy
+4349560	4354120	you can add noise actually to your retrieval and then you use the dense one to filter it down.
+4356760	4362680	Yeah, everyone's trying to maybe adapt their plug-in model to almost
+4362680	4369240	the only specific area. I think there are many two ways of project one way is to use
+4369240	4375080	some instrument tuning in some kind of learning way or functionally like tuning that and another way
+4375080	4382520	is to the main project of this lecture is using the virtual augmented way. So I wonder if I
+4383160	4390680	know a message of virtual augmented way, do you think the capacity or the quality of virtual
+4390680	4395640	augmented way can be matched with those tuning methods I think or kind of learning?
+4395640	4401960	Yeah, so I think actually what's going to happen is that all of this will come together right so
+4402920	4408440	if you actually train things like end-to-end, rack 2.0 style then you can also fine-tune that system
+4409000	4415720	on some use case end-to-end. So why would you just take the retrieval augmented system if you can
+4415720	4419640	also fine-tune it on the thing you care about? So I think in the end everybody's going to do
+4419640	4423640	all of those things and then there's questions like how do you do that efficiently so that's
+4423640	4430520	why you would use adapters or things like that. I think there was another question.
+4432920	4437320	I'm curious about hardware, you say it's going to become database kind of thing,
+4437320	4444440	in fact it was part of the database but what about retrieval hardware and you know it's mine
+4444440	4451160	because we've got so much of the learning part but what about because it's huge,
+4452360	4457000	tree as I said so do you have any ideas it's just a database problem?
+4457000	4464280	So I don't know if I'm allowed to say this exactly actually but so one of the biggest chip
+4464280	4469880	manufacturers that recently their stock has done really well they have some dedicated retrieval
+4469880	4480200	hardware coming out I think sooner it might already be out. So yeah very efficient dense
+4480200	4488280	retrieval is a very big business. Other questions?
+4499160	4504920	Yes I think so if you take it to the extreme so one of the big problems right now is that
+4504920	4508440	if you contextualize an existing language model that already hallucinates
+4509160	4513000	then then it's going to be kind of hard to get rid of the hallucination right so if you do
+4513000	4519880	replug on GPT-4 GPT-4 might still hallucinate so you could basically just ignore all the stuff
+4519880	4524200	you retrieved and just do whatever it wants anyway so that's one of the reasons why you
+4524200	4528680	want to train the system end to end and if you take that to the extreme where like I said right
+4528680	4534200	if you can just have the language model only reason and speak so it knows English and reasoning
+4534200	4539640	but it has no knowledge which all comes from somewhere else then you can't hallucinate and so
+4539640	4551080	it's really all grounded in whatever is in your index but they're so they're about hallucination
+4551080	4555320	I'm sort of frustrated that a lot of people in the field misunderstand what hallucination even
+4555320	4560520	means like so a lot of people are conflating hallucination with a correctness or incorrectness
+4560520	4564520	so they're like oh the model made a mistake it hallucinated it's like no it made a mistake
+4565320	4570280	that's different from hallucination hallucination I think is very specific kind of I've retrieved
+4570280	4576600	something so I have some sort of counterfactual ground truth and what I'm saying does not correspond
+4576600	4584600	to that ground truth and so yeah I think there's a bunch of folks at Stanford also working on better
+4584600	4587480	measurements of hallucination and definitions and things like that
+4597560	4603960	yeah awesome ground truth right so so hallucination is really like there there is something that is
+4603960	4609000	true right so so if we're talking about like hallucination and yeah so if we're talking about
+4609000	4613640	just general parametric language models then sort of the ground truth is whatever we consider to be
+4613640	4621960	true right but we had to work for like language models making mistakes before it was called major
+4621960	4634120	mistakes yeah ground truth I guess this is solving that helps me to question that path
+4634760	4639560	are you working on ground truth per se that's around you know if I generate the building
+4640120	4646680	saying oh well I'm a president I mean everything all the time are you sharing work on that on this
+4647720	4653960	yeah so so I like the sort of silo uh mansion error as well so I think the whole point is that you
+4653960	4660120	can you can have different indices and different definitions of ground truth and so um I think
+4660120	4666600	you could say I only trust uh archive or I only trust like peer review papers and not just archive
+4667480	4671240	so you can make decisions in your architecture during test time about what you
+4671240	4678440	define as ground truth and I also think actually that and there's a bunch of work I think happening
+4678440	4683400	on this right now you can control for how how grounded you want it to be in your ground truth
+4683960	4688920	so that's another kind of misconception about hallucinations like sometimes hallucinations
+4688920	4693000	are actually good right if you have a creative writing assistant and you wanted to come up with
+4693000	4698440	some cool new ideas you want the language model to hallucinate uh so I think what you want to have
+4698440	4702680	is kind of a tunable knob where you say like oh now you can hallucinate and now maybe you should
+4702680	4706840	like really tell me the truth only
+4711720	4714840	anything else
+4715160	4727960	yeah so but the temperature that's just about how you sample right so how flat your your distribution
+4727960	4737640	is that you sample from yes but so even if you have a low temperature it can still come up with
+4737640	4742360	random stuff right so it just says that then you're very likely to do like really sampling
+4742920	4754200	um so so I think what you want to get at is is something more sophisticated than that
+4756920	4762200	yeah I like the question

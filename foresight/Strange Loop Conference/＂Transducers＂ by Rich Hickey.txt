@@ -1,0 +1,738 @@
+Transducers. Of course, everything is just some combination of the same ingredients.
+The shell is on the outside, the inside, the cheese is in, it's on top, whatever. I'm not claiming any novelty here.
+This is just another rearrangement of the same old stuff as usual. But, you know, sometimes the cheese on top, you know, tastes better than when it's inside.
+Alright. So, what are transducers? The basic idea is to go and look again at map and filter and see if there's some idea inside of them that could be made more reusable than map and filter.
+Because we see map and filter being implemented over and over again in different contexts, right? We have map and filter on collections, we have map and filter on streams, we have map and filter on observables.
+We were starting to write map and filter and so on on channels and there was just, there's no sharing here, there's no ability to create reusable things.
+So, we want to take the essence out and see if we can reuse them. And the way that we're going to do that is by recasting them as process transformations.
+And I'll talk a lot more about that, but that's essentially the entire idea. Recasting the core logic of these, what were sequence processing functions as process transformations and then providing context in which we could host those transformations.
+So, when I talk about processes, what am I saying? It's not every kind of process. There are all kinds of processes that cannot be modeled this way, but there are a ton of processes that can, right?
+And the critical words here are that if you can model your process as a succession of steps, right? And if you can talk about a step or think about a step as ingesting an input, as taking in or absorbing some input, a single input.
+So, something going on, there's an input, we're going to absorb that input into the something going on and proceed. That's the kind of process that we can use transducers on.
+And when you think about it that way, building a collection is just one instance of a process with that shape, right? Building a collection is you have the collection so far, you have the new input, and you incorporate the new input into the collection and you keep going, right?
+But that's a specialization of the idea. The general idea is the idea of a seeded left reduce of, you know, taking something that you're building up and a new thing and continually building up.
+But we want to get away from the idea that the reduction is about creating a particular thing and focus more on it being a process. Some processes build particular things, other processes are infinite.
+They just run indefinitely. So, we made up words. Actually, we didn't make up a word. Again, this is actually a word. But why this word?
+Well, we think it's related to reduce, and reduce is already a programming word, and it's also already a regular word, and the regular word means to lead back, right?
+To bring something back. And we've sort of, the word has come to mean over time to bring something down or to make something smaller.
+But it doesn't necessarily mean that. It just means to lead it back to some, you know, mothership, and in this case we're going to say this process that we're trying to accomplish.
+The word ingest means to carry something into, so it's the same kind of idea, but that's about one byte, right? Reduction is about a series of things, and ingest itself means one thing.
+And transduce means to lead across. And the idea basically is, as we're taking inputs into this reduction, we're going to lead them through a series of transformations.
+We're going to carry them across a set of functions. So we're going to be talking about manipulating input during a reduction.
+So this is not a programming thing. This is a thing that we do all the time in the real world. We don't call them transducers. We call them instructions, right?
+And so we will talk about this scenario through the course of this talk, which is put the baggage on the plane.
+And that's the overall thing that we're doing. But I have this transformation I want you to do to the baggage, right?
+I want you to, while you're doing it, while you're putting the baggage on the plane, break apart the pallets.
+So we're going to have pallets, you know, big, you know, wooden things with a pile of luggage on it that's sort of shrink wrapped.
+We want to break them apart, so now we have individual pieces of luggage. We want to smell each bag and see if it smells like food.
+If it smells like food, we don't want to put it on the plane. And then we want to take the bags and see if they're heavy, and we want to label them.
+Right, that's what you have to do. So we're talking to the luggage handlers, we say, that's what you're going to do.
+And they all say, great, I can do that. One of the really important things about the way that was just said and the way you talk to luggage handlers and your kids and anybody else you need to give instructions to,
+is that the conveyance and the sources and the sinks of that process are irrelevant.
+Right, do the luggage handlers get the bags on a conveyor belt or on a trolley?
+We didn't say, we don't care. In fact, we really don't want to care. We don't want to say to the luggage guys today, there's going to be luggage on a trolley, do this to it, and then put it on another trolley.
+And then tomorrow when we switch to conveyor belts, have them say, we didn't know what to do.
+We came on a conveyor belt and like, I have rules for trolleys.
+So the rules don't care, the instructions don't care. This is the real world. Then we have programming. What are we doing programming?
+We have collection function composition, we're so cool. We have lists, we have functions from list to list.
+So we can compose our functions. We're going to say, well, labeling the heavy bags is like mapping, right?
+Every bag comes through and it gets a label or it doesn't. But for every bag that comes through, there's a bag that comes out and maybe it has a label or it doesn't.
+And taking out the non-food bags is, or keeping the non-food bags, is a filter. It's analogous to filter.
+Is it food? We don't want it. If it's not food, we're going to keep it. So we may or may not have an input depending on this predicate.
+And unbuttling the pallets is like map cap. There's some function that, given a pallet, gives you a whole bunch of individual pieces of luggage.
+So we already know how to do this. We're done. We're finished. Programming can model the real world.
+Except there's a big difference between this and what I just described happens in the real world, right?
+Because map is a function from whatever, collection to collection or sequence to sequence or pick your programming language.
+But it's basically a function of aggregate to aggregate. And so is filter and so is map cap, right?
+And the rules that we have only work on those things. They're not independent of those things.
+If we have something new, like a channel or a stream or observable, none of the rules we have apply to that.
+And in addition, we have all this in-between stuff. It's as if we said to the luggage guys, take everything off the trolley, trolley, right?
+And unbutton the pallet and put it on another trolley, right? And then take it off that trolley and then see if it smells like food.
+And if it doesn't, put it on another trolley. And then take it off that trolley. And if it's heavy, put a label on it and put it on another trolley.
+This is what we're doing in programming. This is what we do all the time, right?
+And we wait for a sufficiently smart supervisor to come and, like, say, what are you guys doing, right?
+So we don't want to do this anymore, right? We don't have any reuse, right?
+Every time we do this, we end up writing a new thing, right? A new kind of stream. We have a new set of these functions, right?
+You invent Rx. Boom. You know, it was 100 functions. We were starting to do this enclosure, right?
+We had channels, and we're starting to write map and filter again. So it's time to say, time out. Can we do this?
+Because there are two things that happen. One is, all the things we're doing are specific, and the other is, there's a potential inefficiency here, right?
+Yeah, maybe there are sufficiently smart compilers, and maybe for some context, they can make the intermediate stuff go away.
+Maybe they can. The problem is our initial statement really doesn't like what we normally do. It's not general. It's specific.
+We're relying on something else to fix it, right?
+We also have this problem, right, where we're going to go from, you know, one kind of conveyance to another.
+And now, all of a sudden, well, you know, map is from X to X, and whatever, you know, how do we fix this?
+And I know what everybody's thinking, of course.
+Yeah.
+So, I mean, that may fix some of this, but in general, it doesn't solve the problem.
+And the problem is mostly about the fact that we're talking about the entire job, right?
+Those instructions, they were about the step. They weren't about the entire job. The entire job was around it.
+While you're doing this thing, here's what you're going to do to the inputs.
+Here's how you're going to transform them, while you're doing the bigger thing, which could change, right?
+We could change from conveyor belts to trolleys and stuff like that.
+So we want to just take a different approach, right?
+If we have something that's about the steps, we can build things that are about the whole jobs, but not vice versa.
+Okay. So, there's just going to be some usages here, and then I'll explain the details in a little bit.
+Because usually I do it the opposite way, and people are like, oh, my brain hurt for so long.
+And then, like, 40 minutes in, you show me the thing that made it all valuable.
+So here's the value proposition, right? We make transducers like this.
+We say, I want to make a transducer. I want to make a set of instructions.
+I'm going to call it process bags.
+I'm going to compose the idea of map catting using unbundled pallet as the function, right?
+So I want to unbundle the pallets.
+Then I want to filter out the non-food, or keep the non-food, filter out the food.
+And I want to map labeling the heavy bags.
+And in this case, we're going to compose those functions with comp,
+which is Clojure's ordinary function composition thing.
+So map catting, filtering, and mapping return transducers.
+And process bags, which is the composition of those things, is itself a transducer.
+So we're going to call map catting, call filtering, call mapping,
+get three transducers, compose them, and make another transducer.
+Each transducer takes a process step, or it's reducing function,
+and transforms. It changes it a little bit.
+It says, before you do that step, do this.
+I'll explain why that seems backwards in a little bit.
+Having made those instructions, we can go into completely different
+Contexts and reuse them.
+Amongst the several contexts that we're supporting in Clojure in the first
+Version is supporting transducers in intu, and intu is Clojure's
+Function that takes a collection and another collection and pours one
+Into the other. Instead of having, you know, more
+Object-oriented, you know, collections that know how to absorb
+Other collections with build from, we just have the standalone
+Thing called intu, but it's the same idea.
+Your source and destination could be different.
+So we want to pour the pallets into the airplane, but we're going to
+Take them through this process bags transformation first.
+So this is collection building. Intu was already a function in
+Clojure. We just added an additional
+Arity that takes transducers. Then we have sequence.
+Sequence takes some source of stuff and makes a lazy sequence out of it.
+Sequence now additionally takes a transducer and will perform
+That transformation and all the stuff as it lazily produces results.
+So we can get laziness out of this.
+There's a function called transduce, which is just like reduce,
+Except it also takes a transducer. So that takes a transducer,
+An operation, an initial value, and a source.
+So the transducer is a modification of process bags.
+I'll talk about in a second. The operation is sum.
+The initial value is zero and the source of the pallets.
+So what does this composition do? What is this going to do?
+It's going to sum the weight of the bags. It's the weight of all the bags.
+So it's cool. Look, we can take the process that we already had and
+Modify it a little bit. We can add weighing the bags at the end of that
+Set of instructions and that gives us a number and we can use that number
+With plus to build the sum.
+So that's transduced. The other thing we can do is go to a
+Completely different context now. So we have some channels.
+We're going to be sending pallets of luggage across channels.
+But they don't really fit. But the idea is there.
+This is a very different context. Channels run indefinitely.
+You can feed them stuff all the time and get stuff out of the
+Other end on a continuous basis. But the critical thing here is
+That these things are not parameterized.
+They're not, i'm a thing that you can tell me later.
+You're going to tell me if it's trolleys or conveyor belts.
+This is the exact same process bags i defined here.
+This concrete thing being reused in completely different
+Context. So this is concrete reuse, not
+Parameterization. So we can use transducers on channels.
+The channel constructor now optionally takes a transducer and
+It will transduce everything that flows through.
+It has its own internal processing step and it's going to
+Modify its inputs accordingly with the transducer it's given.
+It's an open system. I can imagine, but i did not get time
+To implement, that you could plug this into rx java trivially
+And take half of the rx java functions and throw them away.
+Because you can just build a transducer and plug it into one
+Observable function that takes an observable and a transducer
+And returns an observable. And that's the idea.
+So we call all of these things into and sequence and transduce
+And transduceable processes. They satisfy the definition of
+Process we gave before. And they accept a transducer.
+So transducers have two parts. You make functions that create
+Transducers and in context where they make sense, you start
+Accepting transducers. And then you have these two
+Orthogonal legos you can put together. Inside each process,
+They're going to take that transducer and their internal
+Processing function. So what's the internal processing
+Function of into? The thing that adds one thing to a
+Collection. In closure, it's called conge for conjoin.
+Similarly, inside lazy sequences, there's some
+Thunk mechanism that produces a result on demand and then
+Waits to produce the next thing. So that has a step inside of it
+That can be transformed this way. Channels also take inputs
+Somewhere inside channels is a little step function that adds
+An input to a buffer. That step function has exactly the
+Same shape as conge. And as laziness.
+So it can transform its fundamental internal operation.
+But the operation remains completely encapsulated.
+The transducible context takes the transducer, modifies its
+Own step function and proceeds with that.
+So as i said before, there's nothing new.
+Two papers i find useful for helping you think about these
+Things are lectures and construct functional programming
+Which is a lot closer to the source of when people started
+Thinking about folds and their relationship to lists.
+And the second grand paper is a summary paper which summarizes
+The current thinking at the time it was written.
+So they're both really good. But now i'm going to take you
+Through how do we get to this point? How do we think about these things?
+So one of the fundamental things that the bird paper and the work
+That preceded it talk about is the relationship between these
+List processing operations and fold. In fact, there's a lot of
+Interesting mathematics that shows that they're the same thing.
+That you can go backwards and forwards between a concrete list
+And the operations that constructed it. They're sort of isomorphic to each other.
+So many of the list functions that we have can be redefined in
+Terms of fold. There's the definition of map in several
+Talks here, i think. But the traditional definition of
+Map says if it's empty, return empty sequence, if you're
+Getting a new input, cons that input onto the result of mapping
+To the rest of the input. It's recursive and calls itself.
+But map does that, filter does that, map cat does that.
+They all have these structures. But filter is a little bit different.
+It has a predicate inside. It has a conditional branch.
+And then it then it recurses in two parts of the branch with different arguments.
+So what this work, this earlier work did was say you can think about
+All these things as folds. If you do, you get a lot of regularity
+And things that you can prove about folds which are now all uniform
+Will apply to all these functions that otherwise look a little
+Different from each other. So there's a lot of value to this.
+Fold encapsulates the recursion. And it's easy to reason about.
+If we look at a redefinition of map, it's not often defined this way.
+But if we look at a redefinition of map in terms of fold,
+Then we say we're going to fold this function that cons is the first thing onto the rest.
+And we start with an empty list. So this is fold, fold right.
+And we do that over a collection. We can similarly define filter this way.
+And what's really interesting about these things is that the fold are the empty list
+And the call, that's all boilerplate, right? It's exactly the same.
+Map and filter are precisely the same in those things.
+All that's different is what's inside the inner function definition.
+And even there, there's something the same.
+So it ends up that you can similarly redefine these functions
+Or define these functions in terms of fold L.
+And fold L is just left reduced.
+And so here's some what if definitions of map and filter.
+And we added map cat that are left folds that use left reduced.
+And so the trade off between left reduced and right reduced
+Is right reduced sort of puts you on the laziness path
+And left reduced puts you on the loop path.
+It ends up that the loop path is better and faster and more general
+For the kinds of things we want to apply this to.
+Especially if we can get laziness later, which I just said we kind of could.
+So we like that. So this means we can turn these things into loops.
+Because reduced becomes a loop.
+But the same thing. We have the boilerplate. We have reduced.
+These definitions use vectors, which in closure are like arrays.
+But their fundamental conging operation adds at the end.
+So this has the same shape I want to talk about for the rest of the talk.
+We have something that we're building up, a new input,
+And we produce a new thing. And sort of the stuff's coming from the right
+And getting added to the right-hand side.
+So it just makes more sense here. So these are eager and they return vectors.
+But it's the same idea. We're reducing.
+We have a function that takes, you know, the vector so far.
+And a new value. We're conjoining the new value.
+Having applied f to it, right? That's the idea of mapping, right?
+There's an idea behind mapping that luggage handlers understand, right?
+Put the label on everything that comes through.
+It's very general, right? That's mapping.
+They get that. We get that. We're all human beings.
+We understand the same thing. As programmers, we've mucked this up.
+Because look at what's happening here.
+Map says there's this fundamental thing that you do to everything as it comes through.
+Filter says there's this fundamental tiny thing that you do to everything as it comes through.
+And map cat says there's this fundamental tiny thing that you do to everything as it comes through.
+What's the problem? Conge.
+Conge is basically like saying to the trolley or to the conveyor belt, right?
+It's something about the outer job that's leaked or it's inside the middle of the idea.
+Inside the middle of the idea of mapping is this conge.
+It does not belong. Inside the middle of the idea of filter is this conge.
+It shouldn't be there. Same thing with map cat.
+This is specific stuff in the middle of a general idea.
+The general idea is just take stuff out.
+We don't want to know about conge. Maybe we want to do something different.
+So again, we have a lot of boilerplate. We have these essences.
+And the other critical thing is the essences can be expressed as reducing functions.
+Each of these little inner functions is exactly the same shape as conge.
+It takes a result so far and a new input returns the next result.
+So to turn those inner functions into transducers,
+we're just going to parameterize that conge, right?
+We're going to parameterize the old-fashioned way with the function argument.
+Anything higher order, blah, blah, blah.
+We're going to take an argument, which is the step.
+So right in the middle body of this mapping...
+You can't see my cursor.
+Right in the middle body, this is the same as it was on the last slide.
+This is where it said conge. Now we say step.
+We put that inside a function that takes the step.
+So this is a function.
+Mapping takes the thing that you're going to map, you know, label the baggage.
+And it returns something that is a function that expects a step.
+What are we doing? Putting stuff on conveyor belts.
+What are we doing? We're putting stuff on trolleys.
+Okay? And it says, before I do that, I'm going to call f on the luggage.
+I'm going to put a label on the luggage.
+But I don't know about luggage anymore.
+The step you're going to tell me later. What are we doing today?
+Conveyor belts or trolleys? Conveyor belts. Cool.
+I got the rules. I understand how to do mapping and filtering and map catting.
+So same thing, filter.
+And what's beautiful about this is what's the essence of filtering.
+Apply a predicate, then maybe you do the step, or maybe you don't.
+There's no stuff here, right? It's a choice about activity.
+It's a choice about action. Same thing with concatenate, cat.
+What does it do? It basically says, do the step more than once.
+I'm giving you an input that's really a set of things.
+Do it to each thing. And map catting is just composing
+Mapping cat, which it should be.
+Okay. So we can take these transducer returning functions.
+So mapping returns a transducer, filtering returns a transducer,
+cat is a transducer, and map catting returns a transducer.
+And we can then plug them into the code we saw before.
+Like, how could we define map now that we've made mapping into this abstract thing
+that doesn't really know about lists or vectors anymore?
+And what we do is we just call mapping. That gives us a transducer.
+It says, if you give me a step function, I'll modify it to do F first on the input.
+And we say, okay, here's the step function, conge.
+Now I rebuilt the functions I had before.
+Except conge is not inside mapping and filtering and map catting anymore.
+It's an argument. Woo-hoo!
+We now have the essence of these things, a la carte.
+And that's the point.
+Transducers are fully decoupled.
+They don't know what they're doing.
+They don't know what process they're modifying.
+The step function is completely encapsulated.
+They have some freedom.
+They can call the step function, not at all, once exactly per input
+or more than once per input.
+But they don't really know what it does, so that's what they're limited to doing,
+using it or not using it.
+That's pretty much it.
+Except they do have access to the input.
+So when we said map cat, unbundled pallet,
+the function we're supplying there is something that knows about pallets.
+It doesn't know about conveyor belts.
+It doesn't know what the overall job is, but it knows about pallets,
+and it's going to know how to turn a pallet into a set of pieces of luggage.
+There's a critical thing about how they use that step function that they've been passed,
+and it goes back to that successor notion I mentioned before.
+They must pass the previous result from calling the step function
+as the next first argument to the next call to the step function.
+That is the rule for step functions and their use, and no others.
+They can transform the input argument, the second argument.
+So let's talk a little bit about the backwards part,
+because this is a frequent question I get.
+What did you do?
+Does transducers change comp?
+That is the first thing.
+They ruin comp or something like that.
+So what we have to do is look at what transducers do.
+A transducer function takes a function, wraps it, and returns a new step function.
+That is still happening right to left.
+This is ordinary comp, and it works right to left.
+So mapping gets run first.
+We're going to have some operation, you know, put stuff on a trolley or conge.
+Mapping will be the first thing that happens.
+It's going to make a little modified step that labels the heavy bags
+before it calls, put it on the airplane.
+Then filtering gets called.
+It does go right to left.
+That step, I'll make you a new step that first sees if it's food.
+If it's food, I'm going to throw it away.
+If it's not food, I'm going to use it.
+Then map catting runs, or the result of map catting runs.
+And that says, give me a step, and I will take its input,
+presume it's a pallet, unbundle it,
+and supply each of those arguments to the nested thing.
+So the composition of the transformers runs right to left.
+But it builds a transformation step that runs in the order
+that they appear, left to right, in the comp.
+In other words, comp is working ordinarily.
+It's building steps right to left.
+The resulting step runs the transformations left to right.
+So when we actually run this, we'll unbundle the pallets first,
+call the next step, which is to get rid of the food,
+call the next step, which is to label the heavy bags.
+So that's why it looks backwards.
+Okay, so the other nice thing about transducers is that there's
+no intermediate stuff.
+They're just a stack of function calls.
+They're short.
+Potentially they could be inlined.
+There's no laziness overhead.
+There's no laziness required.
+There's no laziness utilized.
+There's no interim collections.
+We're not going to have you make everything into a list.
+So you can say an empty list is nothing.
+Now, nothing is nothing.
+Empty list is an empty list.
+And one thing is one thing.
+A list of one thing is a list of one thing.
+And these are not the same.
+So you use the step function or you don't.
+And there's no extra boxes required of boxing for communicating
+about the mechanism.
+So the other thing that was sort of interesting was,
+sorry to talk about transducers and a lot of people in Haskell
+were trying to figure out what the actual types were
+because I had a shorthand in my blog post.
+And I'm not going to get into that right now.
+Except to say that I think it's a very interesting type problem
+and I'm very excited to see how people do with it
+in their various languages.
+I've seen results that were sort of, it works pretty well to,
+and types are, you know, these types are killing me.
+Depending on whether the user's type system could deal with it.
+But let's just try to capture what we know so far graphically.
+And somebody who reviewed these slides for me said
+these should have been subscripts,
+computers are so hard to use I couldn't switch them in time.
+So they're superscripts.
+But the idea is that if you're trying to produce the next process
+n, you must supply the result from step n minus one as the input.
+If you try to model this in your type system saying r to r,
+that's wrong, right?
+Because I can call the step function five times
+and then on the sixth time take the return value from the first time
+and pass it as the first thing. That's wrong.
+So you ought to make your type system make that wrong.
+So figure that out.
+Also, if you make the black box and the black box the same thing,
+that's also arbitrarily restrictive, right?
+You can have a state machine that every time it was given x,
+returned y, every time it was given y, returned z,
+every time it was given z, returned x.
+That's a perfectly valid step function.
+It has three separate input types and three separate output types
+that only happen at particular times.
+There's nothing wrong with that state machine.
+It is a perfectly fine reducing function.
+It may be tough to model in a type system.
+And don't say x or y or z, because it doesn't take x or y or z
+and return x or y or z.
+When it's given x, it only returns y. It never returns z.
+So it seems like a good project for the bar later on.
+But the thing that we're capturing here is that the new step function
+might take a different kind of input.
+It might take a b instead of an a.
+Our first step does that.
+It takes a palette and returns a set of pieces of luggage,
+but each step returns a piece of luggage.
+Okay.
+So there are other interesting things that happen in processes, right?
+Ordinary reduction processes everything.
+But we want this to be usable in cases that run arbitrarily long.
+We're not just talking about turning one kind of collection
+into another kind of collection, right?
+A transducer that's running on a channel
+has got an arbitrary amount of stuff coming through.
+A transducer on an event stream has an arbitrary amount of stuff coming through.
+But sometimes you want, you know, either the reducing process
+or somebody who says, whoa, I have had enough.
+I don't want to see any more input.
+We're done. I want to say we're done now,
+even though you may have more input.
+So we're going to call that early termination.
+And it may be desired by the process itself,
+like the thing at the bottom.
+Or it may be a function of one of the steps.
+One of the steps may say, you know what, that's all I was supposed to do.
+And so I don't want to see any more input.
+And the example here will be, you know,
+we're going to modify our instructions and say,
+if the bag is ticking, you're finished.
+Go home.
+We're done loading the plane.
+So we're going to add that.
+Taking while.
+Taking while non-ticking.
+And taking while non-ticking needs to stop the whole job in the middle.
+It doesn't matter if there's more stuff on the trolley.
+When it's ticking, we're finished.
+Okay?
+So how do we do that?
+It ends up in closure.
+We already have support for this idea in reduced.
+There's a constructor of a special, you know,
+wrapper object called reduced, which says this represents the end of the...
+It just says, I don't want to see any more input.
+Here's what I've come up with so far.
+And don't give me any more input.
+There's a predicate called reduced question mark
+that allows you to ask if something is in this wrapper.
+And there's a way to unwrap the thing and look at what's in it.
+So you can say, you know, is the reduced thing reduced?
+That will always return true.
+And you can de-wrap a reduced thing and get the thing.
+That's inside it.
+This is not the same thing as maybe, right?
+Because maybe also wraps the other things that are not reduced, right?
+Or either, or all those other boxy kind of things.
+So we don't do that.
+We only wrap when we're doing this special termination.
+So like reduce, transducers also must support reduced.
+That means that the step functions are allowed to return a reduced value.
+And that if a transducing process or a transducer gets a reduced value,
+it must never call the step function with input again.
+That's the rule.
+Again, implement the rule in your type system, have at it.
+But that's the rule.
+So now we can look at the insides of taking while.
+It takes a predicate.
+It takes a step that it's going to modify.
+It runs the predicate on the input.
+If it's okay, it runs the step.
+If it's not okay, it takes what has been built up so far and says,
+we're finished, reduced result.
+That's how we bail out.
+But notice the ordinary result is not in a wrapper.
+And so the reducing processes must also play this game, right?
+The transducer has to follow the rule from before.
+And a reducing process similarly has to support reduced.
+If it ever sees a reduced thing, it must never supply input again.
+The dereference value is the final accumulated value.
+But the final accumulated value is still subject to completion,
+which I'm going to talk about in a second.
+So there's a rule for the transducers as well.
+They have to follow this rule.
+So now we get new pictorial types in the graphical type language.
+That is Omnigraphil.
+So we can have, you know, a process, right,
+that takes some black box at the prior step and an input
+and returns a black box at the next step.
+Or maybe, right, it returns a reduced version of that.
+So one of those two things can happen.
+Or vertical bars, or.
+And it returns another step function that similarly can take
+a different kind of input, a black box, returns a black box,
+or reduced black box.
+Same rules about successorship apply.
+All right.
+So some interesting sequence functions require state.
+And in the purely functional implementations,
+they get to use the stack or laziness to put that state.
+They get somewhere in the execution machinery,
+a place to put stuff.
+Now we're saying, I don't want to be in the business of specifying
+if we're lazy or not lazy or recursive.
+I'm not going to give you space inside the execution strategy
+because I'm trying to keep the execution strategy from you.
+And that means that state has to be explicit when you have transducers.
+Each transducer that needs state must create it.
+So examples of sequence functions that need state are take, partition,
+all partition by, and things like that.
+They're counting or accumulating some stuff to spit it out later.
+Where's that going to go?
+And it has to go inside the transducer object.
+They have to make state.
+And there's some rules about that.
+If you need state as a transducer author, you have to create it
+every time uniquely, and again, every time you're asked to transform
+a step function.
+So a new, you're going to create state every time you transform a step function.
+That means that if you build up a transducer stack,
+which are stateful transducers, and you apply it,
+not when you build it, no state exists then.
+After you call it comp, there's no state.
+When you've applied it, you now have a new process step.
+But as we should be thinking about all transducer process steps,
+including the ones at the bottom, that may be stateful.
+You don't know that the very bottom process isn't launched stuff into space.
+So you should always treat an applied transducer stack as if it
+returned a stateful process, which means you shouldn't alias it.
+What ends up happening in practice is all of the transducable
+processes, they do the applying.
+It's not in the user's hands to do it.
+You pass around a transducer and input to the job, to the job.
+The job applies the transducer to its process,
+gets a fresh set of state when it does that, and there's no harm.
+But you do have to do this by convention.
+So here's an example of a stateful transducer dropping
+while a predicate is true.
+So we start with our flag that says it's true.
+As long as it's still true, we're going to drop.
+When we see that it's not true, we're going to reset it and
+continue with applying the step.
+And then from then on forward, we're going to apply the step.
+So that is not the prettiest thing.
+I talked before about completion.
+So we have the idea of early termination.
+The other idea that transducer support is completion, which is
+that at the end of input, which may not happen, there'll be
+plenty of jobs that don't complete.
+They don't have ends.
+They're not consuming a finite thing like a collection.
+They're processing everything that comes through a channel or
+everything that comes through an event source.
+There's no end.
+But for things that have an end, there's a notion of
+completion, which is to say, if either the innermost process
+step wants to do something finally when everything's
+finished, they can.
+Or if any of the transducers have some flushing they need to
+do, they can do it.
+So the process may want to do a final transformation on the
+output.
+Any stateful transducer, in particular, a transducer like
+partition, it's aggregating to return aggregates.
+You say partition five, and it collects five things and spits
+it out.
+If you say we're done, it's got three things.
+It wants to spit out the three things.
+But you need to be able to tell it we exhausted input.
+In order to do that, the way that's implemented in the
+closure implementation of transducers is that all the
+step functions must have a second operation.
+So there's the operation that takes a new input and the
+accumulated value so far and returns a new accumulated value
+or whatever.
+I mean, it's up to the process what the meaning of the black
+box is.
+But there must be another operation which takes just the
+accumulated value and no input.
+So an Rd1 operation.
+So that's required.
+So we'll talk about what that does or how that gets used.
+If the process itself, if the overall job has finished, if
+it's exhausted input or it has a notion of being finished, this
+is not bailing out.
+This is like there's nothing more to do.
+There's no more input ordinarily.
+It must call the completion operation exactly once on the
+accumulated value.
+So there's no more inputs.
+I'm going to call you once with no input.
+Do whatever you want.
+Each transducer must do the same thing.
+It has to have one of these completion operations and it
+must call its nested completion operation.
+It may, however, before it does that, flush.
+So if you have something like partition that's accumulated
+some stuff along the way, it can call the ordinary step
+function and then call complete on the result.
+And that's how we accomplish flushing.
+There's just one caveat here, which is that if you're a
+stateful thing like partition and you've ever seen reduced
+come up, well, the earlier rule says you can never call the
+input function.
+So you just drop whatever you have hanging around because
+somebody bailed out on this process.
+There's going to be no ordinary completion.
+So we can look at our types again in Omnigraphful 2000,
+latest programming innovation, and think about a reducing
+function as a pair of operations.
+They'll be different in each programming language.
+It's not really important.
+In closure, it ends up a single function can capture both of
+these arities.
+But whatever you need to do to take two operations, the first
+one up there that takes no input is the completion operation.
+And the second is the step operation that we've been seeing
+so far.
+It takes a pair of those things and returns a pair of those
+things.
+That's it.
+And again, we don't want to concretely parameterize the
+result type there either.
+You've got to use rank two polymorphism or something because
+if you concretely parameterize that, you'll have something that
+only knows about transducing into airplanes as opposed to the
+general instructions.
+OK.
+There's a third kind of operation that's associated with
+sort of processing in general, which is init.
+We've had talks before that mentioned monoids and things like
+that.
+The basic idea is just sometimes it's nice for a
+transformation operation to carry around an initialization
+capability.
+It need not be the identity value or anything like that.
+It does not matter.
+What does matter is that a reducing function is allowed to
+may support arity zero.
+In other words, given nothing at all, here's an initial
+accumulator value from nothing.
+Obviously, a transducer can't do that because it's a black box.
+The one thing it definitely does not know how to do is make a
+black box out of nothing.
+Can't do it.
+So all it can ever do is call down to the nested function.
+So transducers must support arity zero init, and they just
+define it in terms of a call to the nested step.
+They can't really do it, but they can carry it forward so that
+the resulting transducer also has an init, if the bottom
+transducer has an init.
+I've talked about the arity overloading, and so here's an
+example.
+Oh, I'm over time already.
+I'm sorry.
+So here's an example.
+Plus, from Lisp, this is older than transducers.
+Lisp programmers have been doing this for a while.
+Sorry, currying fans.
+This is what we do.
+Plus with nothing returns the identity value for plus zero.
+Multiplication with nothing returns one.
+It implements plus of an accumulated result as identity,
+and the binary operation that does the work.
+So here's the types again.
+We now have an optional init from nothing, and we're taking a
+set of three operations and returning a new set of three
+operations.
+In closure, we just use arity to do this.
+A transducer enclosure then is just something that takes the
+reducing function and returns one, where a reducing function
+has these three arities.
+We haven't actually called the reducing functions mapping and
+filtering and ing this and ing that.
+I think that's an Englishism that's not going to carry over
+very well, and we have available to us arity overloading
+because we don't have currying.
+So the map of f with no collection argument returns the
+transducer, and we've modified so far all of these sequence
+functions to do that.
+So this is a final example of filter returning a transducer.
+It takes a predicate and returns a step modifying function,
+which takes a reducing function, which presumably has these
+three arities, and defines a function with three arities.
+init, which just flows it through because it doesn't know
+what it could possibly do.
+Complete, filter doesn't have anything special to do, so it
+just flows that through.
+And then the result and input one, which is the one we've
+seen before.
+Then we can see, we can define the collection implementing one
+by just calling sequence with this transducer.
+And that's true of all of these functions.
+You can define the collection version exactly like this,
+which shows that transducer is more primitive than the other.
+So this is what we're trying to accomplish.
+You define a set of transducers once.
+You define all your new cool stuff.
+It's a channel today, observables tomorrow, whatever the next
+day.
+You just make it accept transducers.
+And every specific implementation of these things you get for
+free.
+And every recipe that somebody creates, that's a composition of
+those transducing operations, works with your thing right
+away.
+That's what we want.
+We're going to take Perlis and just say, it's even better.
+We want 100 functions with no data structure.
+So transducers are context independent.
+There's tremendous value in that.
+They're concretely reusable.
+So somebody can make this and not know how you're going to use it.
+That has tremendous value.
+It's much stronger than parameterization because you can
+Flow it.
+It supports early termination.
+They support early termination completion.
+You can compose them just as easily as you can compose the
+Other ones.
+They're efficient and tasty.
+Thanks.

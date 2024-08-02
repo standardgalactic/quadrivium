@@ -1,0 +1,154 @@
+start	end	text
+0	5920	Hello, this is Dave. I'm working on Hyperledger Fabric version 1.2, and today I'll be discussing
+5920	12080	and demonstrating a feature that we're working on called Private Data. Private Data is when you've
+12080	17760	got a set of data that is sensitive and should not be shared with the entire blockchain network,
+18560	24640	what we would call a channel. Let's say you've got a handful of organizations in your channel,
+24640	31840	but on any given transaction, maybe only two of the organizations should have access to details
+31840	40000	of some of these private transactions. And to do this, we store the private data on the side,
+40000	45480	instead of on the blockchain, and sometimes this solution is called sideDB, for that reason,
+45480	52200	side database. But a hash of the private data is stored on the blockchain and serves as evidence
+52280	58680	of the private data, and is used to validate the private data, and can be used, for example,
+59240	66440	later on, if there's a dispute between some of the participants, they can go check the entire
+66440	72680	network and look at the blockchain and see what the hash of the private data was, and then you'll
+72680	81880	know for sure if that matches the private data that you claim to have had. Discuss how the
+81880	88120	private data gets distributed across the network. So when a client submits a proposal for chain
+88120	94200	code execution to certain endorsing peers, it can also send in a transient field in the proposal
+94200	103080	some private data. The endorsing peers that have executed the chain code, if they notice any private
+103080	109160	data rights in that chain code, they will store that data in their own transient store and not
+109160	114920	include that private data in the proposal response that gets sent back to the client. It will also
+116280	121080	determine which other peers in the network are authorized to receive this private data,
+121640	127160	and send the private data to those peers via gossip, so that those peers also have the data,
+128040	132120	and can validate and commit the data when the block gets committed.
+132280	143800	In step two, the client will submit the transaction to the ordering service, and that gets distributed
+143800	150440	in the blocks to all the other peers as normal. And then in step three, the peers that are authorized
+150440	155240	to have the private data will look up their private data from their transient stores, validate it
+155240	161480	against hashes in the public blocks, and commit the transaction in the block.
+164440	171480	So let's look at a scenario to make the principles more concrete here. We'll extend the
+171480	177560	Marvel's demonstration that some people might know, and we'll add privacy requirements to that
+177560	183960	scenario, such that no Marvel data should go through the ordering service. The Marvel data should
+183960	191000	only get distributed peer to peer across the network, and all peers will have access to general
+191000	197160	Marvel information, such as the name, size, color, and owner of the Marvel, but only a subset of the
+197160	205320	peers have access to private pricing information. For example, only the peers or the organizations
+205320	216360	that are involved in that transaction. So we distinguish three sets of data, green, yellow,
+216360	222280	and red. Green is the public data that lives on the channel. It goes to the ordering service and
+222280	229400	all the peers. Yellow is the Marvel data that goes to all the peers, but not the ordering service.
+230360	237640	And this is defined in what we call a collection of data. So the Marvel collection
+238760	244200	will get distributed based on the policy, and we see here it's going to go to org one and org two.
+245320	250840	And when peers endorse chain code dealing with marbles, it will distribute the private
+250840	257800	Marvel's data to it'll attempt to distribute it to two different other peers for redundancy,
+257880	263720	so that if this endorsing peer goes down, other peers are available at commit time if there are
+263720	270760	requests to pull that private data. But if each of these peers are not available at the current
+270760	276840	time on the network, let's say that only one of the peers is required to disseminate the private
+276840	284760	data to as a condition of the endorsement of this chain code. Okay, so that is the Marvel's
+284760	289960	collection. And then finally, the Marvel's private details collection includes the pricing
+289960	294920	information. And let's say in this example, only organization one has access to this data.
+297320	303160	Note also, we have a concept of block to live. So for very sensitive information, maybe pricing
+303160	309000	information or maybe personal information, the even the private data shouldn't live
+309960	315160	on the authorized peers forever. So maybe it only lives for a short time, maybe that's a day,
+315160	321640	maybe that's a year. But the way you configure this is through a block to live property. So for
+321640	327080	the Marvel's private pricing details, we have a block to live of three, which means this data
+327080	335160	will live on the blockchain or the site to be for three blocks. And after that, it will get purged.
+339960	345800	So let's step through the data flow for this scenario. First, the client will submit a proposal
+345800	353720	to endorsing peers to execute the chain code. Those endorsing peers see the private the
+353720	359560	Marvel's collection private data. And based on our distribution policy distributes that to two
+359560	366600	other peers. But note, there's a fourth peer in the network that we have not distributed the data
+366600	370760	to. So we'll call this missing private data, and we'll come back to that later and discuss how
+370760	376440	that's resolved. And remember, there's the second collection, the Marvel private details with the
+376440	383960	pricing information. This data is sent to one other peer, because only the organization one
+383960	393800	peers have access to this data. In the next step, the endorsing peer sends the proposal response
+393800	398360	back to the client, the client submits the transaction to ordering, and the block with
+398360	407560	the public transaction gets distributed to all the peers. Next, the peers with the private data
+407560	414120	will validate the private data against the hashes in the public transaction. And this peer that
+414120	421000	had the missing private data, it will determine that it should have the private data based on the
+421000	426920	access policy, its organization to and it should have access to the Marvel's private data. And it
+426920	441080	will try to pull the private data from other peers using the gossip protocol. And finally,
+441800	448440	once we retrieve that private data, each of the peers has all the data they need to commit the
+448440	454840	data, both the public data on the blockchain and the public state database. And then, and for the
+454840	459640	private data to the private state database, and what we call the private rights at storage,
+460440	466280	which is similar to the blockchain structure, but it's not on the actual blockchain. And each of
+466280	472120	the peers also deletes the private data from their transient store, once the transaction is complete
+472120	481560	and committed. Okay, let's go see private data in action. So I'm going to bring up a network with
+481560	489000	the four peers, two from organization one and two from organization two. And while that network
+489880	496040	is spinning up, I will go show you the chain code that we're going to execute and the
+496840	501560	how to configure these collections. So I mentioned there's two collections. There is a
+501560	507080	collection for marbles. And instead of a normal put state, what we do in the chain code is we do a
+507720	514680	put private data. Okay, and then that's for most of the Marvel's data. And then remember for the
+514680	520200	pricing information that's separate, we have another collection for the Marvel's private details.
+520760	526520	Again, we save that with the put private data function call in the chain code.
+526840	533480	And how are these collections configured? Well, they're configured at instantiation of the chain
+533480	541240	code time. In this case in this script, I'm writing to a collections JSON file. And here I define
+541240	549160	the two collections, specify the dissemination policy for the private data, the max peer,
+549160	553000	peer count and the required peer count that the endorser uses to disseminate the private data,
+553560	557240	and the block to live policy for each of those collections.
+560040	563400	Okay, let's go take a look at our network. So it has spun up,
+564440	570840	and we are ready to instantiate the chain code. So the script that brought the network up has
+571640	577240	brought up the four peers and the ordering service, and it's installed this private data chain code.
+577240	591560	I also have the script for this demonstration up here at Fab 6600 in the hyperledger fabric
+592200	601160	JIRA, so that others can follow along. But first we'll go into the client container.
+601800	609960	And let's attempt to instantiate this chain code on org one, peer zero.
+616360	624440	And this takes a few seconds while the chain code image with the chain code gets built and deployed.
+625320	638360	Okay, that was successful. So let's go ahead and create our first marble.
+646200	652680	Okay, that was also successful. So next we will query our marble information,
+652680	657000	and we have two different queries, one for the public information and one for the private information.
+658280	664680	So let's first go try to read the public information from the first peer.
+667160	671000	And we see that the first marble formation did come back successful.
+672920	679240	And let us next look at the private information for this marble on org one, peer zero.
+683000	689480	Okay, and that also has come back. So we see here a price of 99 associated with that marble,
+689480	698120	and that's the private details of the marble. And that was all done on org one, peer zero.
+698120	702040	So of course he's got the private data, because this is the peer that endorsed that
+702600	707880	chain code transaction. But let's query some other peers for the private data.
+708840	715240	We look next at org one, peer one, and remember again that org one is entitled to see
+715800	721400	the private data, has access to that private data. So this peer should also have the private data.
+726280	729640	And this is the first time that we're doing a chain code
+730440	737480	invocation or query on this, on this peer. So he also needs to build his chain code image.
+738600	745480	So the chain code function can be called. And note that he has returned success with the price.
+745480	751720	So this peer also has the private data, which means it was successfully disseminated to this peer.
+754120	761320	And then let's check an org two peer. Now, org two does not have access to the private data.
+762280	772520	So when this peer gets invoked, again, he builds his chain code. This is the first time we've made a
+772520	781400	call on this peer. And org two will not have access to the private data. And so in this case,
+781400	786200	when we try to query for the private data, we get an error failed to read failed to get private
+786200	794840	details for marble one. And this message states that we have a hash matching this key on the public
+795640	801880	and public state, but we don't have the private state for this. So this is because this peer was
+801880	811800	not entitled to that data. Okay, next, I'm going to show you some of the logging information just
+811800	821880	so we can see how this private data was disseminated. So we'll do a Docker logs command, and we'll check
+822440	836600	each of the peers. First, we'll do this on peer zero org one, where the invoke was called.
+836680	844360	And the the creation of this marble was done in block four. So we can see that
+845960	854440	we've received this block from the network. And we would try to retrieve one transaction
+854440	859240	from the transient store because we noticed that there was private data there. And in fact,
+859240	863320	we did retrieve the data from the transient store because there was no missing collection
+863320	872440	information. And so this this this transaction and this block gets committed to the database.
+875080	880360	Now, let's try it. Let's look at something more interesting. Let's look at the organization one.
+885880	890520	Sorry, organization two, who does not have access to the private data.
+894280	898760	Okay, this this peer received the block.
+902600	908920	He tried to retrieve the private data from the transient store. And it was also successful,
+908920	914680	there was nothing missing. So this is a peer that had received the data at endorsement time.
+914920	921960	And let's check the peer that had the missing private data, due to not getting the data at
+921960	924920	endorsement time, that must have been pure one or two.
+928360	934920	And here we see a lot more information, because there's more gossip work to be done. He received
+934920	942360	the block, tried to retrieve one transactions data from the transient store.
+942920	947720	And could not find all the collection private rights sets in the local peer transient store.
+947720	953240	So this peer had to do a private data poll, and fetch the private data from remote peers.
+954600	958840	And it'll attempt to do this for a configurable duration, in this case, 60 seconds.
+959960	964680	And if if they can't find the private data within those 60 seconds, it can go ahead and proceed
+965480	970440	with commits without the private data, and he'll be missing the private data and will not be able
+971400	975800	to endorse transactions against that private data in the future.
+976840	981480	But in this case, in most cases, the peer will be able to find the private data from another
+981480	987880	peer in the network, by sending these gossip requests for that data. And we can see we got
+987880	995560	one match, and we found all the missing collections. And we are also able to now
+995640	1001880	commit that block with that transaction, even in this peer that did not get the data at dissemination
+1001880	1010440	time. Next, let's take a look at the private data purging capability.
+1013320	1021240	So again, recall that when we tried to read the private pricing information, and let's again
+1022120	1031240	try that on the first peer, we get back the price of 99. And that was done in block four,
+1031240	1038120	committed in block four. And so this data should be purged after three more blocks.
+1039080	1042760	Because there was this collection is configured with a block to live of three.
+1043480	1048120	So what we're going to do is we're going to create a few more blocks. Let's do this by creating a
+1048120	1059160	marble two. And then we'll transfer this marble to a few times. We're not going to do anything to
+1059160	1069800	marble one, because that would reset its block to live. So after it has a block to live of three,
+1069800	1074120	so it'll live for three blocks. And then on the fourth block commit, it will get purged. So let's
+1074120	1086440	do another transfer on block on marble two. And then one more transfer on marble two. So now
+1086440	1092520	marble one should have lived for three blocks and should have been purged. So we can again try to
+1092520	1104840	read those marble private details on org one peer zero. And this time instead of getting the price
+1104840	1111320	of 99 back, we see that marble private details does not exist for marble one. So this data has
+1111320	1122440	in fact been purged, making this sensitive data now obsolete from the network. Okay, that concludes
+1122680	1130840	the private data demonstration. Stay tuned for further updates on the Hyperledger Fabric Channel.
+1130840	1133640	Thank you.

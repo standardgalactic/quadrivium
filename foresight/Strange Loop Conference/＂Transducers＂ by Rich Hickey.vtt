@@ -1,0 +1,2216 @@
+WEBVTT
+
+00:00.000 --> 00:11.000
+Transducers. Of course, everything is just some combination of the same ingredients.
+
+00:11.000 --> 00:18.000
+The shell is on the outside, the inside, the cheese is in, it's on top, whatever. I'm not claiming any novelty here.
+
+00:18.000 --> 00:29.000
+This is just another rearrangement of the same old stuff as usual. But, you know, sometimes the cheese on top, you know, tastes better than when it's inside.
+
+00:29.000 --> 00:43.000
+Alright. So, what are transducers? The basic idea is to go and look again at map and filter and see if there's some idea inside of them that could be made more reusable than map and filter.
+
+00:43.000 --> 00:54.000
+Because we see map and filter being implemented over and over again in different contexts, right? We have map and filter on collections, we have map and filter on streams, we have map and filter on observables.
+
+00:54.000 --> 01:05.000
+We were starting to write map and filter and so on on channels and there was just, there's no sharing here, there's no ability to create reusable things.
+
+01:05.000 --> 01:14.000
+So, we want to take the essence out and see if we can reuse them. And the way that we're going to do that is by recasting them as process transformations.
+
+01:14.000 --> 01:30.000
+And I'll talk a lot more about that, but that's essentially the entire idea. Recasting the core logic of these, what were sequence processing functions as process transformations and then providing context in which we could host those transformations.
+
+01:30.000 --> 01:40.000
+So, when I talk about processes, what am I saying? It's not every kind of process. There are all kinds of processes that cannot be modeled this way, but there are a ton of processes that can, right?
+
+01:40.000 --> 01:56.000
+And the critical words here are that if you can model your process as a succession of steps, right? And if you can talk about a step or think about a step as ingesting an input, as taking in or absorbing some input, a single input.
+
+01:56.000 --> 02:08.000
+So, something going on, there's an input, we're going to absorb that input into the something going on and proceed. That's the kind of process that we can use transducers on.
+
+02:08.000 --> 02:23.000
+And when you think about it that way, building a collection is just one instance of a process with that shape, right? Building a collection is you have the collection so far, you have the new input, and you incorporate the new input into the collection and you keep going, right?
+
+02:23.000 --> 02:36.000
+But that's a specialization of the idea. The general idea is the idea of a seeded left reduce of, you know, taking something that you're building up and a new thing and continually building up.
+
+02:36.000 --> 02:47.000
+But we want to get away from the idea that the reduction is about creating a particular thing and focus more on it being a process. Some processes build particular things, other processes are infinite.
+
+02:47.000 --> 02:58.000
+They just run indefinitely. So, we made up words. Actually, we didn't make up a word. Again, this is actually a word. But why this word?
+
+02:58.000 --> 03:08.000
+Well, we think it's related to reduce, and reduce is already a programming word, and it's also already a regular word, and the regular word means to lead back, right?
+
+03:08.000 --> 03:18.000
+To bring something back. And we've sort of, the word has come to mean over time to bring something down or to make something smaller.
+
+03:18.000 --> 03:27.000
+But it doesn't necessarily mean that. It just means to lead it back to some, you know, mothership, and in this case we're going to say this process that we're trying to accomplish.
+
+03:27.000 --> 03:39.000
+The word ingest means to carry something into, so it's the same kind of idea, but that's about one byte, right? Reduction is about a series of things, and ingest itself means one thing.
+
+03:39.000 --> 03:48.000
+And transduce means to lead across. And the idea basically is, as we're taking inputs into this reduction, we're going to lead them through a series of transformations.
+
+03:48.000 --> 03:56.000
+We're going to carry them across a set of functions. So we're going to be talking about manipulating input during a reduction.
+
+03:56.000 --> 04:07.000
+So this is not a programming thing. This is a thing that we do all the time in the real world. We don't call them transducers. We call them instructions, right?
+
+04:07.000 --> 04:15.000
+And so we will talk about this scenario through the course of this talk, which is put the baggage on the plane.
+
+04:15.000 --> 04:22.000
+And that's the overall thing that we're doing. But I have this transformation I want you to do to the baggage, right?
+
+04:22.000 --> 04:27.000
+I want you to, while you're doing it, while you're putting the baggage on the plane, break apart the pallets.
+
+04:27.000 --> 04:34.000
+So we're going to have pallets, you know, big, you know, wooden things with a pile of luggage on it that's sort of shrink wrapped.
+
+04:34.000 --> 04:42.000
+We want to break them apart, so now we have individual pieces of luggage. We want to smell each bag and see if it smells like food.
+
+04:42.000 --> 04:50.000
+If it smells like food, we don't want to put it on the plane. And then we want to take the bags and see if they're heavy, and we want to label them.
+
+04:50.000 --> 04:55.000
+Right, that's what you have to do. So we're talking to the luggage handlers, we say, that's what you're going to do.
+
+04:55.000 --> 05:08.000
+And they all say, great, I can do that. One of the really important things about the way that was just said and the way you talk to luggage handlers and your kids and anybody else you need to give instructions to,
+
+05:08.000 --> 05:14.000
+is that the conveyance and the sources and the sinks of that process are irrelevant.
+
+05:14.000 --> 05:22.000
+Right, do the luggage handlers get the bags on a conveyor belt or on a trolley?
+
+05:22.000 --> 05:34.000
+We didn't say, we don't care. In fact, we really don't want to care. We don't want to say to the luggage guys today, there's going to be luggage on a trolley, do this to it, and then put it on another trolley.
+
+05:34.000 --> 05:39.000
+And then tomorrow when we switch to conveyor belts, have them say, we didn't know what to do.
+
+05:39.000 --> 05:49.000
+We came on a conveyor belt and like, I have rules for trolleys.
+
+05:49.000 --> 05:59.000
+So the rules don't care, the instructions don't care. This is the real world. Then we have programming. What are we doing programming?
+
+05:59.000 --> 06:06.000
+We have collection function composition, we're so cool. We have lists, we have functions from list to list.
+
+06:06.000 --> 06:12.000
+So we can compose our functions. We're going to say, well, labeling the heavy bags is like mapping, right?
+
+06:12.000 --> 06:19.000
+Every bag comes through and it gets a label or it doesn't. But for every bag that comes through, there's a bag that comes out and maybe it has a label or it doesn't.
+
+06:19.000 --> 06:28.000
+And taking out the non-food bags is, or keeping the non-food bags, is a filter. It's analogous to filter.
+
+06:28.000 --> 06:36.000
+Is it food? We don't want it. If it's not food, we're going to keep it. So we may or may not have an input depending on this predicate.
+
+06:36.000 --> 06:44.000
+And unbuttling the pallets is like map cap. There's some function that, given a pallet, gives you a whole bunch of individual pieces of luggage.
+
+06:44.000 --> 06:51.000
+So we already know how to do this. We're done. We're finished. Programming can model the real world.
+
+06:51.000 --> 06:58.000
+Except there's a big difference between this and what I just described happens in the real world, right?
+
+06:58.000 --> 07:04.000
+Because map is a function from whatever, collection to collection or sequence to sequence or pick your programming language.
+
+07:04.000 --> 07:10.000
+But it's basically a function of aggregate to aggregate. And so is filter and so is map cap, right?
+
+07:10.000 --> 07:15.000
+And the rules that we have only work on those things. They're not independent of those things.
+
+07:15.000 --> 07:23.000
+If we have something new, like a channel or a stream or observable, none of the rules we have apply to that.
+
+07:23.000 --> 07:32.000
+And in addition, we have all this in-between stuff. It's as if we said to the luggage guys, take everything off the trolley, trolley, right?
+
+07:32.000 --> 07:39.000
+And unbutton the pallet and put it on another trolley, right? And then take it off that trolley and then see if it smells like food.
+
+07:39.000 --> 07:46.000
+And if it doesn't, put it on another trolley. And then take it off that trolley. And if it's heavy, put a label on it and put it on another trolley.
+
+07:46.000 --> 07:50.000
+This is what we're doing in programming. This is what we do all the time, right?
+
+07:50.000 --> 08:00.000
+And we wait for a sufficiently smart supervisor to come and, like, say, what are you guys doing, right?
+
+08:00.000 --> 08:06.000
+So we don't want to do this anymore, right? We don't have any reuse, right?
+
+08:06.000 --> 08:11.000
+Every time we do this, we end up writing a new thing, right? A new kind of stream. We have a new set of these functions, right?
+
+08:11.000 --> 08:19.000
+You invent Rx. Boom. You know, it was 100 functions. We were starting to do this enclosure, right?
+
+08:19.000 --> 08:27.000
+We had channels, and we're starting to write map and filter again. So it's time to say, time out. Can we do this?
+
+08:27.000 --> 08:34.000
+Because there are two things that happen. One is, all the things we're doing are specific, and the other is, there's a potential inefficiency here, right?
+
+08:34.000 --> 08:40.000
+Yeah, maybe there are sufficiently smart compilers, and maybe for some context, they can make the intermediate stuff go away.
+
+08:40.000 --> 08:49.000
+Maybe they can. The problem is our initial statement really doesn't like what we normally do. It's not general. It's specific.
+
+08:49.000 --> 08:53.000
+We're relying on something else to fix it, right?
+
+08:53.000 --> 08:58.000
+We also have this problem, right, where we're going to go from, you know, one kind of conveyance to another.
+
+08:58.000 --> 09:05.000
+And now, all of a sudden, well, you know, map is from X to X, and whatever, you know, how do we fix this?
+
+09:05.000 --> 09:10.000
+And I know what everybody's thinking, of course.
+
+09:10.000 --> 09:16.000
+Yeah.
+
+09:16.000 --> 09:22.000
+So, I mean, that may fix some of this, but in general, it doesn't solve the problem.
+
+09:22.000 --> 09:28.000
+And the problem is mostly about the fact that we're talking about the entire job, right?
+
+09:28.000 --> 09:36.000
+Those instructions, they were about the step. They weren't about the entire job. The entire job was around it.
+
+09:36.000 --> 09:40.000
+While you're doing this thing, here's what you're going to do to the inputs.
+
+09:40.000 --> 09:43.000
+Here's how you're going to transform them, while you're doing the bigger thing, which could change, right?
+
+09:43.000 --> 09:46.000
+We could change from conveyor belts to trolleys and stuff like that.
+
+09:46.000 --> 09:49.000
+So we want to just take a different approach, right?
+
+09:49.000 --> 09:57.000
+If we have something that's about the steps, we can build things that are about the whole jobs, but not vice versa.
+
+09:57.000 --> 10:04.000
+Okay. So, there's just going to be some usages here, and then I'll explain the details in a little bit.
+
+10:04.000 --> 10:08.000
+Because usually I do it the opposite way, and people are like, oh, my brain hurt for so long.
+
+10:08.000 --> 10:12.000
+And then, like, 40 minutes in, you show me the thing that made it all valuable.
+
+10:12.000 --> 10:16.000
+So here's the value proposition, right? We make transducers like this.
+
+10:16.000 --> 10:19.000
+We say, I want to make a transducer. I want to make a set of instructions.
+
+10:19.000 --> 10:21.000
+I'm going to call it process bags.
+
+10:21.000 --> 10:29.000
+I'm going to compose the idea of map catting using unbundled pallet as the function, right?
+
+10:29.000 --> 10:31.000
+So I want to unbundle the pallets.
+
+10:31.000 --> 10:35.000
+Then I want to filter out the non-food, or keep the non-food, filter out the food.
+
+10:35.000 --> 10:40.000
+And I want to map labeling the heavy bags.
+
+10:40.000 --> 10:44.000
+And in this case, we're going to compose those functions with comp,
+
+10:44.000 --> 10:47.000
+which is Clojure's ordinary function composition thing.
+
+10:47.000 --> 10:53.000
+So map catting, filtering, and mapping return transducers.
+
+10:53.000 --> 10:59.000
+And process bags, which is the composition of those things, is itself a transducer.
+
+10:59.000 --> 11:02.000
+So we're going to call map catting, call filtering, call mapping,
+
+11:02.000 --> 11:07.000
+get three transducers, compose them, and make another transducer.
+
+11:07.000 --> 11:14.000
+Each transducer takes a process step, or it's reducing function,
+
+11:14.000 --> 11:16.000
+and transforms. It changes it a little bit.
+
+11:16.000 --> 11:20.000
+It says, before you do that step, do this.
+
+11:20.000 --> 11:24.000
+I'll explain why that seems backwards in a little bit.
+
+11:24.000 --> 11:28.000
+Having made those instructions, we can go into completely different
+
+11:28.000 --> 11:31.000
+Contexts and reuse them.
+
+11:31.000 --> 11:35.000
+Amongst the several contexts that we're supporting in Clojure in the first
+
+11:35.000 --> 11:39.000
+Version is supporting transducers in intu, and intu is Clojure's
+
+11:39.000 --> 11:42.000
+Function that takes a collection and another collection and pours one
+
+11:42.000 --> 11:45.000
+Into the other. Instead of having, you know, more
+
+11:45.000 --> 11:48.000
+Object-oriented, you know, collections that know how to absorb
+
+11:48.000 --> 11:51.000
+Other collections with build from, we just have the standalone
+
+11:51.000 --> 11:53.000
+Thing called intu, but it's the same idea.
+
+11:53.000 --> 11:56.000
+Your source and destination could be different.
+
+11:56.000 --> 11:59.000
+So we want to pour the pallets into the airplane, but we're going to
+
+11:59.000 --> 12:02.000
+Take them through this process bags transformation first.
+
+12:02.000 --> 12:05.000
+So this is collection building. Intu was already a function in
+
+12:05.000 --> 12:07.000
+Clojure. We just added an additional
+
+12:07.000 --> 12:11.000
+Arity that takes transducers. Then we have sequence.
+
+12:11.000 --> 12:17.000
+Sequence takes some source of stuff and makes a lazy sequence out of it.
+
+12:17.000 --> 12:22.000
+Sequence now additionally takes a transducer and will perform
+
+12:22.000 --> 12:26.000
+That transformation and all the stuff as it lazily produces results.
+
+12:26.000 --> 12:29.000
+So we can get laziness out of this.
+
+12:29.000 --> 12:32.000
+There's a function called transduce, which is just like reduce,
+
+12:32.000 --> 12:37.000
+Except it also takes a transducer. So that takes a transducer,
+
+12:37.000 --> 12:41.000
+An operation, an initial value, and a source.
+
+12:41.000 --> 12:45.000
+So the transducer is a modification of process bags.
+
+12:45.000 --> 12:49.000
+I'll talk about in a second. The operation is sum.
+
+12:49.000 --> 12:52.000
+The initial value is zero and the source of the pallets.
+
+12:52.000 --> 12:58.000
+So what does this composition do? What is this going to do?
+
+12:58.000 --> 13:02.000
+It's going to sum the weight of the bags. It's the weight of all the bags.
+
+13:02.000 --> 13:05.000
+So it's cool. Look, we can take the process that we already had and
+
+13:05.000 --> 13:09.000
+Modify it a little bit. We can add weighing the bags at the end of that
+
+13:09.000 --> 13:14.000
+Set of instructions and that gives us a number and we can use that number
+
+13:14.000 --> 13:18.000
+With plus to build the sum.
+
+13:18.000 --> 13:21.000
+So that's transduced. The other thing we can do is go to a
+
+13:21.000 --> 13:24.000
+Completely different context now. So we have some channels.
+
+13:24.000 --> 13:27.000
+We're going to be sending pallets of luggage across channels.
+
+13:27.000 --> 13:30.000
+But they don't really fit. But the idea is there.
+
+13:30.000 --> 13:33.000
+This is a very different context. Channels run indefinitely.
+
+13:33.000 --> 13:36.000
+You can feed them stuff all the time and get stuff out of the
+
+13:36.000 --> 13:40.000
+Other end on a continuous basis. But the critical thing here is
+
+13:40.000 --> 13:43.000
+That these things are not parameterized.
+
+13:43.000 --> 13:46.000
+They're not, i'm a thing that you can tell me later.
+
+13:46.000 --> 13:50.000
+You're going to tell me if it's trolleys or conveyor belts.
+
+13:50.000 --> 13:54.000
+This is the exact same process bags i defined here.
+
+13:54.000 --> 13:58.000
+This concrete thing being reused in completely different
+
+13:58.000 --> 14:02.000
+Context. So this is concrete reuse, not
+
+14:02.000 --> 14:06.000
+Parameterization. So we can use transducers on channels.
+
+14:06.000 --> 14:10.000
+The channel constructor now optionally takes a transducer and
+
+14:10.000 --> 14:13.000
+It will transduce everything that flows through.
+
+14:13.000 --> 14:17.000
+It has its own internal processing step and it's going to
+
+14:17.000 --> 14:21.000
+Modify its inputs accordingly with the transducer it's given.
+
+14:21.000 --> 14:24.000
+It's an open system. I can imagine, but i did not get time
+
+14:24.000 --> 14:28.000
+To implement, that you could plug this into rx java trivially
+
+14:28.000 --> 14:32.000
+And take half of the rx java functions and throw them away.
+
+14:32.000 --> 14:36.000
+Because you can just build a transducer and plug it into one
+
+14:36.000 --> 14:39.000
+Observable function that takes an observable and a transducer
+
+14:39.000 --> 14:44.000
+And returns an observable. And that's the idea.
+
+14:44.000 --> 14:47.000
+So we call all of these things into and sequence and transduce
+
+14:47.000 --> 14:52.000
+And transduceable processes. They satisfy the definition of
+
+14:52.000 --> 14:56.000
+Process we gave before. And they accept a transducer.
+
+14:56.000 --> 15:00.000
+So transducers have two parts. You make functions that create
+
+15:00.000 --> 15:03.000
+Transducers and in context where they make sense, you start
+
+15:03.000 --> 15:06.000
+Accepting transducers. And then you have these two
+
+15:06.000 --> 15:10.000
+Orthogonal legos you can put together. Inside each process,
+
+15:10.000 --> 15:14.000
+They're going to take that transducer and their internal
+
+15:14.000 --> 15:17.000
+Processing function. So what's the internal processing
+
+15:17.000 --> 15:20.000
+Function of into? The thing that adds one thing to a
+
+15:20.000 --> 15:24.000
+Collection. In closure, it's called conge for conjoin.
+
+15:24.000 --> 15:29.000
+Similarly, inside lazy sequences, there's some
+
+15:29.000 --> 15:32.000
+Thunk mechanism that produces a result on demand and then
+
+15:32.000 --> 15:35.000
+Waits to produce the next thing. So that has a step inside of it
+
+15:35.000 --> 15:39.000
+That can be transformed this way. Channels also take inputs
+
+15:39.000 --> 15:43.000
+Somewhere inside channels is a little step function that adds
+
+15:43.000 --> 15:46.000
+An input to a buffer. That step function has exactly the
+
+15:46.000 --> 15:50.000
+Same shape as conge. And as laziness.
+
+15:50.000 --> 15:54.000
+So it can transform its fundamental internal operation.
+
+15:54.000 --> 15:57.000
+But the operation remains completely encapsulated.
+
+15:57.000 --> 16:00.000
+The transducible context takes the transducer, modifies its
+
+16:00.000 --> 16:05.000
+Own step function and proceeds with that.
+
+16:05.000 --> 16:08.000
+So as i said before, there's nothing new.
+
+16:08.000 --> 16:12.000
+Two papers i find useful for helping you think about these
+
+16:12.000 --> 16:15.000
+Things are lectures and construct functional programming
+
+16:15.000 --> 16:18.000
+Which is a lot closer to the source of when people started
+
+16:18.000 --> 16:25.000
+Thinking about folds and their relationship to lists.
+
+16:25.000 --> 16:29.000
+And the second grand paper is a summary paper which summarizes
+
+16:29.000 --> 16:32.000
+The current thinking at the time it was written.
+
+16:32.000 --> 16:35.000
+So they're both really good. But now i'm going to take you
+
+16:35.000 --> 16:39.000
+Through how do we get to this point? How do we think about these things?
+
+16:39.000 --> 16:42.000
+So one of the fundamental things that the bird paper and the work
+
+16:42.000 --> 16:45.000
+That preceded it talk about is the relationship between these
+
+16:45.000 --> 16:49.000
+List processing operations and fold. In fact, there's a lot of
+
+16:49.000 --> 16:53.000
+Interesting mathematics that shows that they're the same thing.
+
+16:53.000 --> 16:58.000
+That you can go backwards and forwards between a concrete list
+
+16:58.000 --> 17:03.000
+And the operations that constructed it. They're sort of isomorphic to each other.
+
+17:03.000 --> 17:07.000
+So many of the list functions that we have can be redefined in
+
+17:07.000 --> 17:11.000
+Terms of fold. There's the definition of map in several
+
+17:11.000 --> 17:15.000
+Talks here, i think. But the traditional definition of
+
+17:15.000 --> 17:19.000
+Map says if it's empty, return empty sequence, if you're
+
+17:19.000 --> 17:23.000
+Getting a new input, cons that input onto the result of mapping
+
+17:23.000 --> 17:28.000
+To the rest of the input. It's recursive and calls itself.
+
+17:28.000 --> 17:31.000
+But map does that, filter does that, map cat does that.
+
+17:31.000 --> 17:35.000
+They all have these structures. But filter is a little bit different.
+
+17:35.000 --> 17:38.000
+It has a predicate inside. It has a conditional branch.
+
+17:38.000 --> 17:42.000
+And then it then it recurses in two parts of the branch with different arguments.
+
+17:42.000 --> 17:46.000
+So what this work, this earlier work did was say you can think about
+
+17:46.000 --> 17:50.000
+All these things as folds. If you do, you get a lot of regularity
+
+17:50.000 --> 17:53.000
+And things that you can prove about folds which are now all uniform
+
+17:53.000 --> 17:56.000
+Will apply to all these functions that otherwise look a little
+
+17:56.000 --> 17:59.000
+Different from each other. So there's a lot of value to this.
+
+17:59.000 --> 18:03.000
+Fold encapsulates the recursion. And it's easy to reason about.
+
+18:03.000 --> 18:07.000
+If we look at a redefinition of map, it's not often defined this way.
+
+18:07.000 --> 18:11.000
+But if we look at a redefinition of map in terms of fold,
+
+18:11.000 --> 18:18.000
+Then we say we're going to fold this function that cons is the first thing onto the rest.
+
+18:18.000 --> 18:22.000
+And we start with an empty list. So this is fold, fold right.
+
+18:22.000 --> 18:26.000
+And we do that over a collection. We can similarly define filter this way.
+
+18:26.000 --> 18:30.000
+And what's really interesting about these things is that the fold are the empty list
+
+18:30.000 --> 18:34.000
+And the call, that's all boilerplate, right? It's exactly the same.
+
+18:34.000 --> 18:37.000
+Map and filter are precisely the same in those things.
+
+18:37.000 --> 18:41.000
+All that's different is what's inside the inner function definition.
+
+18:41.000 --> 18:45.000
+And even there, there's something the same.
+
+18:45.000 --> 18:49.000
+So it ends up that you can similarly redefine these functions
+
+18:49.000 --> 18:53.000
+Or define these functions in terms of fold L.
+
+18:53.000 --> 18:56.000
+And fold L is just left reduced.
+
+18:56.000 --> 18:59.000
+And so here's some what if definitions of map and filter.
+
+18:59.000 --> 19:05.000
+And we added map cat that are left folds that use left reduced.
+
+19:05.000 --> 19:08.000
+And so the trade off between left reduced and right reduced
+
+19:08.000 --> 19:11.000
+Is right reduced sort of puts you on the laziness path
+
+19:11.000 --> 19:13.000
+And left reduced puts you on the loop path.
+
+19:13.000 --> 19:17.000
+It ends up that the loop path is better and faster and more general
+
+19:17.000 --> 19:19.000
+For the kinds of things we want to apply this to.
+
+19:19.000 --> 19:25.000
+Especially if we can get laziness later, which I just said we kind of could.
+
+19:25.000 --> 19:28.000
+So we like that. So this means we can turn these things into loops.
+
+19:28.000 --> 19:30.000
+Because reduced becomes a loop.
+
+19:30.000 --> 19:33.000
+But the same thing. We have the boilerplate. We have reduced.
+
+19:33.000 --> 19:38.000
+These definitions use vectors, which in closure are like arrays.
+
+19:38.000 --> 19:41.000
+But their fundamental conging operation adds at the end.
+
+19:41.000 --> 19:44.000
+So this has the same shape I want to talk about for the rest of the talk.
+
+19:44.000 --> 19:47.000
+We have something that we're building up, a new input,
+
+19:47.000 --> 19:50.000
+And we produce a new thing. And sort of the stuff's coming from the right
+
+19:50.000 --> 19:52.000
+And getting added to the right-hand side.
+
+19:52.000 --> 19:56.000
+So it just makes more sense here. So these are eager and they return vectors.
+
+19:56.000 --> 19:58.000
+But it's the same idea. We're reducing.
+
+19:58.000 --> 20:01.000
+We have a function that takes, you know, the vector so far.
+
+20:01.000 --> 20:05.000
+And a new value. We're conjoining the new value.
+
+20:05.000 --> 20:09.000
+Having applied f to it, right? That's the idea of mapping, right?
+
+20:09.000 --> 20:14.000
+There's an idea behind mapping that luggage handlers understand, right?
+
+20:14.000 --> 20:17.000
+Put the label on everything that comes through.
+
+20:17.000 --> 20:20.000
+It's very general, right? That's mapping.
+
+20:20.000 --> 20:23.000
+They get that. We get that. We're all human beings.
+
+20:23.000 --> 20:26.000
+We understand the same thing. As programmers, we've mucked this up.
+
+20:26.000 --> 20:29.000
+Because look at what's happening here.
+
+20:29.000 --> 20:33.000
+Map says there's this fundamental thing that you do to everything as it comes through.
+
+20:33.000 --> 20:37.000
+Filter says there's this fundamental tiny thing that you do to everything as it comes through.
+
+20:37.000 --> 20:42.000
+And map cat says there's this fundamental tiny thing that you do to everything as it comes through.
+
+20:42.000 --> 20:48.000
+What's the problem? Conge.
+
+20:48.000 --> 20:53.000
+Conge is basically like saying to the trolley or to the conveyor belt, right?
+
+20:53.000 --> 21:01.000
+It's something about the outer job that's leaked or it's inside the middle of the idea.
+
+21:01.000 --> 21:05.000
+Inside the middle of the idea of mapping is this conge.
+
+21:05.000 --> 21:10.000
+It does not belong. Inside the middle of the idea of filter is this conge.
+
+21:10.000 --> 21:13.000
+It shouldn't be there. Same thing with map cat.
+
+21:13.000 --> 21:18.000
+This is specific stuff in the middle of a general idea.
+
+21:18.000 --> 21:21.000
+The general idea is just take stuff out.
+
+21:21.000 --> 21:25.000
+We don't want to know about conge. Maybe we want to do something different.
+
+21:25.000 --> 21:28.000
+So again, we have a lot of boilerplate. We have these essences.
+
+21:28.000 --> 21:32.000
+And the other critical thing is the essences can be expressed as reducing functions.
+
+21:32.000 --> 21:36.000
+Each of these little inner functions is exactly the same shape as conge.
+
+21:36.000 --> 21:41.000
+It takes a result so far and a new input returns the next result.
+
+21:41.000 --> 21:47.000
+So to turn those inner functions into transducers,
+
+21:47.000 --> 21:51.000
+we're just going to parameterize that conge, right?
+
+21:51.000 --> 21:56.000
+We're going to parameterize the old-fashioned way with the function argument.
+
+21:56.000 --> 21:59.000
+Anything higher order, blah, blah, blah.
+
+21:59.000 --> 22:02.000
+We're going to take an argument, which is the step.
+
+22:02.000 --> 22:06.000
+So right in the middle body of this mapping...
+
+22:07.000 --> 22:10.000
+You can't see my cursor.
+
+22:10.000 --> 22:13.000
+Right in the middle body, this is the same as it was on the last slide.
+
+22:13.000 --> 22:16.000
+This is where it said conge. Now we say step.
+
+22:16.000 --> 22:20.000
+We put that inside a function that takes the step.
+
+22:20.000 --> 22:22.000
+So this is a function.
+
+22:22.000 --> 22:26.000
+Mapping takes the thing that you're going to map, you know, label the baggage.
+
+22:26.000 --> 22:30.000
+And it returns something that is a function that expects a step.
+
+22:30.000 --> 22:32.000
+What are we doing? Putting stuff on conveyor belts.
+
+22:32.000 --> 22:35.000
+What are we doing? We're putting stuff on trolleys.
+
+22:35.000 --> 22:42.000
+Okay? And it says, before I do that, I'm going to call f on the luggage.
+
+22:42.000 --> 22:44.000
+I'm going to put a label on the luggage.
+
+22:44.000 --> 22:46.000
+But I don't know about luggage anymore.
+
+22:46.000 --> 22:48.000
+The step you're going to tell me later. What are we doing today?
+
+22:48.000 --> 22:51.000
+Conveyor belts or trolleys? Conveyor belts. Cool.
+
+22:51.000 --> 22:56.000
+I got the rules. I understand how to do mapping and filtering and map catting.
+
+22:56.000 --> 22:58.000
+So same thing, filter.
+
+22:58.000 --> 23:00.000
+And what's beautiful about this is what's the essence of filtering.
+
+23:00.000 --> 23:04.000
+Apply a predicate, then maybe you do the step, or maybe you don't.
+
+23:04.000 --> 23:07.000
+There's no stuff here, right? It's a choice about activity.
+
+23:07.000 --> 23:12.000
+It's a choice about action. Same thing with concatenate, cat.
+
+23:12.000 --> 23:15.000
+What does it do? It basically says, do the step more than once.
+
+23:15.000 --> 23:18.000
+I'm giving you an input that's really a set of things.
+
+23:18.000 --> 23:23.000
+Do it to each thing. And map catting is just composing
+
+23:23.000 --> 23:27.000
+Mapping cat, which it should be.
+
+23:27.000 --> 23:32.000
+Okay. So we can take these transducer returning functions.
+
+23:32.000 --> 23:36.000
+So mapping returns a transducer, filtering returns a transducer,
+
+23:36.000 --> 23:41.000
+cat is a transducer, and map catting returns a transducer.
+
+23:41.000 --> 23:44.000
+And we can then plug them into the code we saw before.
+
+23:44.000 --> 23:48.000
+Like, how could we define map now that we've made mapping into this abstract thing
+
+23:48.000 --> 23:52.000
+that doesn't really know about lists or vectors anymore?
+
+23:52.000 --> 23:55.000
+And what we do is we just call mapping. That gives us a transducer.
+
+23:55.000 --> 24:00.000
+It says, if you give me a step function, I'll modify it to do F first on the input.
+
+24:00.000 --> 24:04.000
+And we say, okay, here's the step function, conge.
+
+24:04.000 --> 24:07.000
+Now I rebuilt the functions I had before.
+
+24:07.000 --> 24:11.000
+Except conge is not inside mapping and filtering and map catting anymore.
+
+24:11.000 --> 24:15.000
+It's an argument. Woo-hoo!
+
+24:15.000 --> 24:19.000
+We now have the essence of these things, a la carte.
+
+24:19.000 --> 24:21.000
+And that's the point.
+
+24:21.000 --> 24:24.000
+Transducers are fully decoupled.
+
+24:24.000 --> 24:26.000
+They don't know what they're doing.
+
+24:26.000 --> 24:28.000
+They don't know what process they're modifying.
+
+24:28.000 --> 24:31.000
+The step function is completely encapsulated.
+
+24:31.000 --> 24:33.000
+They have some freedom.
+
+24:33.000 --> 24:37.000
+They can call the step function, not at all, once exactly per input
+
+24:37.000 --> 24:39.000
+or more than once per input.
+
+24:39.000 --> 24:42.000
+But they don't really know what it does, so that's what they're limited to doing,
+
+24:42.000 --> 24:44.000
+using it or not using it.
+
+24:44.000 --> 24:46.000
+That's pretty much it.
+
+24:46.000 --> 24:48.000
+Except they do have access to the input.
+
+24:48.000 --> 24:51.000
+So when we said map cat, unbundled pallet,
+
+24:51.000 --> 24:54.000
+the function we're supplying there is something that knows about pallets.
+
+24:54.000 --> 24:56.000
+It doesn't know about conveyor belts.
+
+24:56.000 --> 24:59.000
+It doesn't know what the overall job is, but it knows about pallets,
+
+24:59.000 --> 25:04.000
+and it's going to know how to turn a pallet into a set of pieces of luggage.
+
+25:04.000 --> 25:07.000
+There's a critical thing about how they use that step function that they've been passed,
+
+25:07.000 --> 25:10.000
+and it goes back to that successor notion I mentioned before.
+
+25:10.000 --> 25:16.000
+They must pass the previous result from calling the step function
+
+25:16.000 --> 25:20.000
+as the next first argument to the next call to the step function.
+
+25:20.000 --> 25:25.000
+That is the rule for step functions and their use, and no others.
+
+25:25.000 --> 25:29.000
+They can transform the input argument, the second argument.
+
+25:29.000 --> 25:33.000
+So let's talk a little bit about the backwards part,
+
+25:33.000 --> 25:35.000
+because this is a frequent question I get.
+
+25:35.000 --> 25:37.000
+What did you do?
+
+25:37.000 --> 25:39.000
+Does transducers change comp?
+
+25:39.000 --> 25:41.000
+That is the first thing.
+
+25:41.000 --> 25:43.000
+They ruin comp or something like that.
+
+25:43.000 --> 25:46.000
+So what we have to do is look at what transducers do.
+
+25:46.000 --> 25:53.000
+A transducer function takes a function, wraps it, and returns a new step function.
+
+25:53.000 --> 25:56.000
+That is still happening right to left.
+
+25:56.000 --> 25:59.000
+This is ordinary comp, and it works right to left.
+
+25:59.000 --> 26:02.000
+So mapping gets run first.
+
+26:02.000 --> 26:07.000
+We're going to have some operation, you know, put stuff on a trolley or conge.
+
+26:07.000 --> 26:10.000
+Mapping will be the first thing that happens.
+
+26:10.000 --> 26:14.000
+It's going to make a little modified step that labels the heavy bags
+
+26:14.000 --> 26:17.000
+before it calls, put it on the airplane.
+
+26:17.000 --> 26:19.000
+Then filtering gets called.
+
+26:19.000 --> 26:21.000
+It does go right to left.
+
+26:21.000 --> 26:25.000
+That step, I'll make you a new step that first sees if it's food.
+
+26:25.000 --> 26:28.000
+If it's food, I'm going to throw it away.
+
+26:28.000 --> 26:30.000
+If it's not food, I'm going to use it.
+
+26:30.000 --> 26:34.000
+Then map catting runs, or the result of map catting runs.
+
+26:34.000 --> 26:38.000
+And that says, give me a step, and I will take its input,
+
+26:38.000 --> 26:40.000
+presume it's a pallet, unbundle it,
+
+26:40.000 --> 26:43.000
+and supply each of those arguments to the nested thing.
+
+26:43.000 --> 26:47.000
+So the composition of the transformers runs right to left.
+
+26:47.000 --> 26:51.000
+But it builds a transformation step that runs in the order
+
+26:51.000 --> 26:54.000
+that they appear, left to right, in the comp.
+
+26:54.000 --> 26:56.000
+In other words, comp is working ordinarily.
+
+26:56.000 --> 26:58.000
+It's building steps right to left.
+
+26:58.000 --> 27:02.000
+The resulting step runs the transformations left to right.
+
+27:02.000 --> 27:06.000
+So when we actually run this, we'll unbundle the pallets first,
+
+27:06.000 --> 27:09.000
+call the next step, which is to get rid of the food,
+
+27:09.000 --> 27:11.000
+call the next step, which is to label the heavy bags.
+
+27:11.000 --> 27:14.000
+So that's why it looks backwards.
+
+27:14.000 --> 27:18.000
+Okay, so the other nice thing about transducers is that there's
+
+27:18.000 --> 27:20.000
+no intermediate stuff.
+
+27:20.000 --> 27:22.000
+They're just a stack of function calls.
+
+27:22.000 --> 27:23.000
+They're short.
+
+27:23.000 --> 27:25.000
+Potentially they could be inlined.
+
+27:25.000 --> 27:27.000
+There's no laziness overhead.
+
+27:27.000 --> 27:28.000
+There's no laziness required.
+
+27:28.000 --> 27:30.000
+There's no laziness utilized.
+
+27:30.000 --> 27:32.000
+There's no interim collections.
+
+27:32.000 --> 27:34.000
+We're not going to have you make everything into a list.
+
+27:34.000 --> 27:36.000
+So you can say an empty list is nothing.
+
+27:36.000 --> 27:38.000
+Now, nothing is nothing.
+
+27:38.000 --> 27:40.000
+Empty list is an empty list.
+
+27:40.000 --> 27:41.000
+And one thing is one thing.
+
+27:41.000 --> 27:43.000
+A list of one thing is a list of one thing.
+
+27:43.000 --> 27:46.000
+And these are not the same.
+
+27:46.000 --> 27:49.000
+So you use the step function or you don't.
+
+27:49.000 --> 27:52.000
+And there's no extra boxes required of boxing for communicating
+
+27:52.000 --> 27:55.000
+about the mechanism.
+
+27:55.000 --> 27:59.000
+So the other thing that was sort of interesting was,
+
+27:59.000 --> 28:02.000
+sorry to talk about transducers and a lot of people in Haskell
+
+28:02.000 --> 28:04.000
+were trying to figure out what the actual types were
+
+28:04.000 --> 28:07.000
+because I had a shorthand in my blog post.
+
+28:07.000 --> 28:10.000
+And I'm not going to get into that right now.
+
+28:10.000 --> 28:14.000
+Except to say that I think it's a very interesting type problem
+
+28:14.000 --> 28:18.000
+and I'm very excited to see how people do with it
+
+28:18.000 --> 28:20.000
+in their various languages.
+
+28:20.000 --> 28:23.000
+I've seen results that were sort of, it works pretty well to,
+
+28:23.000 --> 28:26.000
+and types are, you know, these types are killing me.
+
+28:26.000 --> 28:29.000
+Depending on whether the user's type system could deal with it.
+
+28:29.000 --> 28:33.000
+But let's just try to capture what we know so far graphically.
+
+28:33.000 --> 28:35.000
+And somebody who reviewed these slides for me said
+
+28:35.000 --> 28:37.000
+these should have been subscripts,
+
+28:37.000 --> 28:41.000
+computers are so hard to use I couldn't switch them in time.
+
+28:41.000 --> 28:43.000
+So they're superscripts.
+
+28:43.000 --> 28:47.000
+But the idea is that if you're trying to produce the next process
+
+28:47.000 --> 28:53.000
+n, you must supply the result from step n minus one as the input.
+
+28:53.000 --> 28:57.000
+If you try to model this in your type system saying r to r,
+
+28:57.000 --> 28:59.000
+that's wrong, right?
+
+28:59.000 --> 29:02.000
+Because I can call the step function five times
+
+29:02.000 --> 29:05.000
+and then on the sixth time take the return value from the first time
+
+29:05.000 --> 29:08.000
+and pass it as the first thing. That's wrong.
+
+29:08.000 --> 29:11.000
+So you ought to make your type system make that wrong.
+
+29:11.000 --> 29:13.000
+So figure that out.
+
+29:13.000 --> 29:17.000
+Also, if you make the black box and the black box the same thing,
+
+29:17.000 --> 29:20.000
+that's also arbitrarily restrictive, right?
+
+29:20.000 --> 29:23.000
+You can have a state machine that every time it was given x,
+
+29:23.000 --> 29:26.000
+returned y, every time it was given y, returned z,
+
+29:26.000 --> 29:28.000
+every time it was given z, returned x.
+
+29:28.000 --> 29:30.000
+That's a perfectly valid step function.
+
+29:30.000 --> 29:33.000
+It has three separate input types and three separate output types
+
+29:33.000 --> 29:35.000
+that only happen at particular times.
+
+29:35.000 --> 29:37.000
+There's nothing wrong with that state machine.
+
+29:37.000 --> 29:39.000
+It is a perfectly fine reducing function.
+
+29:39.000 --> 29:43.000
+It may be tough to model in a type system.
+
+29:43.000 --> 29:46.000
+And don't say x or y or z, because it doesn't take x or y or z
+
+29:46.000 --> 29:48.000
+and return x or y or z.
+
+29:48.000 --> 29:51.000
+When it's given x, it only returns y. It never returns z.
+
+29:51.000 --> 29:57.000
+So it seems like a good project for the bar later on.
+
+29:57.000 --> 30:00.000
+But the thing that we're capturing here is that the new step function
+
+30:00.000 --> 30:02.000
+might take a different kind of input.
+
+30:02.000 --> 30:04.000
+It might take a b instead of an a.
+
+30:04.000 --> 30:06.000
+Our first step does that.
+
+30:06.000 --> 30:09.000
+It takes a palette and returns a set of pieces of luggage,
+
+30:09.000 --> 30:13.000
+but each step returns a piece of luggage.
+
+30:13.000 --> 30:15.000
+Okay.
+
+30:15.000 --> 30:20.000
+So there are other interesting things that happen in processes, right?
+
+30:20.000 --> 30:23.000
+Ordinary reduction processes everything.
+
+30:23.000 --> 30:26.000
+But we want this to be usable in cases that run arbitrarily long.
+
+30:26.000 --> 30:29.000
+We're not just talking about turning one kind of collection
+
+30:29.000 --> 30:31.000
+into another kind of collection, right?
+
+30:31.000 --> 30:33.000
+A transducer that's running on a channel
+
+30:33.000 --> 30:35.000
+has got an arbitrary amount of stuff coming through.
+
+30:35.000 --> 30:38.000
+A transducer on an event stream has an arbitrary amount of stuff coming through.
+
+30:38.000 --> 30:41.000
+But sometimes you want, you know, either the reducing process
+
+30:41.000 --> 30:44.000
+or somebody who says, whoa, I have had enough.
+
+30:44.000 --> 30:46.000
+I don't want to see any more input.
+
+30:46.000 --> 30:48.000
+We're done. I want to say we're done now,
+
+30:48.000 --> 30:50.000
+even though you may have more input.
+
+30:50.000 --> 30:52.000
+So we're going to call that early termination.
+
+30:52.000 --> 30:54.000
+And it may be desired by the process itself,
+
+30:54.000 --> 30:56.000
+like the thing at the bottom.
+
+30:56.000 --> 30:59.000
+Or it may be a function of one of the steps.
+
+30:59.000 --> 31:02.000
+One of the steps may say, you know what, that's all I was supposed to do.
+
+31:02.000 --> 31:05.000
+And so I don't want to see any more input.
+
+31:05.000 --> 31:07.000
+And the example here will be, you know,
+
+31:07.000 --> 31:09.000
+we're going to modify our instructions and say,
+
+31:09.000 --> 31:11.000
+if the bag is ticking, you're finished.
+
+31:11.000 --> 31:13.000
+Go home.
+
+31:13.000 --> 31:15.000
+We're done loading the plane.
+
+31:15.000 --> 31:17.000
+So we're going to add that.
+
+31:17.000 --> 31:19.000
+Taking while.
+
+31:19.000 --> 31:21.000
+Taking while non-ticking.
+
+31:21.000 --> 31:24.000
+And taking while non-ticking needs to stop the whole job in the middle.
+
+31:24.000 --> 31:26.000
+It doesn't matter if there's more stuff on the trolley.
+
+31:26.000 --> 31:28.000
+When it's ticking, we're finished.
+
+31:28.000 --> 31:30.000
+Okay?
+
+31:30.000 --> 31:32.000
+So how do we do that?
+
+31:32.000 --> 31:34.000
+It ends up in closure.
+
+31:34.000 --> 31:36.000
+We already have support for this idea in reduced.
+
+31:36.000 --> 31:40.000
+There's a constructor of a special, you know,
+
+31:40.000 --> 31:46.000
+wrapper object called reduced, which says this represents the end of the...
+
+31:46.000 --> 31:48.000
+It just says, I don't want to see any more input.
+
+31:48.000 --> 31:50.000
+Here's what I've come up with so far.
+
+31:50.000 --> 31:52.000
+And don't give me any more input.
+
+31:52.000 --> 31:54.000
+There's a predicate called reduced question mark
+
+31:54.000 --> 31:57.000
+that allows you to ask if something is in this wrapper.
+
+31:57.000 --> 32:01.000
+And there's a way to unwrap the thing and look at what's in it.
+
+32:01.000 --> 32:03.000
+So you can say, you know, is the reduced thing reduced?
+
+32:03.000 --> 32:05.000
+That will always return true.
+
+32:05.000 --> 32:07.000
+And you can de-wrap a reduced thing and get the thing.
+
+32:07.000 --> 32:09.000
+That's inside it.
+
+32:09.000 --> 32:11.000
+This is not the same thing as maybe, right?
+
+32:11.000 --> 32:15.000
+Because maybe also wraps the other things that are not reduced, right?
+
+32:15.000 --> 32:19.000
+Or either, or all those other boxy kind of things.
+
+32:19.000 --> 32:21.000
+So we don't do that.
+
+32:21.000 --> 32:25.000
+We only wrap when we're doing this special termination.
+
+32:25.000 --> 32:30.000
+So like reduce, transducers also must support reduced.
+
+32:30.000 --> 32:35.000
+That means that the step functions are allowed to return a reduced value.
+
+32:35.000 --> 32:41.000
+And that if a transducing process or a transducer gets a reduced value,
+
+32:41.000 --> 32:44.000
+it must never call the step function with input again.
+
+32:44.000 --> 32:46.000
+That's the rule.
+
+32:46.000 --> 32:49.000
+Again, implement the rule in your type system, have at it.
+
+32:49.000 --> 32:51.000
+But that's the rule.
+
+32:51.000 --> 32:53.000
+So now we can look at the insides of taking while.
+
+32:53.000 --> 32:55.000
+It takes a predicate.
+
+32:55.000 --> 32:57.000
+It takes a step that it's going to modify.
+
+32:57.000 --> 32:59.000
+It runs the predicate on the input.
+
+32:59.000 --> 33:03.000
+If it's okay, it runs the step.
+
+33:03.000 --> 33:06.000
+If it's not okay, it takes what has been built up so far and says,
+
+33:06.000 --> 33:09.000
+we're finished, reduced result.
+
+33:09.000 --> 33:11.000
+That's how we bail out.
+
+33:11.000 --> 33:15.000
+But notice the ordinary result is not in a wrapper.
+
+33:15.000 --> 33:18.000
+And so the reducing processes must also play this game, right?
+
+33:18.000 --> 33:21.000
+The transducer has to follow the rule from before.
+
+33:21.000 --> 33:24.000
+And a reducing process similarly has to support reduced.
+
+33:24.000 --> 33:29.000
+If it ever sees a reduced thing, it must never supply input again.
+
+33:29.000 --> 33:33.000
+The dereference value is the final accumulated value.
+
+33:33.000 --> 33:36.000
+But the final accumulated value is still subject to completion,
+
+33:36.000 --> 33:38.000
+which I'm going to talk about in a second.
+
+33:38.000 --> 33:41.000
+So there's a rule for the transducers as well.
+
+33:41.000 --> 33:43.000
+They have to follow this rule.
+
+33:43.000 --> 33:47.000
+So now we get new pictorial types in the graphical type language.
+
+33:47.000 --> 33:50.000
+That is Omnigraphil.
+
+33:50.000 --> 33:56.000
+So we can have, you know, a process, right,
+
+33:56.000 --> 34:01.000
+that takes some black box at the prior step and an input
+
+34:01.000 --> 34:03.000
+and returns a black box at the next step.
+
+34:03.000 --> 34:08.000
+Or maybe, right, it returns a reduced version of that.
+
+34:08.000 --> 34:10.000
+So one of those two things can happen.
+
+34:10.000 --> 34:12.000
+Or vertical bars, or.
+
+34:12.000 --> 34:16.000
+And it returns another step function that similarly can take
+
+34:16.000 --> 34:19.000
+a different kind of input, a black box, returns a black box,
+
+34:19.000 --> 34:22.000
+or reduced black box.
+
+34:22.000 --> 34:26.000
+Same rules about successorship apply.
+
+34:26.000 --> 34:28.000
+All right.
+
+34:28.000 --> 34:32.000
+So some interesting sequence functions require state.
+
+34:32.000 --> 34:34.000
+And in the purely functional implementations,
+
+34:34.000 --> 34:38.000
+they get to use the stack or laziness to put that state.
+
+34:38.000 --> 34:42.000
+They get somewhere in the execution machinery,
+
+34:42.000 --> 34:44.000
+a place to put stuff.
+
+34:44.000 --> 34:47.000
+Now we're saying, I don't want to be in the business of specifying
+
+34:47.000 --> 34:55.000
+if we're lazy or not lazy or recursive.
+
+34:55.000 --> 34:58.000
+I'm not going to give you space inside the execution strategy
+
+34:58.000 --> 35:01.000
+because I'm trying to keep the execution strategy from you.
+
+35:01.000 --> 35:04.000
+And that means that state has to be explicit when you have transducers.
+
+35:04.000 --> 35:07.000
+Each transducer that needs state must create it.
+
+35:07.000 --> 35:11.000
+So examples of sequence functions that need state are take, partition,
+
+35:11.000 --> 35:13.000
+all partition by, and things like that.
+
+35:13.000 --> 35:17.000
+They're counting or accumulating some stuff to spit it out later.
+
+35:17.000 --> 35:19.000
+Where's that going to go?
+
+35:19.000 --> 35:21.000
+And it has to go inside the transducer object.
+
+35:21.000 --> 35:23.000
+They have to make state.
+
+35:23.000 --> 35:25.000
+And there's some rules about that.
+
+35:25.000 --> 35:28.000
+If you need state as a transducer author, you have to create it
+
+35:28.000 --> 35:31.000
+every time uniquely, and again, every time you're asked to transform
+
+35:31.000 --> 35:33.000
+a step function.
+
+35:33.000 --> 35:37.000
+So a new, you're going to create state every time you transform a step function.
+
+35:37.000 --> 35:40.000
+That means that if you build up a transducer stack,
+
+35:40.000 --> 35:44.000
+which are stateful transducers, and you apply it,
+
+35:44.000 --> 35:47.000
+not when you build it, no state exists then.
+
+35:47.000 --> 35:49.000
+After you call it comp, there's no state.
+
+35:49.000 --> 35:53.000
+When you've applied it, you now have a new process step.
+
+35:53.000 --> 35:56.000
+But as we should be thinking about all transducer process steps,
+
+35:56.000 --> 36:00.000
+including the ones at the bottom, that may be stateful.
+
+36:00.000 --> 36:06.000
+You don't know that the very bottom process isn't launched stuff into space.
+
+36:06.000 --> 36:10.000
+So you should always treat an applied transducer stack as if it
+
+36:10.000 --> 36:14.000
+returned a stateful process, which means you shouldn't alias it.
+
+36:14.000 --> 36:17.000
+What ends up happening in practice is all of the transducable
+
+36:17.000 --> 36:20.000
+processes, they do the applying.
+
+36:20.000 --> 36:22.000
+It's not in the user's hands to do it.
+
+36:22.000 --> 36:27.000
+You pass around a transducer and input to the job, to the job.
+
+36:27.000 --> 36:30.000
+The job applies the transducer to its process,
+
+36:30.000 --> 36:34.000
+gets a fresh set of state when it does that, and there's no harm.
+
+36:34.000 --> 36:37.000
+But you do have to do this by convention.
+
+36:37.000 --> 36:40.000
+So here's an example of a stateful transducer dropping
+
+36:40.000 --> 36:42.000
+while a predicate is true.
+
+36:42.000 --> 36:45.000
+So we start with our flag that says it's true.
+
+36:45.000 --> 36:47.000
+As long as it's still true, we're going to drop.
+
+36:47.000 --> 36:51.000
+When we see that it's not true, we're going to reset it and
+
+36:51.000 --> 36:53.000
+continue with applying the step.
+
+36:53.000 --> 36:56.000
+And then from then on forward, we're going to apply the step.
+
+36:56.000 --> 37:01.000
+So that is not the prettiest thing.
+
+37:01.000 --> 37:03.000
+I talked before about completion.
+
+37:03.000 --> 37:05.000
+So we have the idea of early termination.
+
+37:05.000 --> 37:08.000
+The other idea that transducer support is completion, which is
+
+37:08.000 --> 37:12.000
+that at the end of input, which may not happen, there'll be
+
+37:12.000 --> 37:14.000
+plenty of jobs that don't complete.
+
+37:14.000 --> 37:16.000
+They don't have ends.
+
+37:16.000 --> 37:19.000
+They're not consuming a finite thing like a collection.
+
+37:19.000 --> 37:22.000
+They're processing everything that comes through a channel or
+
+37:22.000 --> 37:24.000
+everything that comes through an event source.
+
+37:24.000 --> 37:26.000
+There's no end.
+
+37:26.000 --> 37:28.000
+But for things that have an end, there's a notion of
+
+37:28.000 --> 37:33.000
+completion, which is to say, if either the innermost process
+
+37:33.000 --> 37:37.000
+step wants to do something finally when everything's
+
+37:37.000 --> 37:39.000
+finished, they can.
+
+37:39.000 --> 37:41.000
+Or if any of the transducers have some flushing they need to
+
+37:41.000 --> 37:43.000
+do, they can do it.
+
+37:43.000 --> 37:46.000
+So the process may want to do a final transformation on the
+
+37:46.000 --> 37:47.000
+output.
+
+37:47.000 --> 37:51.000
+Any stateful transducer, in particular, a transducer like
+
+37:51.000 --> 37:56.000
+partition, it's aggregating to return aggregates.
+
+37:56.000 --> 37:59.000
+You say partition five, and it collects five things and spits
+
+37:59.000 --> 38:00.000
+it out.
+
+38:00.000 --> 38:02.000
+If you say we're done, it's got three things.
+
+38:02.000 --> 38:04.000
+It wants to spit out the three things.
+
+38:04.000 --> 38:08.000
+But you need to be able to tell it we exhausted input.
+
+38:08.000 --> 38:10.000
+In order to do that, the way that's implemented in the
+
+38:10.000 --> 38:13.000
+closure implementation of transducers is that all the
+
+38:13.000 --> 38:15.000
+step functions must have a second operation.
+
+38:15.000 --> 38:19.000
+So there's the operation that takes a new input and the
+
+38:19.000 --> 38:23.000
+accumulated value so far and returns a new accumulated value
+
+38:23.000 --> 38:24.000
+or whatever.
+
+38:24.000 --> 38:26.000
+I mean, it's up to the process what the meaning of the black
+
+38:26.000 --> 38:27.000
+box is.
+
+38:27.000 --> 38:31.000
+But there must be another operation which takes just the
+
+38:31.000 --> 38:34.000
+accumulated value and no input.
+
+38:34.000 --> 38:37.000
+So an Rd1 operation.
+
+38:37.000 --> 38:38.000
+So that's required.
+
+38:38.000 --> 38:41.000
+So we'll talk about what that does or how that gets used.
+
+38:41.000 --> 38:45.000
+If the process itself, if the overall job has finished, if
+
+38:45.000 --> 38:48.000
+it's exhausted input or it has a notion of being finished, this
+
+38:48.000 --> 38:49.000
+is not bailing out.
+
+38:49.000 --> 38:51.000
+This is like there's nothing more to do.
+
+38:51.000 --> 38:53.000
+There's no more input ordinarily.
+
+38:53.000 --> 38:57.000
+It must call the completion operation exactly once on the
+
+38:57.000 --> 38:58.000
+accumulated value.
+
+38:58.000 --> 38:59.000
+So there's no more inputs.
+
+38:59.000 --> 39:01.000
+I'm going to call you once with no input.
+
+39:01.000 --> 39:03.000
+Do whatever you want.
+
+39:03.000 --> 39:05.000
+Each transducer must do the same thing.
+
+39:05.000 --> 39:08.000
+It has to have one of these completion operations and it
+
+39:08.000 --> 39:11.000
+must call its nested completion operation.
+
+39:11.000 --> 39:16.000
+It may, however, before it does that, flush.
+
+39:16.000 --> 39:19.000
+So if you have something like partition that's accumulated
+
+39:19.000 --> 39:24.000
+some stuff along the way, it can call the ordinary step
+
+39:24.000 --> 39:28.000
+function and then call complete on the result.
+
+39:28.000 --> 39:32.000
+And that's how we accomplish flushing.
+
+39:32.000 --> 39:34.000
+There's just one caveat here, which is that if you're a
+
+39:34.000 --> 39:37.000
+stateful thing like partition and you've ever seen reduced
+
+39:37.000 --> 39:41.000
+come up, well, the earlier rule says you can never call the
+
+39:41.000 --> 39:42.000
+input function.
+
+39:42.000 --> 39:44.000
+So you just drop whatever you have hanging around because
+
+39:44.000 --> 39:46.000
+somebody bailed out on this process.
+
+39:46.000 --> 39:49.000
+There's going to be no ordinary completion.
+
+39:49.000 --> 39:55.000
+So we can look at our types again in Omnigraphful 2000,
+
+39:55.000 --> 40:01.000
+latest programming innovation, and think about a reducing
+
+40:01.000 --> 40:04.000
+function as a pair of operations.
+
+40:04.000 --> 40:06.000
+They'll be different in each programming language.
+
+40:06.000 --> 40:08.000
+It's not really important.
+
+40:08.000 --> 40:11.000
+In closure, it ends up a single function can capture both of
+
+40:11.000 --> 40:12.000
+these arities.
+
+40:12.000 --> 40:15.000
+But whatever you need to do to take two operations, the first
+
+40:15.000 --> 40:19.000
+one up there that takes no input is the completion operation.
+
+40:19.000 --> 40:22.000
+And the second is the step operation that we've been seeing
+
+40:22.000 --> 40:23.000
+so far.
+
+40:23.000 --> 40:25.000
+It takes a pair of those things and returns a pair of those
+
+40:25.000 --> 40:26.000
+things.
+
+40:26.000 --> 40:29.000
+That's it.
+
+40:29.000 --> 40:31.000
+And again, we don't want to concretely parameterize the
+
+40:31.000 --> 40:33.000
+result type there either.
+
+40:33.000 --> 40:35.000
+You've got to use rank two polymorphism or something because
+
+40:35.000 --> 40:39.000
+if you concretely parameterize that, you'll have something that
+
+40:39.000 --> 40:43.000
+only knows about transducing into airplanes as opposed to the
+
+40:43.000 --> 40:46.000
+general instructions.
+
+40:46.000 --> 40:47.000
+OK.
+
+40:47.000 --> 40:49.000
+There's a third kind of operation that's associated with
+
+40:49.000 --> 40:54.000
+sort of processing in general, which is init.
+
+40:54.000 --> 40:56.000
+We've had talks before that mentioned monoids and things like
+
+40:56.000 --> 40:57.000
+that.
+
+40:57.000 --> 41:01.000
+The basic idea is just sometimes it's nice for a
+
+41:01.000 --> 41:04.000
+transformation operation to carry around an initialization
+
+41:04.000 --> 41:06.000
+capability.
+
+41:06.000 --> 41:09.000
+It need not be the identity value or anything like that.
+
+41:09.000 --> 41:11.000
+It does not matter.
+
+41:11.000 --> 41:14.000
+What does matter is that a reducing function is allowed to
+
+41:14.000 --> 41:17.000
+may support arity zero.
+
+41:17.000 --> 41:21.000
+In other words, given nothing at all, here's an initial
+
+41:21.000 --> 41:24.000
+accumulator value from nothing.
+
+41:24.000 --> 41:28.000
+Obviously, a transducer can't do that because it's a black box.
+
+41:28.000 --> 41:30.000
+The one thing it definitely does not know how to do is make a
+
+41:30.000 --> 41:32.000
+black box out of nothing.
+
+41:32.000 --> 41:33.000
+Can't do it.
+
+41:33.000 --> 41:37.000
+So all it can ever do is call down to the nested function.
+
+41:37.000 --> 41:42.000
+So transducers must support arity zero init, and they just
+
+41:42.000 --> 41:45.000
+define it in terms of a call to the nested step.
+
+41:45.000 --> 41:48.000
+They can't really do it, but they can carry it forward so that
+
+41:48.000 --> 41:52.000
+the resulting transducer also has an init, if the bottom
+
+41:52.000 --> 41:55.000
+transducer has an init.
+
+41:55.000 --> 41:57.000
+I've talked about the arity overloading, and so here's an
+
+41:57.000 --> 41:58.000
+example.
+
+41:58.000 --> 42:00.000
+Oh, I'm over time already.
+
+42:00.000 --> 42:01.000
+I'm sorry.
+
+42:01.000 --> 42:02.000
+So here's an example.
+
+42:02.000 --> 42:06.000
+Plus, from Lisp, this is older than transducers.
+
+42:06.000 --> 42:08.000
+Lisp programmers have been doing this for a while.
+
+42:08.000 --> 42:09.000
+Sorry, currying fans.
+
+42:09.000 --> 42:11.000
+This is what we do.
+
+42:11.000 --> 42:15.000
+Plus with nothing returns the identity value for plus zero.
+
+42:15.000 --> 42:18.000
+Multiplication with nothing returns one.
+
+42:18.000 --> 42:22.000
+It implements plus of an accumulated result as identity,
+
+42:22.000 --> 42:26.000
+and the binary operation that does the work.
+
+42:26.000 --> 42:28.000
+So here's the types again.
+
+42:28.000 --> 42:33.000
+We now have an optional init from nothing, and we're taking a
+
+42:33.000 --> 42:36.000
+set of three operations and returning a new set of three
+
+42:36.000 --> 42:37.000
+operations.
+
+42:37.000 --> 42:41.000
+In closure, we just use arity to do this.
+
+42:41.000 --> 42:43.000
+A transducer enclosure then is just something that takes the
+
+42:43.000 --> 42:46.000
+reducing function and returns one, where a reducing function
+
+42:46.000 --> 42:48.000
+has these three arities.
+
+42:48.000 --> 42:50.000
+We haven't actually called the reducing functions mapping and
+
+42:50.000 --> 42:52.000
+filtering and ing this and ing that.
+
+42:52.000 --> 42:54.000
+I think that's an Englishism that's not going to carry over
+
+42:54.000 --> 42:58.000
+very well, and we have available to us arity overloading
+
+42:58.000 --> 43:00.000
+because we don't have currying.
+
+43:00.000 --> 43:03.000
+So the map of f with no collection argument returns the
+
+43:03.000 --> 43:07.000
+transducer, and we've modified so far all of these sequence
+
+43:07.000 --> 43:10.000
+functions to do that.
+
+43:10.000 --> 43:14.000
+So this is a final example of filter returning a transducer.
+
+43:14.000 --> 43:19.000
+It takes a predicate and returns a step modifying function,
+
+43:19.000 --> 43:22.000
+which takes a reducing function, which presumably has these
+
+43:22.000 --> 43:25.000
+three arities, and defines a function with three arities.
+
+43:25.000 --> 43:27.000
+init, which just flows it through because it doesn't know
+
+43:27.000 --> 43:29.000
+what it could possibly do.
+
+43:29.000 --> 43:32.000
+Complete, filter doesn't have anything special to do, so it
+
+43:32.000 --> 43:33.000
+just flows that through.
+
+43:33.000 --> 43:36.000
+And then the result and input one, which is the one we've
+
+43:36.000 --> 43:37.000
+seen before.
+
+43:37.000 --> 43:41.000
+Then we can see, we can define the collection implementing one
+
+43:41.000 --> 43:44.000
+by just calling sequence with this transducer.
+
+43:44.000 --> 43:46.000
+And that's true of all of these functions.
+
+43:46.000 --> 43:49.000
+You can define the collection version exactly like this,
+
+43:49.000 --> 43:53.000
+which shows that transducer is more primitive than the other.
+
+43:53.000 --> 43:55.000
+So this is what we're trying to accomplish.
+
+43:55.000 --> 43:57.000
+You define a set of transducers once.
+
+43:57.000 --> 43:59.000
+You define all your new cool stuff.
+
+43:59.000 --> 44:02.000
+It's a channel today, observables tomorrow, whatever the next
+
+44:02.000 --> 44:03.000
+day.
+
+44:03.000 --> 44:05.000
+You just make it accept transducers.
+
+44:05.000 --> 44:09.000
+And every specific implementation of these things you get for
+
+44:09.000 --> 44:10.000
+free.
+
+44:10.000 --> 44:14.000
+And every recipe that somebody creates, that's a composition of
+
+44:14.000 --> 44:18.000
+those transducing operations, works with your thing right
+
+44:18.000 --> 44:19.000
+away.
+
+44:19.000 --> 44:21.000
+That's what we want.
+
+44:21.000 --> 44:24.000
+We're going to take Perlis and just say, it's even better.
+
+44:24.000 --> 44:28.000
+We want 100 functions with no data structure.
+
+44:28.000 --> 44:32.000
+So transducers are context independent.
+
+44:32.000 --> 44:34.000
+There's tremendous value in that.
+
+44:34.000 --> 44:36.000
+They're concretely reusable.
+
+44:36.000 --> 44:39.000
+So somebody can make this and not know how you're going to use it.
+
+44:39.000 --> 44:41.000
+That has tremendous value.
+
+44:41.000 --> 44:44.000
+It's much stronger than parameterization because you can
+
+44:44.000 --> 44:46.000
+Flow it.
+
+44:46.000 --> 44:48.000
+It supports early termination.
+
+44:48.000 --> 44:50.000
+They support early termination completion.
+
+44:50.000 --> 44:52.000
+You can compose them just as easily as you can compose the
+
+44:52.000 --> 44:53.000
+Other ones.
+
+44:53.000 --> 44:55.000
+They're efficient and tasty.
+
+44:55.000 --> 44:57.000
+Thanks.
+

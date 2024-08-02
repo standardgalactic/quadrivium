@@ -1,0 +1,697 @@
+start	end	text
+0	14320	So our first speaker for the afternoon session is Jacob Steinhardt.
+14320	21400	Jacob is a remarkable researcher who kind of combines like crazy creativity and technical
+21400	22400	know-how.
+22400	26300	And he's gotten me to think very differently about a lot of problems both technically
+26300	29200	and I guess societally.
+29200	36200	So I predict it will be a very interesting talk.
+36200	37760	Thank you, Sasha.
+37760	45320	So I decided that I wanted to talk about something new kind of in the spirit of the Simon's
+45320	46320	workshop.
+46320	49120	So these slides are actually prepared totally from scratch.
+49120	52900	No one has seen them before except me on my laptop.
+52900	55240	So hopefully it will be interesting.
+55240	61720	So the kind of overall motivation here is, you know, at least I really want to understand
+61720	67480	what, you know, these ML systems that we're deploying all over the world are doing, how
+67480	71480	they behave, what's going on under the hood.
+71480	75960	But I find this very challenging because there's so many new ones, you know, maybe like every
+75960	81880	month some new model is released and they get bigger and more capable and more complex.
+81880	86960	And so how kind of understanding of what these models are doing keep up, especially given
+86960	92240	that we often get kind of new capabilities or qualitative behaviors just kind of emerging
+92240	94120	every time we scale up.
+94120	102200	And so I think, you know, there's maybe more than one answer to this, but something that
+102200	108320	will be the focus of this talk is the idea that, well, if we can somehow use LLMs to
+108320	114640	understand LLMs, then maybe we're in better shape because then every time a new better
+114640	118320	LLM is released, well, there's a new thing to understand, but we've also gotten better
+118320	119760	at understanding things.
+119760	127000	So, you know, that's kind of the idea, can we get this virtuous cycle?
+127000	130120	And then, you know, hopefully as models get better, understanding will as well.
+130120	135400	So this is going to be based on work with actually a lot of different collaborators,
+135400	142080	but three that I wanted to highlight are my students, Rachie, Eric, and Colin, in particular,
+142080	149960	a lot of the kind of LLM as statistician perspective in this talk was developed by Rachie.
+149960	154360	So what do I mean by LLMs as statisticians?
+154360	160000	So what I want to argue is that many forms of understanding that we could care about
+160000	165120	essentially reduce to some sort of statistical or data science problem, right?
+165120	172880	So maybe we're given a model, we just see what it outputs on some huge number of inputs,
+172880	173880	right?
+173880	176720	We could easily do that by just taking all of the data sets we have and seeing what
+176720	177840	the model does.
+177840	179920	And then maybe we want to kind of identify patterns, right?
+179920	184400	Are there some things that the model is good at, some things it's bad at, cases where there's
+184400	189800	something surprising, and then, you know, you could try to formalize that as some statistical
+189800	191520	hypothesis and test it.
+191520	194480	So that's kind of a statistical problem.
+194480	199480	Maybe we want to understand the training set and understand, you know, what are the important
+199480	203040	sources of variation?
+203040	207960	You know, if it turns out that large fractions of the data set are in some weird language
+207960	212840	called base 64, maybe we want to know about that.
+212840	216720	And then you could also have kind of more active learning or active sampling problems
+216720	221640	where we want to, say, generate new inputs that elicit problematic behaviors so that
+221640	223440	we can identify and fix it, right?
+223440	229280	So I think of these all as on some level kind of statistics or data problems.
+229280	235680	And so if we can, in some sort of general sense, get large language models to do statistics,
+235680	240720	then they can help us tackle all of these problems, and of course, many other useful
+240720	242440	problems as well.
+242440	245640	So to do that, what would we need to do?
+245640	250120	So I'm going to kind of take a very high level view of, you know, what is, like, the
+250120	252880	pipeline of doing statistics?
+252880	256160	And I'd say it kind of has four steps.
+256160	259280	The first is we look at some initial data.
+259280	263040	Maybe we want to think of this as training data, but, you know, just some sort of data
+263040	265560	that kind of helps us get our bearings.
+265560	271120	From this data, we maybe want to form some hypothesis, you know, and maybe, like, the
+271120	278160	hypothesis that models do worse on long inputs than short inputs, right?
+278160	282720	And then formalize that quantitatively and then test this on new data.
+282720	286120	This data could just be, you know, a held out set from the same distribution.
+286120	292280	We might care about kind of, you know, generalization to new domains, or maybe if, maybe we want
+292280	296880	to even, like, actively collect data to really stress test our hypothesis.
+296880	302560	And so I'm going to go over a couple of case studies where we'll have problems that kind
+302560	306800	of follow this structure and will automate each step with LLMs.
+306800	312600	The kind of key difference from maybe traditional ways of looking at statistics is going to
+312600	319440	be in this hypothesis H. So a key difference is, you know, often H is, like, maybe expressed
+319440	325960	as some mathematical function, like, you know, patients with this future in a data set are
+325960	327240	more likely to get this disease.
+327240	331360	I can write this as, like, expectation of some feature function.
+331360	335720	But here, because we're working with language models, H is going to be a natural language
+335720	336840	string.
+336840	341920	And so this third step, which maybe is often almost trivial, it's just, like, taking the
+341920	347520	average of your feature over the data set, now actually becomes kind of non-trivial because
+347520	351880	we have to formalize what it means for, say, a natural language string to be true about
+351880	354280	a data set or not.
+354280	358600	So if that's kind of abstract, don't worry because we're going to go into some case studies
+358600	359600	very soon.
+359600	360920	In fact, right now.
+360920	361920	Okay.
+361920	368960	So the first case study I want to talk about is finding failures in a model called Clip.
+368960	374420	So for those who aren't familiar with it, Clip is an encoder model.
+374420	380840	So it takes in inputs and kind of embeds them as some feature vector.
+380840	384760	And it's kind of used as the backbone of many later models, right?
+384760	387440	So it's often useful to have good embeddings.
+387440	391560	So many models kind of use these embeddings and then do something with them.
+391560	398720	And the thing that is kind of special about Clip is that it embeds both images and text
+398720	401880	into a kind of shared space.
+401880	408880	So it was one of the most early multimodal models that kind of did this effectively.
+408880	412080	And as sort of shown here, lots of models use it.
+412080	415320	So mid-journey uses it as its kind of first embedding step.
+415320	421880	Dolly does, stable diffusion does, and lots of like 3D and video models do as well.
+421880	426160	And you can kind of get pretty amazing results using these embeddings.
+426160	430080	Often they're used to kind of do text to image generation.
+430080	434720	So you have some text description of what you want, and then these models kind of try
+434720	440720	to generate an image that matches this description in some way.
+440720	446440	So you can see here, these are maybe a little bit small, but this is an empty glass.
+446440	449640	And then you get this glass, a family of five members.
+449640	452560	And then you get this, a man descending a mountain.
+452560	453560	You get this.
+453680	457840	So these are all amazing, except for the problem that they're also all completely wrong.
+457840	459840	This is a full glass.
+459840	461920	This is a family of six members.
+461920	463960	This is somewhat us sending a mountain.
+463960	468680	This says there's no star in the night sky, and it shows the Milky Way.
+468680	473520	And so you get these amazing images, but you often get these kind of like very semantically
+473520	477400	obvious failures.
+477400	483560	So the kind of plot twist here, aside from the fact that here's a bunch of failures that
+483560	489000	we can find, is actually that we didn't find these failures, and LLM found these failures.
+489000	493920	So these are all automatically generated by actually not a single LLM, but a kind of
+493920	500160	pipeline of several LLMs working together on kind of complimentary tasks that played
+500160	502600	to their individual strengths.
+502600	508200	So we'll talk about how could we actually build a system that, just given Clip, could
+508200	513120	kind of automatically generate all of these failures at a large scale.
+513120	516480	So are there any questions so far before I go into the details of this?
+516480	517480	Yes?
+517480	518480	One quick question.
+518480	525520	Why do you say Dolly, new being, what does that mean in this context?
+525520	532800	I think different versions of Dolly, and one of them, I'm not totally sure of the details
+532800	539280	here, but I believe that Dolly was developed by OpenAI, but then Microsoft served some
+539280	542120	version of Dolly as part of their being product.
+542120	550560	And so this is that, which we use because we can actually query it kind of publicly.
+550560	551560	Yes?
+551560	558640	Are there any new type of errors that pop up from this process?
+558640	564120	For example, like the counting error or the direction error, those are already kind of
+564120	565120	known, right?
+565120	568080	So are there any new hypothesized forms in this process?
+568080	569800	Yes, that's a good question.
+569800	573280	So I'll get to kind of numbers later.
+573280	578160	We generated 14 categories of errors.
+578160	582480	We looked for papers that kind of described these errors.
+582480	587680	I think there were a handful that had already been described in the literature.
+587680	589120	The others were not in the literature.
+589120	594640	I would probably guess that someone whose day job was to play around with these models
+594640	597240	would be familiar with these errors.
+597240	604320	But the nice thing is even without spending lots and lots of time, you can do this.
+604320	612240	In fact, I think there were cases where reviewers asked us to add a new system to this pipeline
+612240	617760	and in a half hour we just got all of the new errors that that system had.
+617760	622800	So I think right now that's the advantage is that it's much quicker.
+622800	627040	I think as models become better, I'm hoping that we'll also get things that even an expert
+627040	630040	who spent lots and lots of time might not necessarily find.
+630040	632200	Yeah, great question.
+632200	633200	Any other questions?
+633200	638760	Okay, so how do we do this?
+638760	645320	So first maybe let me give a kind of overview of the key ideas here.
+645320	650240	So again, remember, Clip is a feature encoder that is encoding both text and images.
+650240	655800	So the kind of main key idea in terms of like where we get off the ground is there's going
+655800	659600	to be a sort of notion of what I'll call a hash collision in the encoder.
+659600	663560	And we'll come up with a sort of automated way of identifying lots of hash collisions
+663560	664560	in the encoder.
+664560	669600	So this is going to give us a lot of kind of like individual examples where if you have
+669600	672920	a collision, you don't know which of those two is wrong, but you know at least one of
+672920	676760	them has to be wrong.
+676760	681680	Then kind of given those failures, we're going to use LLMs to kind of categorize them into
+681680	687280	coherent patterns and test that those patterns are actually correct by generating new examples
+687760	693520	from those patterns and making sure that they actually in fact induce failures consistently
+693520	699440	both in the encoder and on downstream tasks and even kind of also generalizing to new
+699440	704600	domains that are kind of different from what we found these patterns on.
+704600	706720	So that's kind of the high level.
+706720	710160	Let me kind of step through these all one by one.
+710160	715440	So again, remember we had this statistical pipeline of get some data, generate a hypothesis,
+716440	717880	test it on new data.
+717880	719920	So let's just go through these one by one.
+719920	723960	So first let's just talk about where are we getting this initial data?
+723960	726240	What is this kind of hash collision idea?
+726240	731160	So to talk about this, I need to give you a little bit more background on Clip.
+731160	738160	So as I said before, Clip embeds either an image I or text T, but what is it actually
+738160	740680	designed to do or what was it sort of trained on?
+740680	744160	So it's actually trained on a bunch of pairs of images and their captions.
+744880	751880	And in general, the idea is that if there's text that describes an image, then that text
+751880	757720	in that image should have similar embeddings, ideally more similar embeddings to each other
+757720	759120	than to anything else.
+759120	764320	So the training process was basically you got a bunch of images, you got a bunch of
+764320	770280	captions, and then you want to make sure that under this embedding, the cosine similarity
+770320	776200	between an image and its caption is higher than between that image and any other captions.
+776200	779760	So you kind of want, if we form this matrix of dot products, you want the diagonal to
+779760	783200	be really big and everything else to be really small.
+783200	788160	And so the kind of point here is that if T is the description of I, they should have
+788160	791520	similar embeddings.
+791520	795680	Now how can I use this to find problems?
+795800	802000	Well, if T and T prime describe different images, but have the same embedding or have
+802000	808000	very similar embeddings, then at least one of them has to be wrong in some sense, right?
+808000	813760	Because they, you know, like whatever images these corresponded to, they kind of can't
+813760	817160	both be, they can't both be right.
+817160	818160	Ah, yes, Aliosha.
+818160	823480	That's the subjection between images and text, and we know that, you know, pictures
+823480	825680	weren't a thousand words.
+825680	832200	Right, so the examples I have in mind would be something like an empty cup and a full
+832200	833200	cup.
+833200	836680	And if those, like if those sentences had the same embedding.
+836680	840480	But those are, that's, that's a very small subset of all the, like there is a lot of
+840480	844440	synonyms, right, visual synonyms.
+844440	845440	That's right.
+845440	847480	So you have to worry about visual synonyms.
+847480	853320	So we need, we need some way of measuring kind of semantic difference that hopefully
+853320	856200	implies that things are actually visually different.
+856200	859040	So I'll get to that on the next slide.
+859040	860800	Other questions though?
+860800	868720	So one thing here also is the nice thing is that I can do this only looking at text, right?
+868720	872240	I mean, I have to use the clip encoder, but I'm only encoding text.
+872240	873800	And why do I want to only look at text?
+873800	877680	Well, basically, because language models work really well and image models don't.
+877680	882920	Sorry, Aliyosha.
+882920	887280	But you know, according to Aliyosha, image models will work really well soon.
+887280	888280	Even better.
+888280	890960	But right now, right now, we want to stick with language.
+890960	893160	So, so what do we do?
+893160	897160	We're going to collect some initial corpus of text inputs, and we want these inputs to
+897160	900880	be inputs that have some visual significance.
+900880	906920	So we'll often take them from some, say, captioning data set or other kind of data
+906920	910120	set that has visual descriptions.
+910120	912760	And then we're going to embed them all under clip.
+912760	916800	And we're also going to embed them under another model called Distill Roberta, which
+916800	922320	is a very good text model, especially for embeddings.
+922320	924720	So it's a text-only model.
+924720	928560	And it also has a higher-dimensional embedding space than clip.
+928560	931920	And so for both of these reasons, it's kind of, you know, has a better understanding of
+931920	937000	text than clip does, because it gets to only focus on text and it has more parameters.
+937000	945080	And so the basic idea is, you know, so we have all these clip embeddings.
+945080	952640	And if there's two inputs that are very close in clip space, but actually have low Roberta
+952640	954560	similarity, right?
+954560	958760	So that means they're kind of different, like Roberta thinks that they're semantically
+958760	963200	different sentences, but clip says they're the same, then we're going to say, OK, that's
+963200	966720	a hash collision, probably something is wrong there.
+966720	972880	Now, I agree with you that we also want to check that these really are semantically different
+972880	974920	in a way that matters visually.
+974920	979960	Empirically, it turns out that that's the case about 90% of the time.
+979960	984800	So this is kind of good enough, and this is something we kind of verified with human
+984800	985800	subject studies.
+985800	988080	Jacob, how do you find these things?
+988080	992640	Because aren't the clip vectors like 2048 dimensional or something?
+992640	999880	Yeah, so we're just taking the cosine similarity.
+999880	1002800	So this is like, this is an n squared algorithm.
+1002800	1007440	Oh, yeah, but OK, but I mean, if we imagine that you were just looking for collisions
+1007440	1013120	in this 2048 dimensional space, we would say a priori that could take astronomical time.
+1013120	1017840	You're saying like in practice, it takes much less time because, you know, there's something
+1017840	1023400	about these text inputs that makes the collisions likelier.
+1023400	1024760	So yeah, a couple of things.
+1024760	1028240	I guess first we don't need exact collisions.
+1028240	1033920	If the cosine similarity is large enough, I guess empirically, if it's larger than 0.88,
+1033920	1039720	it turns out that it's pretty likely to create a problem.
+1039720	1041440	So you don't need them to be exactly the same.
+1041440	1043400	That kind of helped you somewhat.
+1043400	1045400	And yeah, so somehow this...
+1045400	1053040	But I mean, two unit vectors having an inner product of 0.88 in a 2048 dimensional space,
+1053040	1056400	we might as well call that a collision, right, at that point.
+1056400	1061120	But he's assuming n squared time for u n with the exponential, right?
+1061800	1062800	So, okay, right.
+1062800	1066040	So Scott's claiming we would need an exponential large data set, but this is not...
+1066040	1071320	Yeah, yeah, yeah, but okay, but it happens that...
+1071320	1074840	So basically the reason why there are collisions is not...
+1074840	1079040	has nothing to do with like the pigeonhole principle with the space, right?
+1079040	1084320	It's just that, you know, the way that it's something special about this mapping that
+1084320	1089880	causes there to be collisions, even though a priori there could have been no collisions.
+1089880	1090880	Yeah, that's right.
+1090880	1095240	Okay, and if you care, couldn't you do it much faster by using the same kind of h and
+1095240	1100320	s, w in the cities with all of the embeddings?
+1100320	1103000	Yeah, you could do this much faster than n squared.
+1103000	1108280	It just turned out that this is not the bottleneck, like the bottleneck is running the forward
+1108280	1115080	passes of all the models and kind of looping over a bunch of pairs of, you know, thousand
+1115080	1119440	dimensional vectors is pretty cheap compared to running an LLM.
+1120160	1124240	Yeah, so we tried two different corpora.
+1124240	1132280	One is Cocoa and the other is, what's the other one, SNLI, yeah.
+1132280	1138000	These are both kind of text data sets that have visual significance.
+1138000	1141720	And yeah, I mean, basically the point is that there's enough, yeah, there's enough structure
+1141720	1144120	in text that you actually do get collisions.
+1144120	1146880	I don't care about the n squared.
+1146880	1149040	Okay, okay, got it, got it.
+1149240	1150920	Okay, so this is the first step, right?
+1150920	1154520	This is going to give us a bunch of pairs where we kind of know that like one of the
+1154520	1158480	two things in the pair is wrong.
+1158480	1161560	And so now we want to do something with that.
+1161560	1166520	So this is kind of the next stage is we want to generate some hypotheses based on these
+1166520	1167720	pairs, right?
+1167720	1172600	So this is where we're going to use the fact that we have text and not images, right?
+1172600	1177240	So the individual pair fillers are text inputs, they can feed them to GPT4.
+1177240	1182160	And so, you know, here's the magical prompt, it says I'll provide a series of data for
+1182160	1183160	you to remember.
+1183160	1186600	Subsequently, I'll ask you some questions to test your performance.
+1186600	1191400	Here's some pairs of prompts to memorize, and then you give it all of, well, you give
+1191400	1195040	it as many of these failures as you can fit in the context window.
+1195040	1199000	And then you tell it, hey, I'm trying to find failures as an embedding model.
+1199000	1203840	These are pairs of sentences that are encoded very similarly using the specific examples.
+1203840	1207160	Are there any general types of failures you notice the embedding is making?
+1207160	1211760	And then, you know, you kind of give it some more context and you'd say, okay, what does
+1211760	1212760	it generate, right?
+1212760	1218120	So you're basically saying, here's some data, please look at it, please tell me some patterns.
+1218120	1223080	And so then it, you know, it does a pretty good job of coming up with things.
+1223080	1228840	It says, okay, there's negation, temporal differences, quantifiers, and the nice thing
+1228840	1233080	is actually it doesn't just say negation, but it gives a bunch of elaborations.
+1233080	1236880	So it says embedding models may not correctly capture the negative context in a sentence
+1236880	1241920	leading to similarities between sentences with and without negation.
+1241920	1245960	This can result in incorrect visual representations if the presence or absence of an action is
+1245960	1249200	significant in video generation.
+1249200	1253120	And it kind of keeps going.
+1253120	1259240	And you get, I guess in this case, you get kind of 14 distinct failures in total on this
+1259240	1262400	list.
+1262400	1265880	And the other thing is empirically, GPD4 just kind of always uses this consistent list
+1265880	1269600	format so you can automatically just parse out the individual hypotheses.
+1269600	1270600	Yeah, Lisa.
+1270600	1278080	Have you tried just like asking GPT without these like inputs, like what are common failure
+1278080	1281120	cases of image embedding models or something?
+1281120	1282120	Yes.
+1282120	1287240	So that's a baseline that I will show results on later.
+1287240	1292560	And yeah, it works a lot less well.
+1293200	1298280	So this kind of gives us hypotheses.
+1298280	1300080	So this was step two.
+1300080	1304520	But now we're running into this problem of, OK, usually in statistics a hypothesis is
+1304520	1309840	like actually some mathematical function, but here these are just sentences.
+1309840	1312400	So now we need to formalize this hypothesis.
+1312400	1317920	So we have this list of hypotheses, h1 through hk, that are all natural language descriptions.
+1317920	1323440	So how can we test if one of these hypotheses is actually any good?
+1323440	1327440	So I think this is a pretty interesting conceptual question to think about.
+1327440	1334400	So maybe I'll pose it to the audience if anyone has ideas for how we could formalize this.
+1334400	1336400	Hi, Chris.
+1336400	1338400	Good afternoon.
+1338400	1345520	Two or more about pairs as to whether they match this hypothesis and then see if the
+1345520	1346520	images are wrong.
+1346520	1347520	OK.
+1347520	1351520	In this analysis of DPT4, if you have access.
+1351520	1352520	Good.
+1352520	1353520	Yes.
+1353520	1354520	So that is Yan Yi.
+1354520	1361680	I mean, if we think about research hypothesis, there are a few dimensions that you can use
+1361680	1364160	to categorize whether some say it's a hypothesis.
+1364160	1367160	So for example, it should be testable, right?
+1367280	1369280	There should be a clear scope.
+1369280	1373280	There are a few dimensions I think that you can come up with based on experts.
+1373280	1374280	Right.
+1374280	1381000	So you can kind of ask experts or DPT4 if it had those properties.
+1381000	1385960	So it turns out we're going to do something pretty similar to what Chris said, although
+1385960	1389120	we're going to look at generation rather than classification.
+1389120	1397880	So we're going to say H is a good hypothesis if when you hand that description to some
+1397880	1404400	intelligent agent, in this case not humans, because humans are expensive, but DPT4, they
+1404400	1411440	do a better job of generating new failures than they would otherwise.
+1411440	1416360	So this is the way we're going to quantify this.
+1416360	1423040	So we'll say H is a good hypothesis if it can be used to generate new failures better
+1423040	1426720	than some just baseline method of generating failures.
+1426720	1430080	And this is where we're going to get to your question, Lisa.
+1430080	1437480	So we can either hand DPT4 these hypotheses or we could just ask DPT4 to brainstorm without
+1437480	1443520	any data ways in which vision models might be bad and kind of test those against each
+1443520	1446200	other and see which one does better.
+1446200	1449920	So we're going to test this by prompting an LLM with H as a context.
+1449920	1452680	And so again, what is the magical prompt?
+1452680	1458000	The magical prompt is to say write down 41 pairs of prompts that an embedding model with
+1458000	1462240	the following failure mode might encode similarly, even though they would correspond to different
+1462240	1464280	images if used as captions.
+1464280	1470240	Use the following format so you give it kind of a format so that we can extract things programmatically.
+1470240	1474680	And then we say some other stuff to motivate it, saying that it will be evaluated based
+1474680	1477680	on how well it performs.
+1477680	1484840	And then you give the failure mode and as kind of the description that we extracted before.
+1484840	1494080	Y41, that's the length, basically the length of the output context window that can be fit.
+1494080	1499160	So if you want more than 41, you just have to ask it a couple of times.
+1499200	1501600	So this is what we did.
+1501600	1504600	Yeah, Nicholas.
+1504600	1510240	How much does this be creative and cautious and these kinds of things like actually help?
+1510240	1515440	Or is this just like black magic that you sort of sprinkle on top?
+1515440	1520240	We didn't do careful ablations on the prompt.
+1520240	1526200	I think, yeah, we added a bunch of stuff until it worked.
+1526600	1529960	I don't think we tried removing things to see what was actually necessary.
+1529960	1536480	So it seems totally like I would guess that if you tried to distill this to its bare essentials,
+1536480	1539080	you could get something simpler.
+1539080	1541320	But we didn't try to do that.
+1541320	1544120	But yeah, great question.
+1544120	1548240	OK, so then we want to quantify by measuring the success rate.
+1548240	1554600	So we get all these pairs of prompts that are supposedly supposed to be new failures.
+1554600	1556960	So we can do this in two ways.
+1556960	1564640	We can look at the fraction of things generated that are hash collisions in the same sense as before.
+1564640	1567680	So that's kind of an easy thing to do.
+1567680	1571120	At some point, we want to make sure that the system is actually doing something
+1571120	1576440	and that the something doesn't involve trusting that LLMs are good at their job.
+1576440	1583880	So we also do a human evaluation where we look at downstream systems that rely on clip
+1583960	1589440	and ask humans if there's a failure to make sure that these actually are failures
+1589440	1593560	and not just happen to have high cosine similarity.
+1593560	1596040	So those are the two things we do.
+1596040	1599000	So let's kind of go over the results.
+1599000	1605240	So first, just kind of looking at hash collisions,
+1605240	1610400	but testing on these new inputs that were generated.
+1610400	1618480	So we say an input has a success if these similarities are above some threshold.
+1618480	1620760	And what is this table saying?
+1620760	1626920	So these rows are kind of the different failures generated by the system.
+1626920	1630480	And actually, we considered six different systems.
+1630480	1636600	So you can ask different models to look at the data and propose hypotheses.
+1636600	1641800	So these are different kind of proposal models, GPT-4-Claude or GPT-3.5.
+1641800	1648680	And then you can also vary the data set that you used to actually get these failures out.
+1648680	1654160	So these are the two data sets that people asked about before, COCO and SNLI.
+1654160	1656840	So I guess a couple interesting things.
+1656840	1666320	One is that, oh, and a check mark means that the model generated the failure at all in its list.
+1666360	1675680	And then the color is kind of the success rate of generating new inputs conditional on that failure description.
+1675680	1678080	So a couple interesting things.
+1678080	1681360	First of all, the data set seems to actually matter.
+1681360	1693640	So kind of for both GPT-4 and Claude, action, well, OK, maybe let's pick a more intuitive one.
+1693640	1706160	OK, so for both GPT-4 and Claude and GPT-3.5, SNLI elicits granularity as a failure, whereas COCO never does.
+1706160	1708960	And sometimes it's kind of not quite so systematic.
+1708960	1715120	But in general, it sort of seems like these data sets actually do kind of like elicit different failures.
+1715120	1721400	So there is at least some dependence on the data, which is somewhat reassuring.
+1721400	1728280	The other thing is maybe as expected, GPT-4 and Claude in general find many more failures than GPT-3.5 does.
+1728280	1734040	So these better models actually generate more distinct hypotheses.
+1734040	1747560	And then a final thing that is interesting is actually even for the same failure, bigger models often are giving you higher success rates.
+1747560	1752480	So you can see this in a couple places like for granularity.
+1752480	1762200	The description of the granularity failure that GPT-4 generated was apparently better in terms of if you then hand that back to GPT-4,
+1762200	1772280	it more successfully generates novel failure instances compared to the kind of description that GPT-3.5 gave.
+1772280	1777360	In all of these cases, we're fixing GPT-4 as kind of the thing that's generating new failures.
+1777360	1780480	So there's no effect from that.
+1780480	1787000	So this kind of difference is just coming from the actual text description output by them all.
+1787000	1796720	So are there any questions about this data?
+1796720	1811640	What more is left about when GPT-4 does better than GPT-3.5, is it because it better understood the instruction versus maybe GPT-3.5 also understood the description,
+1811640	1824160	but somehow the examples were very just curious what sort of qualitative differences are there between different models.
+1825080	1829720	So I haven't thought about this a ton.
+1829720	1841280	I think my two main hypotheses here would be, I believe GPT-4 has a larger context window so it can see more examples, which might be useful.
+1841280	1854040	But I think probably the more important thing is actually just that the task of proposing hypotheses from a data set is actually a pretty challenging task.
+1854040	1860240	And so even kind of frontier models are not that good at it.
+1860240	1871520	So then once you drop down from GPT-4 to GPT-3.5, you're kind of losing, probably just losing too much capability for it to be super consistent.
+1871520	1873080	That would be my hypothesis.
+1873080	1873880	I don't know.
+1873880	1874560	Yeah, Richie.
+1874560	1883040	Yeah, so in practice, we found that GPT-3.5 doesn't really condition on the data very well, while GPT-4 actually does condition on the data.
+1883040	1885040	And then describe the same thing that they do.
+1888040	1889040	Yes?
+1889040	1898600	If I have the samples that the model generated actually fall into those categories, so maybe they overlap with some other categories.
+1898600	1908800	So I don't think we did a systematic evaluation of whether all of the examples fall into those categories.
+1909560	1916560	Yeah, I can give some orders on the next slide that get at least implicitly at that.
+1916560	1920560	It looked like maybe someone else had a question.
+1920560	1928560	OK, so maybe let's go to the human evaluation, which will at least partially answer your question.
+1928560	1938560	So we wanted to not just stick with saying that you actually get these hash collisions, but show that these actually lead to images that humans say are wrong.
+1939320	1950320	So, OK, darn, the text here is a little bit small, but this is kind of the human annotator interface that we gave.
+1950320	1959320	So we had prompt one, a city skyline with a bridge, prompt two, a city skyline without a bridge.
+1959320	1962320	So this is this kind of collision pair.
+1962320	1972320	This is an image that came from one of these two prompts chosen at random.
+1972320	1984320	And so the annotator has to say either that this corresponds to prompt one, it corresponds to prompt two, it corresponds to neither of them,
+1985320	1990320	or these prompts are described visually identical situations.
+1990320	1997320	So this kind of gets at your earlier question, Alyosha, on whether these are actually semantically different.
+1997320	2009320	And so we're kind of measuring what counts as a successful failure, either if the annotator says that it's wrong,
+2009320	2015320	or if they say it's prompt two, but it was actually generated by prompt one, or vice versa.
+2015320	2029320	And so then you can look at the kind of rate at which mistakes are made conditional on different levels of clip similarity in the two prompts.
+2029320	2033320	So this is kind of testing that high similarity actually leads to failures.
+2033320	2039320	And you can kind of see there's this like inflection point at like 0.88.
+2039320	2047320	So this is kind of one verifying that actually we do get pretty high rates of failure,
+2047320	2053320	and two that this magical threshold I told you about earlier is actually kind of reasonable threshold.
+2053320	2060320	And then finally, to get at this question of whether these descriptions are actually doing anything.
+2060320	2064320	So I guess this doesn't test whether the failures correspond to the descriptions,
+2064320	2069320	but it tests that the descriptions are actually needed to get high failure rates.
+2069320	2075320	If you have a baseline system where you just ask it to like brainstorm possible failures images might have,
+2075320	2082320	and then condition on those, you only get about 20% failure rate,
+2082320	2087320	whereas you get an 80% failure rate if you use this data conditioned system.
+2087320	2095320	So these are the human evaluated rather than model evaluated equals.
+2095320	2102320	So are there questions about this?
+2102320	2105320	This is a talk where high failure rate is better.
+2105320	2112320	Yes, yeah, you want high failure because we're trying to find failures so that we can fix them.
+2112320	2121320	Okay, and then I guess a final cool thing is, you know, a kind of really big bonus of having this come from language models
+2121320	2124320	is language models are kind of automatically steerable.
+2124320	2126320	Right, so I have this way of generating failures,
+2126320	2133320	but I can then just ask the model to give me failures that are relevant to some new domain.
+2133320	2140320	And so in this case, we kind of asked it to generate failures that are relevant to self-driving.
+2140320	2146320	The data sets are still cocoa and SNLI so we didn't give it data that would specialize to self-driving,
+2146320	2154320	but it can still kind of generate these failures in this novel domain and still have a good success rate.
+2154320	2157320	And so these are just kind of examples.
+2157320	2161320	Stable diffusion, you have the cars on the right side of the lane, but it's on the left side.
+2161320	2164320	This is not a green light, gives you a green light.
+2164320	2173320	A yield sign gives you something that is at least not shaped like a yield sign, probably a stop sign.
+2173320	2175320	And then a car stops for a red light.
+2175320	2180320	This is actually a text to video model and the light is green.
+2181320	2188320	What data from cocoa and SNLI are you passing in?
+2188320	2191320	No, no, so you're passing in the text from...
+2191320	2199320	So this is for the very first stage where you're giving it a bunch of just text inputs and embedding them to check for hash collisions.
+2199320	2206320	So those hash collisions were from embedding text sentences from cocoa and SNLI.
+2206320	2214320	So there's actually no images anywhere here except in the output of the systems.
+2214320	2220320	I'm kind of curious about the hypothesis part of this and whether that's kind of necessary.
+2220320	2225320	So we had a paper a couple years ago and just tried finding these collisions.
+2225320	2231320	And I kind of wonder if you could just give it a sentence and like search for a collision and just cut out the language model.
+2231320	2235320	What is it adding in the process?
+2235320	2239320	Well, finding the initial... Oh, I see.
+2239320	2254320	So I think one thing is this steerability I think would be challenging in some cases if you were doing that because you would need a large data set of text in whatever new domain you were looking at.
+2254320	2262320	We don't need a bunch of sentences about self-driving cars to do this, but if you were looking for collisions manually, then you would have to do that.
+2262320	2265320	I see.
+2265320	2268320	Yeah, cool.
+2268320	2277320	Okay, so to summarize this, right, we had these four stages of, you know, first we want to get initial data, which we did by scraping hash collisions from this text data set.
+2277320	2282320	This kind of invoked these two models clipped into still Roberta.
+2282320	2286320	Then we generate hypotheses by prompting GPT-4.
+2286320	2291320	Then we kind of formalize these hypotheses by looking at the success rate of generating new failures.
+2291320	2296320	So we use GPT-4 to generate the failures and clip to evaluate them.
+2296320	2301320	And then we can also do this active steering, again, prompting GPT-4.
+2301320	2315320	So I think one thing I want to highlight here is that, you know, often we think about just having this one language model and we just come up with our super clever prompt that solves everything and maybe do chain of thoughts.
+2315320	2317320	And this sort of thing.
+2317320	2332320	But I think you can actually get a lot further if you're willing to kind of use this kind of, you know, ecosystem of models together in creative ways.
+2332320	2342320	And I think statistics is a particularly kind of good use case for this because there are these different stages of the pipeline that require kind of different skills.
+2342320	2344320	And statistics also has some nice properties, right?
+2344320	2350320	Like many parts of it are kind of automatically measurable and verifiable.
+2350320	2361320	And so you get a lot of the same strengths as Adam was talking about yesterday with computer programming where, you know, you can...
+2361320	2365320	We haven't done much of this, but like you can, you know, maybe do this self-training.
+2365320	2375320	And maybe if you get models that were really, really, really good at statistics, like superhuman at statistics, because there's so much automatically-generatable data.
+2375320	2376320	Okay.
+2376320	2380320	So that was the first case study.
+2380320	2382320	Let me go over the second one.
+2382320	2388320	We'll go a bit more quickly now that we've kind of built up a lot of these conceptual ideas.
+2388320	2400320	So here I'm actually going to talk about a kind of meta task that is then going to be useful for lots of individual ways in which we would want to understand language models.
+2400320	2404320	So this meta task is classifying with natural language predicates.
+2404320	2408320	So the task here is we're going to be given two text data sets, D1 and D2.
+2408320	2411320	We want to find out what's different between them.
+2411320	2415320	And this difference, again, should be some natural language string H.
+2415320	2420320	And so we can kind of think about this as isomorphic to binary classification, right?
+2420320	2426320	We're kind of trying to classify between D1 and D2, but where the function is described in natural language.
+2426320	2430320	So let me just give you an example of what this task might look like, right?
+2430320	2434320	So maybe these are my two data sets, D1 and D2.
+2434320	2439320	We want to come up with a natural language description of how they're different.
+2439320	2444320	So can anyone figure this one out?
+2445320	2447320	Okay, yes.
+2447320	2450320	So the left is French and the right is English.
+2450320	2456320	So our H would be D1 contains more French sentences compared to D2.
+2456320	2460320	Okay, so here's a harder example.
+2460320	2466320	Maybe partly hard due to text size.
+2466320	2474320	So I claim that even if you looked at this for a while, it would be hard to tell what the difference was.
+2474320	2483320	And in fact, the difference is that sentences in D1 contain at least two female characters in them, whereas sentences in D2 do not.
+2483320	2492320	This is actually pretty challenging because there's things like she carried a total of eight torpedoes where she refers to a ship,
+2492320	2495320	which is not in fact a female character.
+2495320	2500320	And you also have to know that Professor McKeown is female.
+2500320	2509320	And so there's kind of a lot of world knowledge and kind of non-trivial stuff in solving a problem like this.
+2509320	2512320	So I guess that's the kind of meta task.
+2512320	2514320	Why should we care about this?
+2514320	2520320	So first, I'll give you three use cases that would help us better understand LLMs.
+2520320	2525320	So we could want to understand distribution shift.
+2525320	2530320	So especially if a model is doing poorly out of distribution, maybe we want to diagnose what's different.
+2530320	2536320	And so we might find out that the test distribution involves more formal writing than the training distribution.
+2536320	2540320	And that might help us diagnose failures or tell us what we should fine tune on.
+2540320	2544320	The positive class contains more URLs than the negative class.
+2544320	2550320	If this were a spam classification data set, this would tell us that there was this potential spurious queue.
+2550320	2557320	That maybe the model just looks at the presence or absence of URLs and we should make sure that that's not just what it's doing.
+2557320	2559320	We could do error analysis.
+2559320	2567320	I could give you two models and I could look at the difference between inputs where one of them versus the other one makes mistakes.
+2567320	2571320	And then we could also go beyond just trying to understand LLMs.
+2571320	2577320	You know, you could start trying to do, you know, for like say like social science, right?
+2577320	2587320	I look at a bunch of tweets from one year versus another year and it turns out and say, okay, public opinion from this year is more optimistic about the pandemic than last year, right?
+2587320	2592320	We can kind of generate at least descriptive hypotheses like this.
+2592320	2605320	Of course, you would then want to carefully do all of the causal inference and other stuff to validate these, but this at least can generate hypotheses for you.
+2605320	2607320	Okay, so how will we do this?
+2607320	2610320	Well, yes, D.
+2610320	2618320	So, if you go back to the examples you have, it feels like the hypothesized space is huge, right?
+2618320	2625320	So there seems to be a recall precision issue here, and it seems your ground truth only has some of them.
+2625320	2631320	Like for them, the very easy example, my hypothesis could be there is no relation between those two sentences.
+2631320	2635320	I mean, you have like, it has more French versus the second sentence.
+2635320	2637320	The space seems huge.
+2637320	2640320	How do you locate it to the final ones we want?
+2640320	2644320	So we're not going to have ground truth in most cases.
+2644320	2653320	There are a couple of cases where we did create a ground truth so that we could kind of test in the traditional setting with kind of gold labels,
+2653320	2660320	but we're going to kind of take a similar perspective to how you'd evaluate any other classifier, right?
+2660320	2665320	So we're going to come up with a way to quantify these in terms of some classification error rate,
+2665320	2673320	and then we'll say that one hypothesis is better than another if it has a lower error rate in distinguishing D1 and D2.
+2673320	2678320	And so rather than having a fixed ground truth, we can just talk about which systems are better or worse,
+2678320	2684320	and maybe we could also say compare to humans to get some like overall benchmark.
+2684320	2690320	Some of the hypothesis might be very true, and others may be more usable, right?
+2690320	2691320	Okay, right.
+2691320	2698320	So there's, right, so you might also want to evaluate if there's some like goal,
+2698320	2703320	you might want to evaluate like relevance to the goal and some notion of novelty.
+2703320	2705320	These become, start to become subjective.
+2705320	2715320	So we have done some of this where we get human ratings of novelty and relevance.
+2715320	2724320	Reviewers didn't like it actually because it's too hard to define novelty, but anyways, like you can do this and like I think,
+2724320	2727320	but I do agree it's kind of a tricky problem.
+2727320	2737320	So just building on these questions, are you constraining some complexity of your hypothesis?
+2737320	2740320	Are you looking for short hypotheses?
+2740320	2751320	So we'll implicitly have short hypotheses here, although that kind of just comes from the fact that these are going to be generated by an LLM,
+2751320	2756320	and LLMs will only output things that are so long.
+2756320	2766320	But yeah, we like, for usability reasons, you would want this to be kind of short and interpretable.
+2766320	2768320	So yeah, how are we going to do this?
+2768320	2774320	We're basically just going to use LLMs somewhat similar to before, right?
+2774320	2782320	So I won't give you the full magical prompt that Rachel came up with, but just kind of schematically,
+2782320	2790320	give it a bunch of examples from the first distribution and label them as A, a bunch from the second label them as B.
+2790320	2796320	And then we say, you know, compared to group B, each sentence from group A, and then we ask it to complete it.
+2796320	2800320	This was done at a point where we were using GBD3.
+2800320	2803320	So we needed it to be in this completion format.
+2803320	2811320	Once you have instruction tuned models, there's maybe nicer prompts you can have.
+2811320	2813320	But this is kind of the basic idea.
+2813320	2819320	And then you sample this a bunch of times with different, you know, sub-samples of the data, right?
+2819320	2823320	So keep in mind that we can only fit maybe like 30 or so examples into the context window.
+2823320	2828320	So we have a data set with thousands of examples is like a very tiny fraction.
+2828320	2833320	So we kind of keep sub-sampling to generate different hypotheses.
+2833320	2840320	And then, you know, you'll get things like is more positive, contains the word chapter, is longer.
+2840320	2846320	Some of them actually kind of have, yeah, some of them end up being kind of trivial.
+2846320	2848320	So you might want ways of filtering them out.
+2848320	2852320	But you kind of get this set of candidate hypotheses.
+2852320	2858320	So this is kind of telling us how we do the first two steps of this statistics pipeline, right?
+2858320	2860320	We look at this initial data.
+2860320	2867320	We prompt GPTN for some N with examples from D1 and D2.
+2867320	2870320	And then we ask how they're different in this form of the hypothesis.
+2870320	2875320	But now we need to somehow formalize each quantitatively and test it on new data.
+2875320	2887320	So I guess, again, maybe I'll pose the question, you know, how could we formalize this each quantitatively?
+2887320	2894320	How could we sort of say quantitatively how good is it?
+2894320	2896320	Sorry, what do you say first?
+2896320	2898320	Okay, good.
+2898320	2906320	So we can say, you know, good hypothesis is something that helps tell D1 and D2 apart.
+2906320	2916320	So we'll, you know, take a sample from D1, a sample from D2, mix them up randomly so you don't know which is which.
+2916320	2925320	Tell either a human or an LLM the hypothesis and ask them to say which is which.
+2925320	2933320	So, you know, as an example, say H is involves more formal writing, we can interpret this as basically a two argument predicate, right?
+2933320	2945320	So if I have sentences X1 and X2, H of X1, X2 is some binary predicate that is the truth value of, you know, the utterance X1 involves more formal writing than X2.
+2946320	2950320	And so this should be true or false.
+2950320	2956320	And so then we just ask a human or a language model if it's true or false.
+2956320	2970320	And so then we'll say H is a correct hypothesis about D1 versus D2 if in expectation over samples X1 from D1 and X2 from D2, this is much less than 0.5, right?
+2970320	2984320	So 0.5 would be chance if this is sort of the, like some measure of the classification error, if it's much less than 0.5, then we've, we figured out something non-trivial about D1 and D2.
+2984320	2994320	And so yeah, how to implement this, I guess you could ask humans or you could just query an LLM.
+2995320	3011320	And so what does this look like, right? So just to illustrate this, if H is samples from D1 or more positive than those from D2, we, you know, we give, in this case, Charlie Snell, who was an undergrad at Berkeley at the time and is now a PhD student at Berkeley,
+3012320	3030320	this paper proposes an impactful task or the approach of this paper is too trivial, and ask him which of these it's true about, and then he says something, and then, you know, maybe Charlie's time is pretty valuable, so you can hire crowd workers to do this instead.
+3030320	3048320	But the problem is, you know, even if we just wanted to average over, say, like 100 samples from this distribution to get some notion of accuracy, this would cost $10 per text description, and this is very expensive.
+3048320	3050320	You don't want to do this.
+3050320	3062320	And so the nice thing is LLMs kind of reduce the cost of this pipeline by about a factor of 1000. You can do this 100 samples for only seven cents with GP3.5 turbo.
+3062320	3071320	And so then this gives you a kind of automatic, quantifiable measure of how successful this hypothesis is.
+3071320	3085320	And the nice thing is also that it's somewhat more reproducible than humans, like you don't have to worry about getting back the same human label errors again, because, you know, the model, well, the model's not actually fixed, open AI keeps updating it, that's kind of annoying.
+3085320	3093320	But if they were to serve a stable version of the model, then this would be reproducible.
+3094320	3111320	Right, so now we've kind of gotten this whole pipeline, right, so the overall system as we have this proposal, which at the time we initially wrote this paper was a fine tune to GP3 that generates these candidate hypotheses.
+3111320	3117320	Then we have a verifier that kind of, you know, does this check on each of the hypotheses.
+3117320	3124320	And at the time it was fine tune unified QA. Now you can kind of replace with newer models.
+3124320	3131320	And then you kind of, you know, re rank the hypotheses based on their actual success rate at this classification task.
+3131320	3138320	And, you know, why is this decomposition useful. Well, from an engineering perspective, and I think this is actually very important.
+3138320	3144320	The proposer only sees 30 examples, because that's length of its context window.
+3144320	3161320	So it's in that sense fairly limited, even though it's this very smart, like GPT three or four system, whereas the verifier can see thousands of examples and so you can get much better tests of statistical significance.
+3161320	3163320	How am I doing on time.
+3163320	3166320	I think we have about five minutes left.
+3166320	3168320	Okay, cool.
+3168320	3174320	So maybe I'll just say, you know, you can use this for a bunch of things. So for describing distribution shifts.
+3174320	3183320	There's these two data sets MNLI and SNLI where SNLI is often used as like an OD version of MNLI.
+3183320	3189320	Here's four samples to which are from SNLI and to which are from MNLI.
+3189320	3194320	It's not immediately obvious what distinguishes them.
+3194320	3208320	But if I say that SNLI describes a picture, then it's very clear that the green ones are SNLI because it says the church choir sings to the masses and old man with the packages poses in front of an advertisement.
+3208320	3211320	And the other two are not about pictures.
+3211320	3216320	So you kind of immediately see what the distribution shift is here.
+3216320	3224320	There's two paraphrase data sets, Twitter, PPTV and QQP, which stands for core question pairs.
+3224320	3228320	It says Twitter talks about a news story and core contains a question.
+3228320	3235320	These are just kind of sanity checks like these would be kind of totally obvious to anyone who was familiar with these data sets.
+3235320	3237320	But you can do more interesting things.
+3237320	3244320	So this was one that I think to our knowledge was novel at the time we discovered it detecting spurious cues in a data set.
+3244320	3250320	So we handed it this data set called SUBJ, which is a data set for subjectivity analysis.
+3250320	3253320	And it said the objective class was a plot summary of a film.
+3253320	3263320	The subjective class is a quote from a film review, which seems like it should be wrong for a data set that's about subjectivity analysis.
+3263320	3268320	But if you actually go back and read the paper, it says,
+3268320	3274320	to gather subjective sentences, we collected 5000 movie reviews snippets from Rotten Tomatoes to obtain mostly objective data.
+3274320	3278320	We took 5000 sentences from plot summaries available from IMDB.
+3278320	3287320	So actually, if you did well in this data set, you were basically learning this rather than stuff about subjectivity.
+3287320	3294320	There's like other shortcuts we found somewhere new somewhere old, but you can sort of find all these various cues.
+3294320	3297320	You can use this for error analysis and so on.
+3297320	3302320	So maybe just to summarize, right, we have these four steps of this pipeline.
+3302320	3308320	Initial data was just the two text distributions, generate the hypothesis by prompting GPT-3,
+3308320	3316320	formalize the hypothesis by measuring the success rate, and then you kind of test on new held out samples.
+3316320	3326320	The final thing I'll just leave up is we have ongoing work that is kind of taking this far beyond classification to just sort of like generally using natural language
+3326320	3331320	predicates as features in statistical models.
+3331320	3341320	So this example here is trying to describe temporal drift in news headlines from the Australian Broadcasting Company,
+3341320	3348320	and it kind of identifies these five features that kind of vary.
+3348320	3354320	And you could think of as maybe the top five principal components explain the variation in this data set.
+3354320	3358320	Although the percent of variance explained is actually still pretty low here.
+3358320	3365320	So I think you should think of this as just like a initial result.
+3365320	3367320	So maybe I'll end there and take questions.
+3367320	3386320	So for the proposal, there can be just like do prompt optimization like overtime,
+3386320	3390320	you keep selecting like an example and then see where it fails and then show it again.
+3390320	3396320	And then after a while you have like this good hypothesis and that you can somehow guarantee that is correct
+3396320	3398320	in a set of checking things.
+3398320	3400320	So you could.
+3400320	3404320	So is the idea like basically like fine tune the proposal to get better and better?
+3404320	3406320	Yeah, fine tune the prompt.
+3406320	3408320	You do that prompt optimization.
+3408320	3410320	Oh, prompt optimization.
+3410320	3419320	So I think so my general sense is if you just use the proposal,
+3419320	3422320	I mean, we didn't try to do like the full prompt optimization,
+3422320	3429320	but we do do ablations of like just using the proposal and that generally does a lot worse.
+3429320	3432320	I think that there's a couple issues.
+3432320	3436320	What one is just that the proposal gets much less data than the verifier.
+3436320	3440320	So, you know, even like if you do prompt optimization.
+3440320	3447320	Oh, no, what's your I thought that your proposal like get like a few number of data.
+3447320	3449320	That's why you should do the checking.
+3449320	3450320	Yes.
+3450320	3455320	And then I was just saying that can you make the proposal more strong by just to prompt.
+3455320	3461320	I see everything and then you can guarantee that these hypothesis is correct.
+3461320	3464320	Yeah, so that's that's an interesting idea.
+3464320	3471320	So you're basically saying, okay, like do prompt optimization to find a prompt that gets this feel like we discussed this.
+3471320	3475320	What was your claim is that you don't get semantically.
+3475320	3483320	The point that you do gradient is gradient is that you find the prompts and you are you very easily get like a readable prompt that is not natural.
+3483320	3486320	I would stream because what you typically find with adversarial examples.
+3486320	3488320	They are relatively possible.
+3488320	3489320	Yeah.
+3489320	3491320	So I think the issue is at least right now.
+3491320	3496320	If you do this, it's hard to get kind of like natural language out right now.
+3496320	3507320	Right now you asked you for to give the gradients but
+3507320	3510320	Thank you for this amazing talk.
+3510320	3518320	The quick question maybe this is not so you're asking you're asking for hypotheses that separate the two data set.
+3518320	3524320	And when you were testing them, they were like, okay, let me pick two examples and say one is more positive than the other.
+3524320	3536320	But could you tweak this to possibly look for hypotheses that certainly answer yes in one case and no in the other case that you don't have to look at two comparative examples.
+3536320	3539320	Like, okay, this one talks of a female character.
+3539320	3542320	The other one talks of a male character.
+3542320	3547320	So what would be just so I can understand like what would be an example.
+3547320	3556320	So as an example, the second data, the second example you showed was that this statement talks of two female characters.
+3556320	3562320	That's a statement you can answer in yes or no without looking at two different samples from the two data sets.
+3562320	3563320	Yeah.
+3563320	3572320	So could you tweak this to possibly just look for hypotheses that could be answered on a single data point rather than a comparison between data points from different data sets.
+3572320	3581320	Yeah, so we actually, I think, worked with both versions of the system, one that is kind of unary predicates and one that's binary predicates.
+3581320	3587320	I think in practice, a lot of the interesting things you want out are kind of binary predicates.
+3587320	3597320	So you can get like you can get somewhere with this unary thing, but you're kind of losing something if you don't consider comparatives.
+3597320	3599320	Okay, let's thank the speaker.

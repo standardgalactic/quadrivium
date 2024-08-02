@@ -1,0 +1,347 @@
+start	end	text
+0	8000	After that, we have our discussion session for about half an hour from 4 to 4.30.
+8000	20000	So, the next talk will be given by my colleague, Major Naik, who will talk about scallops and other seafood.
+20000	25000	Hi, everyone. Thanks, Val.
+25000	38000	So, I'll be talking about this programming language and compiler that we have been building over the last three years on this exciting topic called Neurosymbolic Programming.
+38000	51000	As a disclaimer, I'm a programming languages researcher, mostly consuming all the cool stuff that folks in databases and AI have been doing so.
+51000	64000	So, you won't see much in terms of novelty, but you'll see a lot of interesting synergies and empirical results that come from importing good theory from other fields.
+64000	70000	Let me first motivate the need for Neurosymbolic programming.
+70000	76000	So, there are these two prevalent paradigms of modern programming, as all of you know.
+76000	87000	So, these are commonly called System 1 and System 2 by noted psychologist Daniel Kahneman in his book Thinking Fast and Slow.
+87000	96000	So, if you see System 1 is deep learning where you have a lot of benefits.
+96000	101000	For example, you have subsymbolic knowledge.
+101000	110000	What that means is you have meaning associated with, say, a name Tom that likely is a male and so on, right?
+110000	117000	There's open domain knowledge. You don't have to write and code everything explicitly.
+117000	130000	They're good at rapid reasoning, handling noise and naturalness, and what we nowadays see with foundation models is in context learning or more accurately prompt engineering.
+130000	144000	On the other hand, we have classical algorithms, which is System 2, where you can explicitly encode knowledge and get more data efficient solutions.
+144000	157000	You can also do complex reasoning, things like multi-hop reasoning using recursion, but also negation, aggregation, and so on, which traditionally deep learning isn't great at.
+157000	164000	You have other benefits like interpretability, modular reasoning, and better generalizability.
+164000	173000	Traditionally, these two systems don't talk to each other very well.
+173000	178000	But we do want features of both for many AI applications, right?
+178000	184000	And so that has given rise to this field called neurosymbolic programming.
+184000	194000	Now, this term means slightly different things to different people, and so I'm going to define more specifically what it means to us.
+194000	205000	There is a much richer taxonomy of different styles of neurosymbolic programming that we don't necessarily encompass.
+205000	215000	But I will show you that at least this form that we consider is interesting enough to write a lot of useful applications, right?
+215000	230000	So what I've shown here is a picture of the three approaches before proceeding to why it is hard to combine deep learning and classical algorithms in a single system.
+230000	247000	So in deep learning, much of the success comes from gradient descent algorithms for backpropagating the loss to learn the parameter theta of this neural model.
+247000	256000	X and Y are in these double boxes indicating that you have supervision on them, right?
+256000	269000	On the other hand, classical algorithms such as this program P can typically work on structured data, which I'm going to indicate with R, okay?
+269000	284000	And in neurosymbolic, this is a simple neurosymbolic program where there's initially a neural component and theta, which takes input X, produces an intermediate representation R, which is structured,
+284000	291000	which in turn is fed to a classical algorithm P to produce an output Y, right?
+291000	308000	And we have gradient descent here, dr by d theta, but we'd also like to somehow backpropagate the loss across this program, this discrete program P, okay?
+308000	322000	And even though this looks like a supervised learning setting, we have actually used neurosymbolic programming in many different settings that I'll show you today, including RL and even unsupervised learning with foundation models.
+322000	326000	So what are some of the challenges that we tackled in building Scallop?
+326000	332000	So the first question is what is the symbolic representation we use for R?
+332000	338000	And the second is what is the reasoning language for programs P, right?
+338000	345000	As you can imagine, there's a lot of different choices for these decisions.
+345000	359000	Most importantly, how can we obtain an automatic and efficient differentiable reasoning engine to learn this dy by dr under what we call algorithmic supervision, right?
+359000	362000	What that means is you're not given supervision on R, right?
+362000	366000	And that makes this whole problem more challenging.
+366000	373000	We only have supervision end to end on end to end observable input output data X and Y, okay?
+373000	379000	But not on sort of intermediate data R. And this makes sense for a lot of applications.
+379000	381000	If you think of a healthcare application, right?
+381000	387000	You have data about a patient, all of their lab measurements and so on.
+387000	391000	We also have some outcome Y of, say, a treatment.
+391000	401000	But even an expert clinician might not have time to label every intermediate piece of information or might not even know how to label it, right?
+401000	404000	Even if they could.
+404000	410000	So that makes this problem particularly challenging.
+410000	412000	We also have two other challenges here.
+412000	423000	We'd like to tailor learning of this computing dy by dr by different applications, characteristics, okay?
+423000	432000	At this point, we are looking at approximate algorithms which go along well with gradient descent, which is already approximate.
+432000	438000	And lastly, we'd like to integrate with all the existing training pipelines.
+438000	441000	This is more of an empirical challenge here.
+441000	444000	We don't want to reinvent something like PyTorch.
+444000	453000	And so we'd like to reuse all the existing models and training pipelines.
+453000	458000	So here are some of the design decisions that we made.
+458000	462000	Much of this borrows from work by other researchers.
+462000	469000	I'm not necessarily inspired by DeepProblog, but would later learn that there was work by many other researchers as well.
+469000	480000	And our main contribution here was really using Datalog and putting all of this together in a practical system, right?
+480000	488000	So the first design decision here was to use a relational representation for R, right?
+488000	497000	And I don't need to tell a database community about how the relational model has withstood the test of time.
+497000	505000	It can represent very general forms of data in arbitrary graphs.
+505000	514000	There are many other nice properties about relations, as I will show you when we tag tuples with probabilities and more general kinds of information,
+514000	518000	so this relational representation is really helpful.
+518000	525000	The second is the choice of the language for P, and here we use a Datalog-based language.
+525000	530000	We started out literally with Datalog, but it has grown over the years.
+530000	535000	We have support for algebraic data types, foreign functions, and so on.
+535000	538000	Actually, it is at this point Turing complete.
+538000	546000	So depending on what subset of a language you use, you get different guarantees.
+546000	554000	Perhaps the most interesting piece here for this audience is we accidentally discovered provenance semirings.
+554000	567000	We were playing with different kinds of tags and eventually realized that they could generalize them in this very elegant work,
+567000	572000	which was mentioned at the beginning of this workshop on provenance semirings.
+572000	577000	I will show you the different semirings that we have in my talk.
+577000	583000	Lastly, we have integration with both PyTorch and JAX.
+583000	590000	PyTorch for getting models that might be pre-trained and so on that we might want to fine-tune,
+590000	598000	but also for computing the loss here using something like JAX.
+598000	605000	It is a pretty usable framework and to end with lots of moving pieces.
+605000	611000	Let me give a simple motivating example of the kinds of things we can do with Scala.
+611000	616000	This is a simple strategy game called Pac-Man.
+616000	619000	It is actually a simplified version which is called Static Pac-Man.
+619000	621000	The ghosts are not moving.
+621000	623000	The setup is as follows.
+623000	626000	There is this grid of 5x5 cells.
+627000	637000	Each time in each instance of this game, we randomly assign these ghosts, the Pac-Man agent and the goal in different cells.
+637000	653000	As I said, the ghosts do not move and so the goal is to learn to reach the goal without hitting any of the ghosts.
+654000	661000	We set this up as a simple RL reinforcement learning problem.
+661000	672000	We use a simple model here which is BQN, BQ networks to train this agent.
+672000	678000	The baseline here is an end-to-end neural model, a convolutional neural network,
+678000	687000	which is not given supervision on which cells contain ghosts or the goal post or the Pac-Man itself.
+687000	690000	All of this is the intermediate representation to be learned.
+690000	698000	The only supervision one gets is after an entire game episode where either the Pac-Man reached the goal,
+698000	705000	so you get a reward of 1 or it didn't and in which case it gets a reward of 0.
+706000	714000	We formulate this problem in Scalop by decomposing it into a neural model which is doing this low-level perception.
+714000	721000	The goal of the neural model is to simply learn what each cell might contain.
+721000	723000	There are four choices.
+723000	730000	It can either be empty or it can contain a ghost or it can contain the Pac-Man itself or it can contain the goal.
+730000	732000	These are the four choices.
+732000	744000	Now this neural model outputs these choices to a logic program in Scalop whose goal is to do the path planning.
+744000	755000	In summary, instead of having a monolithic neural network which is trying to learn end-to-end how to do both entity extraction and path planning,
+755000	762000	we decompose this task into entity extraction which is sort of low-level perception that is best done by a neural module
+762000	768000	and a logic program, a classical algorithm which does the path planning.
+768000	775000	At each step, the goal is to decide whether the Pac-Man should move up, down, right or left.
+775000	781000	You'll get the reward only after an entire episode of around 20 steps.
+782000	788000	Here is our empirical result.
+788000	798000	In just 50 such episodes with this Scalop program that I showed you, we can get an accuracy of 99.4%.
+798000	809000	Whereas if you do this with a baseline of end-to-end neural, you get a much lower accuracy and it requires over 50,000 episodes.
+810000	819000	There's some hand-waving here. This is not entirely a fair comparison because we have written a domain knowledge using logic rules.
+819000	823000	I probably skipped over the program itself so here goes.
+823000	831000	This is our syntax for our data log-based language, in this case for path planning.
+831000	837000	The goal here is to compute the next action, one of these four choices.
+837000	847000	That in turn depends on whether there's a path from an adjoining position where the Pac-Man currently is to the goal.
+847000	852000	The definition of a path is itself a recursive predicate.
+852000	861000	It's a path that does not collide with any of the hosts and that is encoded using what we call safe cells.
+861000	864000	Any questions so far?
+869000	874000	The programmer writes this discrete program without any probabilities and so on.
+875000	891000	What we will see happening under the hood when both at training and inference time is a neural model will compute these predicates such as actor, goal and enemy only with different degrees of certainty.
+891000	900000	In some sense, we have all of these possible words being tracked simultaneously by the scallop engine.
+901000	912000	All of that computation will be done through tags which you don't see here at the level of the values that are being propagated.
+912000	917000	Can I ask you a quick question on this? Is there a notion of a shortest path or is it any path?
+917000	928000	Great question. Here we say any path but if I understand this correctly, the tags will penalize paths that are longer.
+929000	931000	Cycles in the path you will...
+937000	949000	Let me get into the semirings. The short answer is the tags will be tracking a finite amount of information so they won't necessarily compute all paths with cycles and so on.
+950000	963000	In this example, the neural network is responsible for extracting the state of the program and then you have an actual program to perform the logic.
+963000	969000	The neural network extracts action information or something else.
+969000	972000	So the neural network only extracts...
+972000	978000	So the question was whether the neural network extracts these predicates actions.
+979000	980000	If it did.
+983000	987000	So that is the baseline that I was showing you that you don't have a logic program.
+987000	997000	So the neural network is taking in this grid of pixels, 200 by 200 pixels and producing one of these four outputs or other distribution over these four outputs.
+997000	1001000	So that is the baseline. If you were using that, then you wouldn't need scallop.
+1001000	1007000	Here we are trying to show you that you can actually do more data efficient and robust and so on.
+1007000	1013000	By the way, this program, which is learned, generalizes very nicely to much larger grids, even 25 by 25.
+1013000	1023000	So you see, whereas a network which was trained end to end would probably not generalize well to other grid sizes.
+1023000	1028000	So let me briefly talk about what is going on in the scallop compiler.
+1028000	1031000	So we have this differentiable reasoning framework.
+1032000	1035000	First, a preview of our entire compiler.
+1035000	1038000	So the surface syntax looks like this.
+1038000	1043000	In this case, it even has limited forms of quantifiers.
+1043000	1052000	We have a front end which produces these abstract syntax trees and there are several passes here for type inference and so on.
+1052000	1063000	Then we have a back end where, which is based on extended data log where we do a lot of optimizations including query planning and magic set transformations and so on.
+1063000	1074000	And finally, we have this relational algebra machine or RAM, which is what is actually executed at training and inference time.
+1074000	1082000	And this is what the equivalent scallop RAM program looks like for that high level constraint.
+1082000	1086000	So where does prominence come in?
+1086000	1096000	So the semantics of SEL RAM, which is essentially just extended relational algebra, which is the semantics of data log.
+1096000	1102000	We have implemented a very general framework for tracking provenance.
+1102000	1110000	And this is inspired by the work on provenance semirings that was mentioned at the beginning of this workshop.
+1110000	1118000	And we even have this very clean interface to define new provenance structures.
+1118000	1126000	So again, covered in the original tutorial, but briefly there's this tag space that you have to define yourself.
+1126000	1132000	And then various operations for disjunction, conjunction, negation and saturation.
+1132000	1138000	I've shown one instance of this abstract structure here, which we call max min probabilities.
+1138000	1150000	Here the set of tags is real numbers between 0 and 1 and disjunction is max, conjunction is min and so on and so forth.
+1150000	1160000	If you apply this max min probe to a particular rule during the execution of the program I showed you,
+1160000	1164000	let's say the rule which computes whether a cell x comma y is safe.
+1164000	1170000	So it is safe if it is indeed a grid cell, a cell in the grid, in the 5 by 5 grid,
+1170000	1174000	and we do not believe that there's an enemy in the cell.
+1174000	1179000	So this is the standard semantics of data log, of discrete data log, untagged semantics.
+1179000	1184000	So let us say that in 1 comma 2 and 2 comma 3 are two different grid cells.
+1184000	1190000	And let us say the enemy is in the cell 2 comma 3, then we know how to compute this difference.
+1190000	1193000	So that's just the tuple 1 comma 2.
+1193000	1201000	But in the tagged semantics, something much richer is happening, which is that we have these tags t1, t2 and t3 now.
+1202000	1209000	And they are propagated here along with the output values of each rule.
+1209000	1216000	And once you use a particular provenance semiring, in this case the max min probe,
+1216000	1222000	we can for example say that in this case we believe the enemy is in cell 2 comma 3
+1222000	1227000	with the probability of 0.2 coming from the convolutional neural network.
+1227000	1233000	And so now you can imagine every cell has some probability of an enemy being there.
+1233000	1243000	And accordingly you can now get estimates of which cells are safe, okay?
+1243000	1246000	Yes, go ahead.
+1247000	1254000	So the difference with prob log is that you use this fuzzy logic, we are propagating the probability.
+1254000	1256000	The difference to prob log?
+1256000	1259000	Yes, so the prob log has this weighted model accounting semantics, right?
+1259000	1263000	So you use the fuzzy semantics to propagate the probability.
+1263000	1267000	So we, so I wouldn't know the answer to that.
+1267000	1272000	We can probably take that offline, but we do have, so this was as I said inspired by deep prob log.
+1272000	1275000	We do have weighted model counting.
+1275000	1279000	I just showed you, so max, I see, so you mean fuzzy as in this max min.
+1279000	1280000	Okay, okay.
+1280000	1283000	So I just showed you a simple semiring.
+1283000	1285000	In practice we don't use any of those.
+1285000	1289000	We just use them early on while we are developing applications,
+1289000	1296000	but very quickly turns out these fuzzier semirings don't really help learn the model, okay?
+1296000	1302000	So the one that we really use, so as I said, there's the discrete execution.
+1302000	1306000	There's the probabilistic one, and then finally there's the differentiable one,
+1306000	1309000	which is what we use for learning, right?
+1309000	1314000	And the one that you are probably talking about is what we call top K proofs.
+1314000	1321000	So along with each tuple, we track, you know, what we call, you know, up to the top K proofs,
+1321000	1328000	which I think Eric in the first talk referred to as I believe W of X, okay?
+1328000	1335000	So we don't count how many times a tuple was used or anything like that.
+1335000	1341000	Yes, with respect to the negation and saturation operations, right?
+1341000	1348000	Can you expand a little bit on what your requirements for them are, for this to work?
+1348000	1351000	Yeah, this is sort of too low level for me to explain.
+1351000	1352000	So I wouldn't know.
+1352000	1357000	I'll be happy to get you in touch with the students.
+1357000	1359000	First of all, it will be stratified negation.
+1359000	1363000	But I think you are asking me a deeper question than that.
+1363000	1369000	What's the structure, what's the test, what's the negation has to prove that?
+1369000	1371000	So if it comes to me, I'll let you know.
+1371000	1378000	I do know exactly what you're asking, and I'll try to see if I can remember, okay?
+1378000	1386000	There are certain restrictions on all of these, on negation and saturation, okay?
+1386000	1390000	But you prove them once and for all when you're defining the semi-ring, okay?
+1390000	1393000	And so you can then use it.
+1393000	1399000	So I'm not going to go too much further into semi-rings other than to just say that the nice thing here,
+1399000	1404000	at least to me, is that the programmer writes as if they are programming against a deterministic
+1404000	1407000	neural model that is producing these outputs, right?
+1407000	1415000	But under the hood, you have all of these probabilistic and differentiable reasoning happening through these tags, okay?
+1416000	1425000	We have applied this to a wide range of benchmarks and are now moving to even more sophisticated ones in robotics
+1425000	1429000	and healthcare, for explainable healthcare and so on.
+1429000	1436000	But I'll just show you some core, you know, some challenges in the field of AI that we started out with.
+1436000	1442000	These include, you know, benchmarks in computer vision, which have images and video.
+1442000	1449000	For example, here, this is this Mugen benchmark where the goal is given a short video and a piece of text
+1449000	1459000	to give a score between zero and one that tells how likely is this text talking about the frames in this video, right?
+1459000	1467000	So this, as you can imagine, has applications in video captioning, video search, video recommendation and so on, right?
+1467000	1470000	There is, we have benchmarks in NLP as well.
+1470000	1478000	Again, fairly standard ones and then we also have multimodal benchmarks.
+1478000	1485000	And much of these benefits of relational, the relational model are useful here.
+1485000	1490000	For example, we extract scene graphs from images which can be represented as relations.
+1490000	1498000	We extract abstract syntax trees from in semantic parsing, which are again represented as relations, right?
+1498000	1502000	This is where the rubble meets the road. All of this theory is elegant.
+1502000	1508000	But if it doesn't work in practice, then it's not, then it doesn't help us, right?
+1508000	1517000	When we started this project, many of these baselines, both neural and neurosymbolic, were far behind us, right?
+1517000	1524000	But by the time we got all of this published, some of them had even crept back up ahead of us, right?
+1524000	1528000	So this is sort of the challenge we face against the end-to-end deep learning paradigm, right?
+1528000	1540000	Which is, it will, you know, as newer neural architectures and so on are designed, they might even outperform, say, the neurosymbolic approaches, okay?
+1540000	1544000	So, any questions before I proceed? Yes.
+1544000	1547000	Maybe also, right, so accuracy is one thing, right?
+1547000	1552000	But I could also see that since you're encoding some of the main knowledge into your program, right?
+1552000	1559000	I could see that, for example, you might need less data to learn the model and things like that, and maybe it's more performant.
+1559000	1561000	Yes, so great question.
+1561000	1569000	And we have all of these results in our PLDI paper, PLDI 2023, where we talk about better interpretability.
+1569000	1579000	So if you remember, the intermediate representation R on which no supervision was given, we can actually look back what did it actually learn the right representation, right?
+1579000	1587000	And the answer is yes, so it is more interpretable, it is more robust and better generalizable.
+1587000	1593000	So these better neural networks, are they kind of trying to do what you do with your structured constraints?
+1593000	1596000	Are they trying to do that through network structure?
+1596000	1600000	Are they trying to simulate, basically, what you can do in a more elegant way?
+1600000	1604000	So, first of all, these are end-to-end deep neural models, right, like transformers and so on.
+1604000	1609000	We wouldn't necessarily know what they are trying to do, but they are solving this problem.
+1609000	1611000	Let me show you one, right?
+1611000	1616000	So this pathfinder was a benchmark by, I think, Google Research a few years ago called PathX.
+1616000	1623000	You see, they're two tiny dots, and you have to tell whether there's a dotted path from one to the other, okay?
+1623000	1632000	And even for a human, it can take up to two minutes to tell for some of these difficult images whether there's actually a dotted path or not.
+1632000	1635000	So it's a binary classification problem, right?
+1635000	1645000	So, you know, so the state of the art now here is actually a transformer which, I'm sorry, which beats what we have.
+1645000	1651000	So you see for PathX, there's this transformer model which is doing even better than ours.
+1651000	1656000	In our case, we simply, you know, we have the rule for computing transitive closure.
+1656000	1665000	So once you know which, where are the two dots and where are the edges, you can use, you know, simple these two rules to tell whether they are reachable or not.
+1665000	1671000	But you don't know if their model is trying to do something like that in the deep learning model directly?
+1671000	1675000	Right, so we haven't actually seen, you know, like for explanations within them.
+1675000	1677000	So it would be nice to see that.
+1677000	1680000	There are also some neuro-symbolic baselines here.
+1680000	1682000	I mean, work that Guy and others have done.
+1682000	1688000	By the way, a lot of his work has gone into this with sentential decedent diagrams and so on in our weighted model accounting.
+1688000	1691000	You know, just ignore, you know, not mentioning here.
+1691000	1700000	But there are other neuro-symbolic works as well based on, you know, abductive reasoning and so on that we were able to outperform.
+1700000	1701000	Yeah.
+1701000	1705000	So I have a question about the gradient semi-ring, which was mentioned several times today.
+1705000	1713000	So I don't understand how it's useful in the context here because the gradient semi-ring really computes the forward derivatives,
+1713000	1718000	which means that if you have a neural network for object detection with a million parameters,
+1718000	1723000	you have to push forward a million dimensional vector through your whole computation path.
+1723000	1729000	And what you really need for machine learning is the backward derivatives, which are, you know, linear time.
+1730000	1734000	So even though mathematically the gradient semi-ring is a beautiful thing,
+1734000	1736000	it's actually the wrong tool for machine learning.
+1736000	1739000	You want the backward derivative not to forward.
+1743000	1746000	Yeah, so I think we'll have to talk about this more offline.
+1746000	1747000	Sorry about that.
+1747000	1751000	I wasn't paying too close attention to the gradient semi-ring.
+1751000	1753000	Let's talk more.
+1754000	1757000	Could you go back once?
+1757000	1758000	Yeah.
+1758000	1763000	So for the first two examples, we have the MNIST bit.
+1763000	1764000	Yeah.
+1764000	1774000	And then this is, like after you recognize, so another approach is that you recognize bit and then you just write Python to something to get.
+1774000	1775000	Right.
+1775000	1778000	So why is this any better?
+1778000	1780000	Why are we doing anything better?
+1780000	1783000	Your supervision is not given on the individual MNIST digits.
+1783000	1784000	Okay.
+1784000	1786000	It's only given on the final result.
+1786000	1787000	Yeah.
+1787000	1791000	So but this example is, it feels a little bit confined.
+1791000	1792000	Right.
+1792000	1794000	So I could have done this by doing the two basic approach.
+1794000	1795000	Yeah.
+1795000	1796000	Yeah.
+1796000	1801000	For example, here we are this kind of more streamlined approach has a clear benefit.
+1801000	1806000	So if you had supervision on the intermediate results, you wouldn't need scallop at all.
+1806000	1807000	Okay.
+1807000	1808000	Right.
+1808000	1809000	Right.
+1809000	1816000	So in, in none of these benchmarks, do we have intermediate supervision, even though many of them are synthetic and you actually know the intermediate labels.
+1816000	1823000	So that is how we actually, you know, measure whether you know, you know, the degree of interpretability, how much has it actually recovered the information.
+1823000	1829000	So I'm not showing you, you know, we have heat maps for all of this to show you actually what intermediate representation was learned.
+1829000	1836000	And it is, it matches the synthetic data's labels.
+1836000	1837000	Yes.
+1837000	1838000	Okay.
+1838000	1841000	So, you know, that is, you know, I'm just going to show you some fun things here.
+1841000	1851000	There's not much more I can say here with, you know, so now what happened was in these two years that we did this work, LLMs and more generally foundation models came on the scene.
+1851000	1853000	And we wondered, you know, can we catch up?
+1853000	1854000	Right.
+1854000	1856000	Can we somehow integrate this into scallop?
+1856000	1858000	And the answer surprisingly is yes.
+1858000	1859000	Okay.
+1859000	1860000	And this is still open.
+1860000	1864000	I think Joe also brought this up, you know, if I understood correctly what you're saying.
+1864000	1872000	So what is the, the programming, you know, abstraction for say, you know, these generative models, and surprisingly, the relational model still works.
+1872000	1878000	If you think of any foundation model, right, it is a binary relation which takes a prompt and gives a response.
+1878000	1879000	Right.
+1879000	1883000	And these are data types where the strings or tensors and so on are all supported in scallop.
+1883000	1884000	Okay.
+1884000	1891000	And it's actually a relation, not a function because based on the temperature and so on that you use the same prompt could have different responses.
+1891000	1892000	Right.
+1893000	1895000	You know, very well into scallop.
+1895000	1898000	And we built this library of plugins.
+1898000	1909000	We now have 12 foundation models integrated into scallop and you can add new ones very easily using our foreign function and predicate interface.
+1909000	1921000	I'm not going to go too much into these, but I can, you can sort of see how we are, we have these decorators for relations.
+1921000	1934000	And you can use a few short examples or you can use chain of thought, you can use auto GPT, you can even fine tune, you know, layers of these models in scallop using again just end to end supervision.
+1934000	1948000	In this case, you know, we break down this task into sort of this in context learning which extracts tuples, you know, which are the basic relationships between pairs of people mentioned in this passage.
+1948000	1958000	And then we write a few rules in this case just three, which can compute the answer to a question which is how is a particular pair of people in this passage related.
+1958000	1959000	Right.
+1959000	1962000	So this is sort of showing you multi hop reasoning.
+1962000	1971000	By the way, we even have rule learning here so the parameters don't just have to be in the neural model but for example this relation composition is itself noisy.
+1971000	1976000	And you could learn the weights of individual tuples of this relation.
+1976000	1988000	You can extend it to vision models as well. So here's a simple one, which is actually a multi model model clip from open AI, which also provides probabilities.
+1988000	1991000	So in this case, the input is an image.
+1991000	1994000	It's a bound argument and the output is the label.
+1994000	2003000	So in this case, if you give a set of labels such as cat and dog, it will tell you the probability of this image being cat or a dog.
+2004000	2007000	We have also integrated meta segment anything models.
+2007000	2018000	So this in this case, you are given an image as an input, and it produces a set of tuples with an ID of each segment and the tensor representation of the segment.
+2018000	2019000	Right.
+2019000	2024000	You can put these all together and build very interesting multi model applications in scallops.
+2024000	2039000	So in this case here, what you see is three different models put together to solve the problem from this clever benchmark, which asks in this case, some some question that involves elementary reasoning about a scene.
+2039000	2040000	Right.
+2040000	2042000	How many green objects are there in the image.
+2042000	2045000	I'm not showing you all of the rules that we wrote in scallop.
+2045000	2049000	There are about 100 rules that we wrote for this particular task.
+2049000	2053000	But we use these three different models to extract basic information.
+2053000	2063000	In this case, doing the semantic parsing of this question, extracting segments from this image and finally labeling each segment with a piece of text.
+2063000	2068000	Finally, we can get the answer that there are three main objects in this image.
+2068000	2069000	Okay.
+2069000	2071000	So I'm not going to show you the imperial results.
+2071000	2075000	This work is still under review.
+2075000	2081000	We have applied it to a wide range of benchmarks, including those involving vector databases.
+2081000	2088000	So, you know, you're having retrieval and generation, but also image generation and so on.
+2088000	2089000	Right.
+2089000	2095000	And you can actually run many of these applications at this URL.
+2095000	2099000	And there's a lot more resources at this particular URL.
+2099000	2101000	Thank you very much for your attention.
+2101000	2106000	Any questions?
+2106000	2107040	Thank you.
+2107040	2109320	And once

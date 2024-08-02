@@ -1,0 +1,1247 @@
+WEBVTT
+
+00:00.000 --> 00:07.560
+Okay, so I'll just stop here, thanks for coming.
+
+00:07.560 --> 00:12.320
+I'm Xiang and today I'll be talking about theoretical and practical insights from linear
+
+00:12.320 --> 00:13.320
+transformers.
+
+00:13.320 --> 00:23.320
+As you know, large language models work surprisingly well in practice and the basis of large language
+
+00:23.320 --> 00:26.680
+models is the transformer neural network.
+
+00:26.680 --> 00:33.080
+So an important question is why do transformers work and how can we train them effectively?
+
+00:33.080 --> 00:39.560
+But directly this question is difficult to answer because large language models have billions,
+
+00:39.560 --> 00:44.360
+maybe even trillions of parameters, they have a lot of moving parts, different choices
+
+00:44.360 --> 00:49.680
+of normalization, of embedding and they contain many different kinds of modules.
+
+00:49.680 --> 00:57.240
+So it is important to have a mathematical abstraction that captures the essence of transformer
+
+00:57.240 --> 01:03.200
+learning and optimization in order to better understand transformers.
+
+01:03.200 --> 01:09.360
+And today we are going to look at how the simple linear transformer can shed light on
+
+01:09.360 --> 01:11.240
+two important questions.
+
+01:11.240 --> 01:18.560
+One is the mechanism behind a phenomenon known as in-context learning and two, I'll tell
+
+01:18.560 --> 01:23.440
+you about how linear transformer optimization shares many of the unconventional features
+
+01:23.440 --> 01:25.760
+of real transformer optimization.
+
+01:25.760 --> 01:31.880
+And these two points are based on two papers which are in joint work with Kwong Joon, Ha-Dee,
+
+01:31.880 --> 01:41.040
+Subritz, Ali from MIT as well as Minghak, Charlie from KAIST.
+
+01:41.040 --> 01:45.280
+So part one will be understanding in-context learning.
+
+01:45.280 --> 01:47.160
+So what is in-context learning?
+
+01:47.160 --> 01:52.680
+A very standard task of large language models is that of next-word prediction.
+
+01:52.680 --> 01:59.520
+For example, you can give GPT a prompt, Mary has a little blank and it tells you Mary has
+
+01:59.520 --> 02:00.760
+a little lamb.
+
+02:00.760 --> 02:05.240
+But that's not so surprising because somewhere in this training data I probably saw this
+
+02:05.240 --> 02:09.520
+exact sentence, maybe thousands of times.
+
+02:09.520 --> 02:13.760
+So then in-context learning refers to the following kind of prompting.
+
+02:13.760 --> 02:17.880
+So I'll provide GPT with a few demonstrations.
+
+02:17.880 --> 02:23.480
+I'll say apple is red, banana is yellow, then what is a grape?
+
+02:23.480 --> 02:29.800
+And then so apple, red and banana yellow serve as contextual examples.
+
+02:29.800 --> 02:33.880
+And based off of these contextual examples, GPT infers that I'm looking for the color
+
+02:33.880 --> 02:37.160
+of the fruit so it feels in purple.
+
+02:37.160 --> 02:40.880
+And this phenomenon even works for arbitrary made-up rules.
+
+02:40.880 --> 02:46.800
+So this is a bunch of gibberish but the ad symbol denotes concatenation and it correctly
+
+02:46.800 --> 02:49.800
+infers that ad denotes concatenation.
+
+02:49.800 --> 02:55.560
+So it probably hasn't seen this exact example anywhere in this training set but it still
+
+02:55.560 --> 02:57.600
+does the right thing.
+
+02:57.600 --> 03:05.000
+I would say that I tried some very complicated gibberish and it doesn't work there.
+
+03:05.000 --> 03:14.080
+So that's a good thing, I guess, because otherwise we are all out of jobs soon.
+
+03:14.080 --> 03:21.600
+And so to the best of my knowledge, this in-context learning phenomenon was first reported in
+
+03:21.600 --> 03:28.320
+a seminal paper by Brown, Mann, Ryder, Soubia and collaborators.
+
+03:28.320 --> 03:40.640
+And this paper was also the one that coined the phrase in-context learning, I think.
+
+03:40.640 --> 03:45.360
+I would also say that from a machine learning point of view, if you give your model a few
+
+03:45.360 --> 03:52.440
+demonstrations and then it does well on those demonstrations, it's not terribly surprising.
+
+03:52.440 --> 03:58.960
+But the thing is here in-context learning works without any updates to the model parameters.
+
+03:58.960 --> 04:04.800
+So I'm not doing any fine-tuning, I'm just using the same transformer and then it does
+
+04:04.800 --> 04:05.800
+the right thing.
+
+04:05.800 --> 04:07.920
+So that's, I guess, the surprising thing.
+
+04:07.920 --> 04:12.440
+Some people even go as far as claim that it's one of the main reasons for why large language
+
+04:12.440 --> 04:14.560
+models work so well in practice.
+
+04:14.560 --> 04:21.600
+But regardless, understanding how large models do in-context learning is a very important
+
+04:21.600 --> 04:29.280
+question to us understanding large language models.
+
+04:29.280 --> 04:37.480
+So in recent years, there's a few very important papers that try to shed light on this phenomenon.
+
+04:37.480 --> 04:42.640
+Our work is based on a few of these papers, so I'll do a quick review of the relevant
+
+04:42.640 --> 04:44.920
+literature now.
+
+04:44.920 --> 04:50.360
+The first such paper is the one by Garak Sipras-Leon Valiant, 2022.
+
+04:50.360 --> 04:54.160
+And the title is, What Can Transformers Learn In-Context, A Case Study of Simple Function
+
+04:54.160 --> 04:55.640
+Classes.
+
+04:55.640 --> 05:00.520
+So we call the example about fruits and colors and the hidden rule is that y is the color
+
+05:00.520 --> 05:03.560
+of x, where x is some fruit and y is some color.
+
+05:03.560 --> 05:10.880
+But it's very hard to reason about what does it mean, what kind of function is represented
+
+05:10.880 --> 05:16.240
+by the question about color in, say, the embedding space of words.
+
+05:16.240 --> 05:23.360
+So what they propose to do is consider a simplified setup where your x are Euclidean
+
+05:23.360 --> 05:30.320
+vectors and the y's are linearly related to x by some unobserved data.
+
+05:30.320 --> 05:32.520
+So it's a linear regression problem.
+
+05:32.520 --> 05:39.440
+Pictorially, you're given a bunch of demonstrations, the black dots, x, y pairs.
+
+05:39.440 --> 05:44.040
+And then the question is in the form of the red dot, xn plus 1.
+
+05:44.040 --> 05:48.440
+And you're trying to figure out what the label y is.
+
+05:48.440 --> 05:50.440
+The revolution is a bit low.
+
+05:50.440 --> 05:51.440
+OK.
+
+05:51.440 --> 06:05.840
+So a follow-up paper by Akirak, Sherman, Andreas, Ma, and Zoe in 2023.
+
+06:05.840 --> 06:14.480
+They further try to characterize what kind of, or they try to characterize how transformers
+
+06:14.480 --> 06:19.560
+are able to learn these functions such as linear functions.
+
+06:19.560 --> 06:27.600
+And the main takeaway here is that transformers can learn in context because they are able
+
+06:27.600 --> 06:30.200
+to implement various learning algorithms.
+
+06:30.800 --> 06:36.400
+For example, this plot here shows that experimentally, transformers appear to implement the ordinary
+
+06:36.400 --> 06:39.680
+least squares algorithm on noiseless data.
+
+06:39.680 --> 06:44.160
+So the green line is like zero throughout.
+
+06:44.160 --> 06:51.760
+And so the transform prediction has a very good agreement with ordinary least squares.
+
+06:51.760 --> 06:58.320
+And the way they show that transformers are able to implement this learning algorithm
+
+06:58.320 --> 06:59.880
+is approved by construction.
+
+06:59.880 --> 07:05.120
+So they have this very clever construction, where they define a few algorithmic primitives
+
+07:05.120 --> 07:11.880
+like multiplication, division, affine transformation, and they show that the attention unit can
+
+07:11.880 --> 07:13.400
+implement this primitive.
+
+07:13.400 --> 07:17.880
+So by hooking together various attention units, you're able to implement algorithms
+
+07:17.880 --> 07:19.400
+such as iOS.
+
+07:19.400 --> 07:23.320
+And I'll mention here that further along this direction, there are also more extreme examples
+
+07:23.320 --> 07:30.440
+where people show that the attention architecture can implement some kind of register system
+
+07:30.440 --> 07:31.440
+or something.
+
+07:31.440 --> 07:36.920
+So you can implement arbitrary algorithms and transformers can be called as programmable
+
+07:36.920 --> 07:39.240
+computers.
+
+07:39.240 --> 07:43.760
+The catch is that all these constructions are very clever, but the downside is that also
+
+07:43.760 --> 07:45.760
+means they are very fragile.
+
+07:45.760 --> 07:50.760
+And it's unclear whether these very clever constructions are actually recovered when
+
+07:50.760 --> 07:55.880
+you, say, train your transformers with the atom algorithm.
+
+07:55.880 --> 07:58.040
+So the next in line are two papers.
+
+07:58.040 --> 08:02.960
+Linear transformers are circularly fast-waist programs by Schlag, Erich, Mied, Huber in
+
+08:02.960 --> 08:03.960
+2010.
+
+08:03.960 --> 08:16.240
+And a closely related paper by Oswald, Nikolson, Luan, Dazzo, Sacramento, Moff, and Blak Mirov
+
+08:16.240 --> 08:17.240
+in 2010.
+
+08:17.240 --> 08:22.800
+So I'll mainly focus on the second paper, Transformers, Learning Contacts by Gradient
+
+08:22.800 --> 08:23.800
+Descent.
+
+08:23.800 --> 08:27.160
+And so here, as well, they do approve by construction.
+
+08:27.160 --> 08:31.640
+But there is a very important difference from previous papers, which is they consider the
+
+08:31.640 --> 08:38.160
+linear transformers, which is, so all previous papers, they may consider a simplified setting
+
+08:38.160 --> 08:41.920
+where the problem is linear regression, but the architecture was always full transformers.
+
+08:41.920 --> 08:45.680
+But here, it's the first time people look at linear transformers, which I'll define
+
+08:45.680 --> 08:46.680
+a bit.
+
+08:47.080 --> 08:50.280
+It's simpler than full transformers.
+
+08:50.280 --> 08:54.240
+And because they look at linear transformers, they are able to provide a very simple construction
+
+08:54.240 --> 09:01.760
+where, under which linear transformers are able to implement gradient descent, which
+
+09:01.760 --> 09:05.480
+in turn allows them to learn linear functions in context.
+
+09:05.480 --> 09:13.680
+And remarkably, they have some pretty convincing experiments which agree with their construction.
+
+09:13.680 --> 09:16.840
+So that's for prior work.
+
+09:16.840 --> 09:22.680
+And now I come to our paper, where we try to answer the following question.
+
+09:22.680 --> 09:26.960
+So we saw that transformers are expressive enough to implement a whole bunch of algorithms,
+
+09:26.960 --> 09:31.800
+but can we show that transformers actually learn to implement any of these algorithms
+
+09:31.800 --> 09:36.160
+during training?
+
+09:36.160 --> 09:39.000
+So let me set up the problem.
+
+09:39.000 --> 09:46.520
+When you have a transformer, the input is of the form of a matrix, d by n, where you
+
+09:46.520 --> 09:50.600
+can think of it as a horizontally stacked bunch of tokens.
+
+09:50.600 --> 09:53.080
+Each token is kind of like a word in a sentence.
+
+09:53.080 --> 09:56.160
+So your sentence will get, you know, embedded in the impedance space and turn into a bunch
+
+09:56.160 --> 09:58.600
+of factors.
+
+09:58.600 --> 10:02.360
+So if you want to see it.
+
+10:02.360 --> 10:09.840
+The standard self-attention module is the following function.
+
+10:09.840 --> 10:13.560
+So you have your key value query matrix.
+
+10:13.560 --> 10:24.720
+You have a mask for this causality, and then you put a softmax on this thing.
+
+10:24.720 --> 10:31.080
+And linear self-attention is basically the same thing except we take out the softmax.
+
+10:31.080 --> 10:36.520
+And that's why it's called linear because we took out the non-linearity.
+
+10:36.520 --> 10:42.320
+And by the same time, I would say that the phrase linear attention is maybe a bit of
+
+10:42.320 --> 10:49.360
+a misnomer because the linear attention module is not linear in either the parameter PQK
+
+10:49.360 --> 10:50.360
+or in its input Z.
+
+10:50.360 --> 10:54.840
+In fact, it's a third or the polynomial of Z.
+
+10:54.840 --> 11:00.280
+Because of this, the representation power, when you stack a bunch of these linear attention
+
+11:00.280 --> 11:03.720
+modules on top of each other, it increases.
+
+11:03.720 --> 11:08.840
+So this is in contrast to something like a linear fully connected neural network.
+
+11:08.840 --> 11:13.640
+So no matter how many of these you stack, you always are a linear function of an input.
+
+11:13.640 --> 11:17.040
+But you can actually represent increasingly high-degree polynomials by stacking linear
+
+11:17.040 --> 11:19.520
+attention units.
+
+11:19.520 --> 11:24.480
+And the linear transformer, which we'll look at, is basically stacking these attention
+
+11:24.480 --> 11:29.240
+units by a residual connection.
+
+11:29.240 --> 11:38.000
+And to be precise, this is a single-headed transformer.
+
+11:38.000 --> 11:41.480
+So that's defining the linear transformer architecture.
+
+11:41.480 --> 11:45.720
+And now let me properly set up the learning objective.
+
+11:45.720 --> 11:51.240
+So as mentioned earlier, the input to a transformer is a sequence of tokens.
+
+11:51.240 --> 11:57.760
+And in the linear regression setting, each token Z consists of an x, y pair, where x
+
+11:57.760 --> 12:04.640
+is a d-dimensional Euclidean vector, y is a scalar, and x, y are related by this linear
+
+12:04.640 --> 12:05.640
+relationship.
+
+12:05.640 --> 12:10.120
+And theta star is unobserved.
+
+12:10.120 --> 12:14.280
+And on top of that, each prompt has a different theta star.
+
+12:14.280 --> 12:21.800
+The goal, you are also given a xm plus 1, but without the label ym plus 1.
+
+12:21.800 --> 12:26.080
+And the goal is to train the transformer to predict the hidden label.
+
+12:26.560 --> 12:31.520
+Given the demonstrations, as well as xm plus 1.
+
+12:31.520 --> 12:38.720
+I was stressed that this problem is much harder than simply learning a single theta
+
+12:38.720 --> 12:42.520
+star, because theta star changes from prompt to prompt.
+
+12:42.520 --> 12:47.360
+So you need to learn an algorithm that, given a few demonstrations, infers the right theta
+
+12:47.360 --> 12:50.520
+star regardless of what the theta star is.
+
+12:56.520 --> 13:03.360
+And at this point, I would also mention that one of the reasons for choosing to focus on
+
+13:03.360 --> 13:08.080
+linear attention as opposed to the softmax attention, besides the fact that linear attention
+
+13:08.080 --> 13:14.560
+is simpler and easier to understand, is that for this problem of learning a linear function,
+
+13:14.560 --> 13:22.120
+linear transformers perform much better than softmax transformers.
+
+13:22.120 --> 13:26.720
+And I guess we'll see concretely why that is in a bit.
+
+13:26.720 --> 13:33.360
+But even now, just intuitively, if your data are linearly related, then it makes sense
+
+13:33.360 --> 13:43.920
+that softmax doesn't really help you with all that much.
+
+13:43.920 --> 13:47.120
+So here's the first result I'll talk about.
+
+13:47.120 --> 13:53.160
+We study one layer, linear transformer, and we claim that it implements one step of gradient
+
+13:53.160 --> 13:56.240
+descent at global minimum.
+
+13:56.240 --> 13:59.440
+So what does it mean for a transformer to implement one step of gradient descent?
+
+13:59.440 --> 14:03.240
+On the left here, in this box, I show the architecture of a one-layer linear transformer.
+
+14:03.240 --> 14:04.240
+It's very simple.
+
+14:04.240 --> 14:10.600
+If you have a z, it passes through a single attention layer, and then, you know, we get
+
+14:10.600 --> 14:19.840
+some output tfz, where tf subscript lz, denotes the transformer's prediction at layer l,
+
+14:19.840 --> 14:21.560
+given input z, and parameter w.
+
+14:21.560 --> 14:26.720
+So parameter w is like the correct key value matrices.
+
+14:26.720 --> 14:30.720
+And we try to minimize the in-contact loss, which is the expected difference between the
+
+14:30.720 --> 14:32.640
+prediction and the true label.
+
+14:32.640 --> 14:38.640
+And the expectation is taken over both z, which is the input, as well as theta star,
+
+14:38.680 --> 14:44.640
+which is the unobserved linear relationship.
+
+14:44.640 --> 14:49.320
+And if you forget about transformers, we're a bit a very reasonable thing to try to do
+
+14:49.320 --> 14:53.960
+when given a bunch of demonstrations, and you need to infer the correct label, is to
+
+14:53.960 --> 15:01.000
+maintain a theta and then run gradient descent on it, with respect to the empirical least
+
+15:01.000 --> 15:05.720
+grass loss, which I highlight in problem.
+
+15:05.720 --> 15:16.080
+And so here, I just take one step, a single step, of gradient descent, and if n is sufficiently
+
+15:16.080 --> 15:20.520
+large, you know, you'll probably do decently.
+
+15:20.520 --> 15:22.760
+So theorem one of our paper states the following.
+
+15:22.760 --> 15:28.440
+If you assume that the covariates are sampled from the standard normal distribution and theta
+
+15:28.480 --> 15:32.560
+star is also sampled from the standard normal distribution, then the linear transformer
+
+15:32.560 --> 15:39.800
+that minimizes the in-contact loss, fw, which is in red, gives the same prediction as the
+
+15:39.800 --> 15:44.760
+one step gradient descent on r theta, which I highlight in purple.
+
+15:44.760 --> 15:55.040
+So in other words, the output, tf1 of v comma w, is the same as if you ran one step of gradient
+
+15:55.040 --> 16:05.280
+descent on theta, and use that to predict the label.
+
+16:05.280 --> 16:11.640
+And in fact, you can consider a more general setting when your covariates are sampled from
+
+16:11.640 --> 16:16.720
+some distribution with a non-identity covariate.
+
+16:16.720 --> 16:20.360
+So when your covariance is sigma here, the linear transformer that globally minimizes
+
+16:20.480 --> 16:28.480
+the loss now coincides with running one step of precondition gradient descent, where the
+
+16:28.480 --> 16:35.440
+preconditioner a is given by following.
+
+16:35.440 --> 16:43.320
+For when n is very large, which is when you're given a ton of demonstrations of, you know,
+
+16:43.480 --> 16:54.000
+xy pairs, a in the limit is just inverse of your covariance matrix, the covariance matrix
+
+16:54.000 --> 16:57.520
+of your covariates.
+
+16:57.520 --> 17:03.240
+But when n is small, there's this additional regularization.
+
+17:03.240 --> 17:09.440
+Is it obvious that the global minimum is unique, and if not, is this a statement about any
+
+17:09.440 --> 17:10.440
+global minimum?
+
+17:10.560 --> 17:13.800
+Yeah, so this is a statement about any global minimum.
+
+17:13.800 --> 17:22.440
+In fact, there is some obvious, you know, no spaces in the loss, I guess, because one
+
+17:22.440 --> 17:25.840
+example is the query times key matrix.
+
+17:25.840 --> 17:31.360
+You can scale them arbitrarily if their product is the same, then that's the same.
+
+17:31.360 --> 17:36.680
+Another example is, you know, since this is a linear transformer, scaling the value key
+
+17:36.760 --> 17:42.000
+current matrices arbitrarily as long as they multiply the same thing also gives the exact
+
+17:42.000 --> 17:45.720
+same predictor.
+
+17:45.720 --> 17:51.080
+But then one might wonder, you know, ignoring these inferences, is that unique?
+
+17:51.080 --> 17:52.080
+I'm not sure.
+
+17:52.080 --> 17:53.080
+I'm not sure.
+
+17:53.080 --> 17:58.160
+In perfectly, in all our experiments, this is always recovered.
+
+17:58.160 --> 18:00.040
+So that's a good sign.
+
+18:00.040 --> 18:06.600
+And also, as I'm just about to mention, there are two concurrent works, which appear surely
+
+18:06.600 --> 18:09.080
+after we publish the initial draft.
+
+18:09.080 --> 18:13.680
+One of them characterizes global optimality for one-layer linear transformer on the similar
+
+18:13.680 --> 18:14.680
+sign.
+
+18:14.680 --> 18:15.680
+So similar results at Sowers.
+
+18:15.680 --> 18:20.080
+And the second paper by Zang Fre and Bartlett in 2023.
+
+18:20.080 --> 18:23.760
+On top of characterizing global optimality, they show that if you run gradient descent
+
+18:23.760 --> 18:29.960
+on the linear transformer with some specific initialization or some specific conditions
+
+18:29.960 --> 18:34.840
+on initialization, you'll always converge to this.
+
+18:34.840 --> 18:42.360
+So at least, you know, it's a good region of attraction based off of these results.
+
+18:42.360 --> 18:46.760
+But I'm not sure if it's unique.
+
+18:46.760 --> 18:50.440
+So that's for one-layer transformer implementing one-stop gradient descent.
+
+18:50.440 --> 18:55.480
+In practice, you know, transformers work better when there are lots of players and gradient
+
+18:55.480 --> 18:57.640
+descent works better when there are lots of steps.
+
+18:57.640 --> 19:02.880
+So then a natural question is, can we extend the similar results to a L-layer linear transformer
+
+19:03.000 --> 19:05.800
+for some arbitrary integer L?
+
+19:05.800 --> 19:11.440
+So on the left, again, I show a L-layer linear transformer, same in context learning loss,
+
+19:11.440 --> 19:16.520
+but this time the predictor is after L-layers.
+
+19:16.520 --> 19:22.120
+And in the middle, I show L-steps of gradient descent, again, with respect to the same in
+
+19:22.120 --> 19:26.680
+percolate scores.
+
+19:26.680 --> 19:29.680
+And here, we establish a weaker guarantee.
+
+19:29.680 --> 19:34.880
+So instead of saying that gradient descent is a global optimum, we only show that there
+
+19:34.880 --> 19:43.080
+exists transformers, which are stationary points of the in-contact loss, such that at
+
+19:43.080 --> 19:48.880
+every layer, the transformer gives the same prediction as L-steps of gradient descent
+
+19:48.880 --> 19:49.880
+on R.
+
+19:49.880 --> 19:56.880
+So in other words, TF2 would correspond to the prediction, TF1 corresponds to the prediction
+
+19:57.080 --> 20:02.000
+for each L.
+
+20:02.000 --> 20:09.000
+And that's kind of interesting because really the only thing you're training on is TF capital
+
+20:09.480 --> 20:10.480
+L.
+
+20:10.480 --> 20:17.480
+And so it's interesting that all these intermediates outputs have a interpretable connection to
+
+20:17.560 --> 20:20.560
+gradient descent.
+
+20:20.560 --> 20:27.560
+I have a question trying to parse this.
+
+20:27.880 --> 20:34.380
+There exist transformers, I'm trying to figure out the quantification.
+
+20:34.380 --> 20:41.380
+There exist transformers that for a random choice of these parameters, what's the quantification
+
+20:43.080 --> 20:48.080
+on the X and the theta?
+
+20:49.080 --> 20:54.080
+Are you saying at the very beginning of the theorem, very beginning of theorem 3?
+
+20:54.080 --> 20:56.880
+Yes, X and theta are here, expectation.
+
+20:56.880 --> 21:02.320
+So I define a loss on transformer key value query matrices, which is only a function of
+
+21:02.320 --> 21:09.320
+W that is expectation over Z, which I guess X, Y, and theta of the prediction minus the
+
+21:09.960 --> 21:11.440
+true label.
+
+21:11.440 --> 21:17.880
+And there are stationary points of this loss, F of W, such that the stationary point is
+
+21:17.880 --> 21:23.200
+some specific choice of key value query matrices, so if it's non-identity, but sigma.
+
+21:23.200 --> 21:29.640
+And here we assume theta star is from sigma inverse, and there exist stationary points,
+
+21:29.640 --> 21:32.640
+which coincide with preconditions.
+
+21:32.640 --> 21:37.640
+Where the preconditioner is sigma inverse.
+
+21:37.640 --> 21:43.640
+Are these local minima, can you construct one which is also a local minimum?
+
+21:43.960 --> 21:50.720
+I'm not sure, but we tried, but we couldn't show it, which is why we only show stationary
+
+21:50.720 --> 21:51.720
+points.
+
+21:51.720 --> 21:57.720
+Okay, let me show you one more slide, so experimentally, so we only show that there exist stationary
+
+22:01.440 --> 22:07.960
+point, but experimentally, surprisingly, we always recover the same key value matrices.
+
+22:07.960 --> 22:12.960
+So specifically, a transformer implements precondition gradient descent by sigma inverse
+
+22:12.960 --> 22:17.080
+if the product of key query matrices is sigma inverse.
+
+22:17.080 --> 22:22.080
+And so here I train a three-layer transformer, and I display sigma half, query times key
+
+22:22.080 --> 22:28.080
+is sigma half, and we see that each of these cases is speculative, pretty much.
+
+22:28.080 --> 22:32.160
+So in other words, it's always learning to implement precondition.
+
+22:32.160 --> 22:37.800
+So I think that we don't have a theory for it, but I think there is, you know, we conjecture
+
+22:37.880 --> 22:43.880
+that maybe these are, in fact, locally or even globally.
+
+22:43.880 --> 22:49.120
+So it's something worth thinking about.
+
+22:49.120 --> 22:55.080
+Before I end, I will also mention that I skimmed a bit of detail on characterizing this theorem.
+
+22:55.080 --> 22:59.960
+We actually need to assume certain sparsities, specifically the last row and column of the
+
+22:59.960 --> 23:05.440
+key query matrices are at zero, and there are actually two variants of this theorem,
+
+23:05.440 --> 23:09.040
+depending on what kind of constraints we impose on the value matrix.
+
+23:09.040 --> 23:13.280
+You could implement precondition gradient descent or something more clever than precondition
+
+23:13.280 --> 23:18.040
+gradient descent, which interleaves gradient steps with rotation of the gram matrix to
+
+23:18.040 --> 23:19.760
+make things better conditioned.
+
+23:19.760 --> 23:23.520
+You can see the details of all this in the arm.
+
+23:23.520 --> 23:28.840
+So that's all for the first part of the talk, and I'm almost out of time, but maybe I'll
+
+23:28.840 --> 23:34.280
+quickly talk about the second part, which is how linear transformer loss lens gave first
+
+23:34.280 --> 23:39.760
+a number of remarkable similarities to the loss landscape of full transformation.
+
+23:39.760 --> 23:44.240
+So again, transformers are large and complicated, and it's difficult to pinpoint why algorithm
+
+23:44.240 --> 23:48.000
+works or it doesn't work, and it's difficult to theoretically analyze the behavior of optimization
+
+23:48.000 --> 23:49.000
+algorithms.
+
+23:49.000 --> 23:51.600
+Also, it's very expensive to experiment on full transformers.
+
+23:51.600 --> 23:55.920
+On the other hand, linear transformers may be a useful model to understand transformer
+
+23:55.920 --> 23:56.920
+optimization.
+
+23:56.920 --> 24:02.400
+So we surveyed a number of recent papers, which look at the transformers, the optimization
+
+24:02.400 --> 24:08.080
+landscape of full transformers, and we identify several remarkable features, which are kind
+
+24:08.080 --> 24:12.400
+of unique to transform optimization, and we observe that shallow linear transformers
+
+24:12.400 --> 24:17.200
+on the linear regression problem has similar optimization features.
+
+24:17.200 --> 24:22.080
+So one example is that Adam is significantly faster than stochastic gradient descent for
+
+24:22.080 --> 24:24.840
+a transformer training.
+
+24:24.840 --> 24:29.760
+On the left, and this is a phenomenon that is kind of unique to large-language models
+
+24:29.760 --> 24:30.760
+and transformers.
+
+24:30.880 --> 24:35.320
+On the left, this plot is taken from Quintetian, I think that means 23.
+
+24:35.320 --> 24:41.600
+On the left, the two plots, we show training a CNN, or MNIST, and Cpartan, so it's a image
+
+24:41.600 --> 24:42.600
+test.
+
+24:42.600 --> 24:48.600
+And there is no obvious gap between SGD and L, but on the right, they show three transformers
+
+24:48.600 --> 24:52.480
+on different datasets, and there's a clear gap between Adam and SGD.
+
+24:52.480 --> 24:58.840
+Similar observations were also made in a number of other recent papers, and we show here on
+
+24:58.880 --> 25:04.040
+the left, you know, the same plot features from the previous slide for the three kinds
+
+25:04.040 --> 25:06.160
+of language tests.
+
+25:06.160 --> 25:10.320
+Here on the right, I show a three-layer linear transformer trained on linear regression,
+
+25:10.320 --> 25:16.320
+and we see that similarly there is a significant gap between Adam and SGD, and the three plots
+
+25:16.320 --> 25:20.600
+coincide with slightly different settings of the kind.
+
+25:20.600 --> 25:26.480
+And I'm already over time, so maybe I'll skip over the rest of the features, but the long
+
+25:26.520 --> 25:31.160
+story short, there's a number of features which are kind of unique to transform optimization,
+
+25:31.160 --> 25:35.240
+and people conjecture that's maybe why adaptive algorithms are so important when training large
+
+25:35.240 --> 25:41.000
+language models, and so we went through each of them and we checked if you get the same
+
+25:41.000 --> 25:46.960
+kind of plots or data that you get from training a simple linear transformer, and each of this
+
+25:46.960 --> 25:51.160
+case, there is a surprising agreement with what people opt for for four transformers,
+
+25:51.840 --> 25:56.840
+so with that, I will end the talk.
+
+26:10.840 --> 26:16.360
+Any more questions for Chim?
+
+26:16.360 --> 26:21.160
+So I've heard that actual large language model training is like unstable, and if you look
+
+26:21.160 --> 26:25.000
+at the training pause, they're a place where you get like these spikes.
+
+26:25.000 --> 26:30.000
+Are those instabilities also replicated in the smaller transformers that you consider?
+
+26:30.000 --> 26:34.000
+Yeah, they are.
+
+26:34.000 --> 26:41.000
+In fact, we have a gap for why some of the instability is happening, and it goes back
+
+26:41.160 --> 26:46.160
+to the fact that the transformer appears to be learning to implement this gradient descent
+
+26:46.160 --> 26:53.160
+algorithm, and the thing with gradient descent is that the closer the larger your step size
+
+26:53.160 --> 26:57.600
+is, the better you do until the point where you exceed the lift shift constant, then things
+
+26:57.600 --> 27:04.600
+blow up very quickly, so we also observed that as your loss gets lower and your learning
+
+27:05.120 --> 27:10.920
+rate per layer is getting closer to the boundary, it's become more unstable because if you just
+
+27:10.920 --> 27:16.840
+exceed that a little bit, your transformer, the kind of optimization algorithm that's
+
+27:16.840 --> 27:19.600
+implemented by a transformer, like hybridism.
+
+27:19.600 --> 27:26.600
+So that's one example, but yeah, we do offer similar problems.
+
+27:33.920 --> 27:40.840
+So you showed the linear transform of one layer is equivalent to gradient, empirically,
+
+27:40.840 --> 27:42.400
+one is the square one.
+
+27:42.400 --> 27:44.280
+Yes, one step of gradient.
+
+27:44.280 --> 27:50.280
+For all layers, they actually implement the preconditioned gradient.
+
+27:50.280 --> 27:53.280
+Yeah, so for both, let me go back.
+
+27:58.280 --> 28:05.280
+So for one layer, we showed that if the covariance is sigma, it also implements one step of precondition.
+
+28:05.400 --> 28:12.400
+And then for our layer, if that covariance is identity, it just does L steps of standard
+
+28:19.760 --> 28:26.760
+gradient descent, but again, if the covariance is sigma, then it does L steps of preconditioned.
+
+28:27.680 --> 28:29.600
+So it's kind of like two orthogonal.
+
+28:29.600 --> 28:34.040
+So the linear transform actually is nonlinear in Z, right?
+
+28:34.040 --> 28:41.040
+So that means this nonlinear minimization actually automatically implement precondition.
+
+28:41.040 --> 28:42.440
+Yes, yes.
+
+28:42.440 --> 28:49.440
+Okay, so that's a different way to think about these algorithms and then they adaptively automatically
+
+28:49.680 --> 28:51.800
+choose what precondition it is.
+
+28:51.800 --> 28:52.800
+Yes, exactly.
+
+28:52.800 --> 28:53.800
+That's right.
+
+28:53.800 --> 28:54.800
+Okay.
+
+28:54.800 --> 28:55.800
+Interesting.
+
+28:56.800 --> 29:01.800
+Just one question.
+
+29:01.800 --> 29:07.800
+You mentioned if you add softmax in this linear regression task, it's actually going to underperform
+
+29:07.800 --> 29:09.800
+compared to the linear model, right?
+
+29:09.800 --> 29:10.800
+Yeah.
+
+29:10.800 --> 29:11.800
+I didn't understand.
+
+29:11.800 --> 29:12.800
+What was the reason?
+
+29:12.800 --> 29:13.800
+This is kind of...
+
+29:13.800 --> 29:15.800
+So did you try like chatGPT2 model or...?
+
+29:15.800 --> 29:20.800
+No, we code up a softmax with the same number of parameters.
+
+29:20.800 --> 29:25.800
+We coded up some linear transformer and take a softmax to the place where we just pick
+
+29:25.800 --> 29:27.800
+it to make a softmax.
+
+29:27.800 --> 29:29.800
+So it's not like a giant model?
+
+29:29.800 --> 29:30.800
+I see.
+
+29:30.800 --> 29:33.800
+So without any residual connections, right?
+
+29:33.800 --> 29:34.800
+Oh, with residuals.
+
+29:34.800 --> 29:39.800
+So basically these two are almost exactly the same except, you know, we have a softmax
+
+29:39.800 --> 29:42.800
+here and we don't.
+
+29:42.800 --> 29:46.800
+So both look like this.
+
+29:46.800 --> 29:51.800
+Except different, slight difference in how ATTN is defined.
+
+29:51.800 --> 29:54.800
+What was the intuition that white softmax is here?
+
+29:54.800 --> 29:55.800
+Yeah.
+
+29:55.800 --> 29:56.800
+That's a very good question.
+
+29:56.800 --> 29:58.800
+So here's an example, right?
+
+29:58.800 --> 30:05.800
+You know, if I'm trying to predict y and I have some x and in my demonstrations I have
+
+30:05.800 --> 30:07.800
+minus x, right?
+
+30:07.800 --> 30:11.800
+Then that should be very informative to predicting x.
+
+30:11.800 --> 30:13.800
+If you know it's linear.
+
+30:13.800 --> 30:20.800
+Softmax would compute the, you know, product which is an active number and that becomes
+
+30:20.800 --> 30:26.800
+that then you can improve our little weight on that sample and so that sample became useful
+
+30:26.800 --> 30:27.800
+for prediction.
+
+30:27.800 --> 30:28.800
+And that's just one example.
+
+30:28.800 --> 30:35.800
+I guess overall it's just that, you know, based on the construction which I didn't show,
+
+30:35.800 --> 30:39.800
+the linear transformer very easily implements a gradient descent step.
+
+30:39.800 --> 30:42.800
+The linear transformer not so much because softmax sticks out.
+
+30:42.800 --> 30:49.800
+It does this weird reweighting of your demonstration samples which doesn't really help in the linear
+
+30:49.800 --> 30:50.800
+regression setting.
+
+30:50.800 --> 30:57.800
+So, but probably softmax transformer works more generally if it's not linear.
+
+30:57.800 --> 31:00.800
+But is there anything like the optimal algorithm for this problem?
+
+31:00.800 --> 31:02.800
+That's a good question.
+
+31:02.800 --> 31:04.800
+I don't know.
+
+31:04.800 --> 31:11.800
+But I guess, you know, whatever algorithm that softmax is doing, it's just not very nice.
+
+31:11.800 --> 31:21.800
+Thank you.
+
+31:21.800 --> 31:22.800
+Thank you.
+
+31:22.800 --> 31:23.800
+I had a clarification question.
+
+31:23.800 --> 31:28.800
+So you mentioned that there's a different theta star for each input prompt.
+
+31:28.800 --> 31:33.800
+Does your results also depend on how many prompts or demonstrations are provided as
+
+31:33.800 --> 31:36.800
+part of in-context learning?
+
+31:36.800 --> 31:42.800
+Good question.
+
+31:42.800 --> 31:48.800
+Yes, because, so here n is the length of the prompt.
+
+31:48.800 --> 31:49.800
+Okay.
+
+31:49.800 --> 31:55.800
+And how much regularization you put here depends on n.
+
+31:55.800 --> 32:03.800
+And I guess what this affects is how, I guess, what preconditioner you use exactly.
+
+32:03.800 --> 32:06.800
+So this is for the non-identity covariance case.
+
+32:06.800 --> 32:11.800
+And even for the identity covariance case, the exact step size, I think, would be affected
+
+32:11.800 --> 32:16.800
+depending on, you know, this delta one, which I didn't talk about at all.
+
+32:16.800 --> 32:23.800
+I think that's going to depend very importantly on how large n is, larger n, probably larger
+
+32:23.800 --> 32:24.800
+delta.
+
+32:24.800 --> 32:25.800
+That makes sense, right?
+
+32:25.800 --> 32:29.800
+Because if you think about it, gradient descent involves this gram matrix.
+
+32:29.800 --> 32:34.800
+And if the gram matrix is identity, one step of gradient descent will just give you the
+
+32:34.800 --> 32:35.800
+solution.
+
+32:35.800 --> 32:43.800
+And when n is very large, the gram matrix does approach identity, whereas when it's small,
+
+32:43.800 --> 32:45.800
+the gram matrix could be your condition.
+
+32:45.800 --> 32:50.800
+And how your condition, gram matrix, is related to the condition number of our theta.
+
+32:50.800 --> 32:57.800
+So it makes sense that for a smaller n, you can take smaller steps of gradient descent
+
+32:57.800 --> 33:00.800
+and order n.
+
+33:00.800 --> 33:02.800
+All right.
+
+33:02.800 --> 33:09.800
+So let's thank Yashiyang again.
+
