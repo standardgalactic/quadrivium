@@ -1,0 +1,1275 @@
+Anytime Capacity Expansion in Medical Residency Match by Monte Carlo Tree
+Search∗
+
+Kenshi Abe1 , Junpei Komiyama2 , Atsushi Iwasaki3
+1CyberAgent, Inc.
+2New York University
+3University of Electro-Communications
+abe kenshi@cyberagent.co.jp, junpei@komiyama.info, atsushi.iwasaki@uec.ac.jp
+
+Abstract
+
+This paper considers the capacity expansion prob-
+lem in two-sided matchings, where the policymaker
+is allowed to allocate some extra seats as well as
+the standard seats.
+In medical residency match,
+each hospital accepts a limited number of doctors.
+Such capacity constraints are typically given in ad-
+vance. However, such exogenous constraints can
+compromise the welfare of the doctors; some pop-
+ular hospitals inevitably dismiss some of their fa-
+vorite doctors. Meanwhile, it is often the case that
+the hospitals are also beneﬁted to accept a few extra
+doctors. To tackle the problem, we propose an any-
+time method that the upper conﬁdence tree searches
+the space of capacity expansions, each of which
+has a resident-optimal stable assignment that the
+deferred acceptance method ﬁnds. Constructing a
+good search tree representation signiﬁcantly boosts
+the performance of the proposed method. Our sim-
+ulation shows that the proposed method identiﬁes
+an almost optimal capacity expansion with a sig-
+niﬁcantly smaller computational budget than exact
+methods based on mixed-integer programming.
+
+Introduction
+
+1
+This paper considers the capacity expansion problem in two-
+sided matchings, where the policymaker is allowed to allocate
+some extra seats as well as the standard seats. The two-sided
+matchings have a lot of real applications such as medical resi-
+dency match [Roth, 1991] and school choice [Abdulkadiro˘glu
+and S¨onmez, 2003]. The theory has been extensively devel-
+oped across computer science and economics [Roth and So-
+tomayor, 1990; Manlove, 2013]. To establish our model and
+concepts, we use medical residency match as a running exam-
+ple. In this literature, each hospital (school) accepts a limited
+number of residents (students). Such capacity constraints (or
+quotas) are assumed to be known and ﬁxed in advance.
+
+However, in practice, even for hospitals, or its stakehold-
+ers, it is often uncertain how the capacity constraints are spec-
+iﬁed beforehand. Those could be ﬂexible and variable more
+(cid:3)Atsushi Iwasaki was supported by JSPS KAKENHI Grant
+Numbers JP21H04890 and JP20K20752. A full version of this paper
+is found in https://arxiv.org/abs/2202.06570.
+
+than the previous studies preclude. By pooling some extra
+funding, hospitals can accept a few more residents. Schools
+may be granted some budgets or dispatched teachers from
+their district according to the demand.
+
+Such a situation involves a lot of resource allocation prob-
+lems where capacities are predeﬁned, e.g., how many jobs
+each machine takes in the jobshop scheduling problem. How
+we should choose the capacities has been paid less attention
+than it deserves, though they inﬂuence the performance gen-
+erated by allocations.
+
+A classical comparative statistic already analyzes the effect
+of such expansion. If the capacity of some hospitals is ex-
+panded, the welfare of every resident weakly improves [Roth
+and Sotomayor, 1990]. However, it is rarely investigated how
+capacities should be expanded to improve the total welfare.
+Bobbio et al. [2021] have initiated the question of how lim-
+ited extra seats should be allocated, keeping resulting match-
+ings stable. The stability is a key concept for the two-sided
+matching and if a matching is stable, no groups of residents
+and hospitals have proﬁtable deviations. The celebrated de-
+ferred acceptance (DA) algorithm is known to ﬁnd a stable
+matching [Gale and Shapley, 1962]. The capacity expansion
+with DA, i.e., ﬁnding the optimal allocation of extra seats in
+the welfare of residents, is formulated as an integer quadratic
+programming [Bobbio et al., 2021], which is computationally
+challenging to solve exactly. In addition to the exact method,
+they also developed some greedy heuristics, which run very
+effectively yet are suboptimal.
+
+This paper proposes an alternative method to solve the ca-
+pacity expansion problem where the upper conﬁdence tree
+(UCT) searches the space of capacity expansions.1 Each pat-
+tern of them has a resident-optimal stable assignment that
+DA ﬁnds. Not only does UCT obtain an optimal solution
+given a sufﬁciently large time, but also a policymaker can
+stop UCT anytime to obtain a reasonably good solution,
+which is important given the hardness of obtaining an opti-
+mal solution. We then characterize a good tree representation
+so that the tree search method efﬁciently exploits the struc-
+ture of the capacity expansion problem. There have been
+a certain amount of studies on two-sided matchings in the
+AI community, although this literature has been established
+
+1An implementation of our method is available at https://github.
+
+com/CyberAgentAILab/mcts-capacity-expansion.
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)3mainly in ﬁelds across algorithms and economics [Kamada
+and Kojima, 2015; Bir´o et al., 2010; Fragiadakis et al., 2016;
+Goto et al., 2014; Goto et al., 2016].
+In many application
+domains, various distributional constraints are imposed on
+an outcome, e.g., regional maximum quotas are imposed on
+hospitals in urban areas to allocate more doctors to rural ar-
+eas [Kamada and Kojima, 2015].
+
+2 Problem Setup
+Let D = {d1; d2; : : : ; dD} be the set of residents (doctors)
+and H = {h1; h2; : : : ; hH } be the set of hospitals. We con-
+sider a bipartite graph where D and H are connected by edges
+E. Each edge represents that the resident is accepted by the
+hospital. Residents and hospitals have their own preferences.
+We denote h (cid:31)d h0 if resident d prefers hospital h to hos-
+pital h0. Similarly, we denote d (cid:31)h d0 if hospital h prefers
+resident d over resident d0. A vector q = (q1; q2; : : : ; qH )
+represents the quota of the hospitals. An instance of the resi-
+dency match problem is a tuple Γ = (D; H; (cid:31); q), where (cid:31)
+denotes all preferences of the residents and the hospitals.
+
+A matching M ∈ M is a subset of E such that the fol-
+lowing criteria are met. Each resident d ∈ D has at most
+one edge. Each hospital h ∈ H can have at most qh edges.
+We say that resident d is unassigned if there is no edge from
+d. We denote M (d) and M (h) to represent the hospital as-
+signed to resident d and the set of the residents assigned to
+hospital h, respectively. Given a matching M , we say a pair
+(d; h) ∈ E is a blocking pair if (1) resident d is unassigned
+or prefers hospital h to M (d), and (2) hospital h is such that
+|M (h)| < qh or prefers resident d over at least one resident
+in M (h). Matching M is stable if there is no blocking pair.
+
+Gale and Shapley [1962] showed that a stable matching
+always exists and proposed the deferred-acceptance (DA) al-
+gorithm that yields a stable matching. The resident-proposing
+DA ﬁnds the resident-optimal stable matching where no res-
+ident is better off among all stable matchings [Roth and So-
+tomayor, 1990]. That matching is also obtained by minimiz-
+ing the total resident ranking under the stability constraints.
+A resident ranking is denoted by rankd(h) the rank of hos-
+pital h according to the resident d’s preference. This is also
+referred to as the cost of the match (d; h). Given a matching
+M , the total resident ranking is deﬁned as
+
+X
+
+(d;h)∈M
+
+rankd(h):
+
+(1)
+
+DA gives a matching that minimizes Eq. (1) among all stable
+matchings [Bobbio et al., 2021].
+
+This paper improves the resident utilities by allowing ad-
+ditional seats. Letting t ∈ NH be a non-negative vector, we
+consider an expanded matching problem in which the capac-
+ity of each hospital h is the sum of regular capacity qh and the
+extended capacity th. A reasonable extension of the capacity
+should not be very large and can accommodate the demand
+of each hospital. Given this, we consider the following opti-
+mization problem: Let
+
+(
+
+P =
+
+(x; t) ∈ {0; 1}E × Θ
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+X
+
+h∈H
+
+xdh ≤ 1 ∀d ∈ D;
+
+xdh ≤ (qh + th) ∀h ∈ H
+
+; and
+
+)
+
+X
+
+d∈D
+
+(
+
+Θ =
+
+t ∈ {0; 1; 2; : : : ; B}H
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+th ≤ bh ∀h;
+
+)
+
+th ≤ B
+
+X
+
+h∈H
+
+be the set of matchings. The capacity expansion problem is
+the following:
+X
+
+(2)
+
+min
+x;t
+
+(d;h)∈E
+
+rankd(h)xdh
+
+s:t: (qh + th)
+
+1 −
+
+X
+
+!
+
+xdh0
+
+≤
+
+X
+
+h0∈Sdh
+
+d0∈Tdh
+
+xd0h ∀(d; h) ∈ E;
+
+(x; t) ∈ P:
+
+where Sdh = {h0 ∈ H : rankd(h0) ≤ rankd(h)} is the set
+of indices of hopsitals that resident d prefers at least as hos-
+pital h; similarly, Tdh = {d0 ∈ D : rankh(d0) < rankh(d)}
+is the set of indices of residents that hospital h prefers more
+than resident d. Namely, keeping stability, we maximize the
+residents’ welfare subject to the capacity constraints of the
+hospitals, where the capacity can be relaxed up to B seats.
+Moreover, we assume that each hospital h has its own expan-
+sion limit bh.
+Remark 1.
+(Complete preference) The optimization of
+Eq. (2) requires a complete preference of all residents and
+hospitals, which is often impractical. For example, in the real
+data of a residency matching program, an average resident
+only applies to four or ﬁve hospitals. In this case, we can add
+a dummy hospital of inﬁnite capacity and rank all unpreferred
+hospitals after the dummy hospital.
+
+Bobbio et al. [2021] proved the computational hardness of
+
+the problem of Eq. (2) without hospital-wise limit bh.
+Proposition 1. (Hardness result [Bobbio et al., 2021]) The
+decision version of Eq. (2) is NP-complete even in the case
+where there is no hospital-wise limit bh.
+
+The key idea of our algorithm for this problem is that, when
+we ﬁx an expansion vector t ∈ Θ, the capacity expansion
+problem of Eq. (2) boils down to the standard matching in-
+stance Γ = (D; H; (cid:31); q + t) that we can solve efﬁciently by
+DA.2 Therefore, a tree search on the space of Θ combined
+with DA is expected to give an efﬁcient solution.
+
+3 Method
+This section proposes our algorithm to solve Eq. (2). We ap-
+ply Upper Conﬁdence Tree (UCT) [Kocsis and Szepesv´ari,
+2006], which belongs to a class of Monte Carlo tree search
+methods [Browne et al., 2012]. One of the most success-
+ful examples of UCT is for abstract games such as the
+Game of Go [Wang and Gelly, 2007; Yoshizoe et al., 2011;
+Silver et al., 2016] where the goal is to ﬁnd the best next
+move in a game tree. Another aspect of UCT is diverse rec-
+ommendation method, which minimizes total regret, searches
+
+2The computational complexity of DA is O((D + H)2).
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)4 
+Figure 1: Three tree representations. In the iterative tree (left), the node of the grey dot corresponds to a vector t = (2; 0; 1), with its
+corresponding path expanding hospitals 1 and 3 once, and expanding hospital 1 once again. An edge in the iterative priority tree (middle)
+is the same as the iterative tree, but its path only includes nonincreasing order of edges (e.g., 1 → 3 → 1 is not allowed). An edge in the
+batch tree (right) corresponds to how many extended seats we allocate to each hospital (= t1; t2; t3). The node of the grey dot in the batch
+tree corresponds to a vector of t = (5; 3; 1). Ordering of the hospitals matters in the iterative priority and the batch trees; the hospitals that
+receive large expansion should be numbered earliest. All leaves of the iterative and iterative priority trees are at depth B, whereas the path
+length to a leaf of the batch tree varies: It stops branching when P
+
+h th = B.
+
+for different solutions of reasonable objective value [Bosc et
+al., 2018]. In this paper, we use UCT to ﬁnd a global opti-
+mum node in a tree Tall.
+
+UCT consists of a sequential process of traversing a tree
+structure where each tree node i is associated with its value vi.
+We use n ∈ {1; 2; : : : ; N } to denote the number of rounds.
+The entire tree Tall is typically very large, and UCT tries to
+develop a subtree of it. We denote the subtree of round n by
+T (n). Each node i in the current tree is associated with a
+tuple (Vi; Ni) ∈ R2, where Vi is the sum of rewards and Ni
+the number of times at which node i is traversed. The value
+ˆ(cid:22)i := Vi=Ni is an estimator of vi, and its standard deviation
+is proportional to p1=Ni. Each round consists of selection,
+development, simulation, and backpropagation steps.
+Selection: At each iteration, UCT traverses the tree from the
+root. At each node i, it chooses a child node c with the maxi-
+mum UCB value:
+
+UCB(c) := ˆ(cid:22)c + Cp
+
+s
+
+log(Ni)
+Nc
+
+;
+
+where Cp > 0 is the parameter that determines how much
+exploration it attempts.
+Development: When it reaches a node k that is out of the
+current tree, it adds the node to the current tree.
+Simulation: Based on the reached node k, it conducts a ran-
+dom play to ﬁnd l, which is a leaf that stems from k.
+Backpropagation: Letting vl be the value of the leaf l, it
+updates the statistics of all nodes that we have traversed in
+this round: Vi ← Vi + vl; Ni ← Ni + 1 for each node i
+during the backpropagation.
+
+The four steps above are quite standard in UCT. For a more
+
+algorithmic description, see the full version.
+
+3.1 Tree Representation of Expansion Space
+Unlike abstract games where the game tree is inherent, the re-
+lation between a tree and the capacity expansion in our prob-
+
+lem is nontrivial. This section describes the mapping from a
+tree node into an expansion t ∈ Θ.
+
+In the capacity expansion problem deﬁned in Eq. (2), DA
+yields an optimal solution given a ﬁxed expansion vector t.
+Therefore, we consider a tree where each node corresponds to
+an expansion vector t, and each leaf is an expansion of limit
+P
+h∈H th = B. The value vi at each node i is the objective
+value of DA for the corresponding expansion.
+
+We consider the following criteria are important in con-
+
+structing a good tree representation of an expansion.
+
+1. Faithfulness: The tree preserves the inclusion relation-
+ship of the original expansion vector space: if node j
+is a descendant of node i, then t(j) − t(i) ≥ 0, where
+t(i); t(j) be corresponding expansions of nodes i; j and
+t(j) − t(i) ≥ 0 means all the features of the vector
+t(j) − t(i) are non-negative.
+
+2. Nonredundancy: The mapping is one-to-one. Namely,
+for any expansion vector t ∈ Θ such that P
+h th = B,
+there exists only one leaf of tree Tall. Redundancy in a
+tree representation compromises the search efﬁciency.
+
+3. Decisiveness: Assuming that a tree representation is
+faithful, the tree representation is decisive if branching
+in a shallow layer is more informative than the one in a
+deep layer. In our case, allocations related to important
+hospitals should appear in a shallow layer of the tree.
+
+Faithfulness Nonredundancy Decisiveness
+
+Iterative tree
+Iterative priority tree (IPT)
+Batch tree (BT)
+
+X
+X
+X
+
+X
+X
+
+X
+
+Table 1: Comparison of the three tree representations with respect
+to the criteria.
+
+r1231312312121123123Iterative treeIterative priority treeBatch treer1rt1=t2=t3=0053BB-5........................11t = (2,0,1)t = (2,0,1)t = (5,3,1)23ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)5Considering those criteria, we propose the three tree repre-
+sentations in Figure 1. In all of the three representations, the
+root node r corresponds to the zero vector t = (0; 0; : : : ; 0)
+that corresponds to no expansion. Table 1 illustrates which
+properties are satisﬁed in each of the representations. We will
+discuss the idea behind them.
+
+The iterative representation, which is the most straightfor-
+ward, builds an H-ary tree.3 Each edge corresponds to allo-
+cating a seat to one of the hospitals. As a result, each path
+from the root to depth B represents an expansion of size B.
+Although the iterative representation is faithful, it is redun-
+dant. For example, consider the case of three hospitals. Let
+1 → 2 → 2 to denote a path on the tree that sequentially
+expands hospitals 1; 2; 2. An expansion vector (2; 1; 0) cor-
+responds to three different path on the tree (1 → 1 → 2,
+1 → 2 → 1, and 2 → 1 → 1). As a result, UCT with iterative
+tree representation searches an unnecessary large representa-
+tion space, which increases the computational burden.
+
+To deal with this issue, we introduce an improved tree rep-
+resentation of the expansion, which we call the iterative pri-
+ority tree (IPT). For each node i, it only allocates a node with
+its priority higher than the most prioritized hospital that has
+been allocated a seat. IPT solves the issue of redunduncy in
+the iterative tree:
+
+Proposition 2. (Nonredundancy of IPT) For each expansion
+vector t ∈ NH, there exists a unique node in IPT.
+
+Proof. Each expansion uniquely corresponds to a nonincreas-
+ing sequence of numbers. For example, expansion t =
+(1; 3; 1) corresponds to 3 → 2 → 2 → 2 → 1. It is easy
+to conﬁrm that, in the iterative priority tree, this is the unique
+path that leads to the desired expansion.
+
+While the IPT is nonredundant, there still remains some
+space for improvement. The batch tree (BT) representation
+fully exploits the priority information to allocate more than
+one seats to popular nodes, which reduces the depth of the
+optimal solution in the tree. Namely, each depth of BT cor-
+responds to how many seats to allocate to each hospital. The
+following proposition states that the properties of BT:
+
+Proposition 3. (Nonredundancy and decisiveness of BT) BT
+is nonredundant.
+It is also decisive, that is, if the optimal
+solution aligns with the expansion vector (i.e., t1 ≥ t2 ≥
+t3 ≥ · · · ≥ tH ), then BT minimizes the depth of the optimal
+node among all trees such that each edge allocates seats to
+one hospital.
+
+Proof. The nonredundancy is trivial.
+In the following, we
+derive the decisiveness of the BT. Assume that the optimal
+expansion vector is such that t1 ≥ t2 ≥ t3 ≥ · · · ≥ tH , and
+let h be the ﬁrst index such that th = 0. BT includes the path
+of depth h − 1 that leads to this allocation.
+
+3.2 Ordering Hospitals
+We introduce two ideas for ordering hospitals that we use in
+IPT and BT. The ﬁrst idea is to order hospitals in terms of
+
+3Note that H is the number of the hospitals.
+
+their popularity
+
+Popularity(h) :=
+
+X
+
+d∈D
+
+rankd(h):
+
+We use the term “popularity” because it is the total rank
+of hospital h in view of residents. Note that this value is
+also referred to as the Borda count in the context of social
+choice [Moulin, 1994]. A smaller value represents a more
+popular hospital.
+
+The second idea is utilizing potential envies that may not
+be justiﬁed so that we could construct a better decision tree
+of the hospitals. Namely, let
+
+Envy(h) :=
+
+X
+
+d∈D
+
+1[rankd(h) < rankd(M (d))]
+
+be the potential envy that the residents have toward the ones
+matched to hospital h in matching M . The score indicates the
+number of residents who prefer hospital h over their matched
+hospital in M . For calculating M , we run DA with no expan-
+sion before running UCT to determine the ordering.
+
+Avoiding multiple entries. Since the evaluation of each
+node (i.e., DA with a given expansion vector) is determin-
+istic, we can restrict the node selection so that a node is never
+evaluated twice. In the backpropagation step, we mark the
+node k as “evaluated” if it is a leaf of Tall. Moreover, for each
+ascendant node, if all children of the node are evaluated, then
+we mark that node as evaluated. In the selection and simula-
+tion phase, the evaluated nodes are never visited again.
+
+3.3 Consistency of the Method
+This section analyzes the proposed method. The ﬁrst result is
+a trivial consequence of avoiding multiple entries:
+
+Proposition 4. (Worst-case sample complexity) UCT with
+iterative tree ﬁnds an optimal solution in N = |Tall| rounds.
+
+Proof. Since the development step adds a node to T (n) at
+each round n, it follows that it obtains the optimal solution if
+N reaches the number of the nodes |Tall|.
+
+We further propose a nontrivial analysis by follow-
+the original UCT by [Kocsis and
+ing the analysis of
+Szepesv´ari, 2006]. The largest difference is that Kocsis and
+Szepesv´ari [2006] analyzed the average quality of the se-
+lected action (i.e., regret), whereas we are interested in the
+quality of the best path, which corresponds to the optimal so-
+lution of the capacity expansion problem.
+
+q log n
+
+Let ˆ(cid:22)i;m = Vi=m be the mean of vi over the ﬁrst m visits,
+and Ui;m;n = ˆ(cid:22)i;m + Cp
+m be the corresponding UCB
+value. Let W be the maximum number of the children of a
+node and DT be the depth of the tree.4 Let v∗
+i be the maxi-
+mum value of the leaves that are descendants of node i. Let
+v∗ = v∗
+r be the global optimal value, where r is the root node.
+The following assumption is essentially the same as the one
+in [Kocsis and Szepesv´ari, 2006]:
+
+4That is W = H; DT = B for iterative and iterative priority
+
+tree, or W = B; DT = H for the batch tree.
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)6H B
+
+(cid:11)
+
+5
+5
+15
+15
+5
+5
+15
+15
+5
+5
+15
+15
+
+5
+30
+5
+30
+5
+30
+5
+30
+5
+30
+5
+30
+
+0:0
+0:0
+0:0
+0:0
+0:2
+0:2
+0:2
+0:2
+0:4
+0:4
+0:4
+0:4
+
+Baseline
+LPH Grdy
+5:7
+32:9
+4:6
+25:3
+1:4
+6:4
+0:8
+4:3
+0:2
+2:1
+0:3
+0:8
+
+7:5
+6:3
+8:9
+23:2
+1:8
+3:6
+2:6
+4:1
+0:6
+1:1
+1:1
+0:8
+
+UCT (proposed)
+
+Iterative
+0:0
+1:3
+0:5
+17:8
+0:0
+1:6
+0:09
+2:7
+0:0
+1:4
+
+IPT-R
+0:0
+34:5
+0:5
+18:0
+0:0
+0:9
+0:0
+2:5
+0:0
+0:1
+
+0:0
+0:0
+0:09
+10:4
+0:0
+0:03
+0:0
+1:4
+0:0
+0:0
+−0:08 −0:09 −0:1 −0:1
+0:05 −0:6 −0:6
+
+IPT-P
+0:0
+0:0
+0:05
+15:5
+0:0
+0:1
+0:0
+1:3
+0:0
+0:0
+
+IPT-E BT-R
+0:0
+0:4
+1:1
+19:9
+0:0
+0:4
+0:2
+1:4
+0:0
+0:1
+
+BT-E
+BT-P
+0:0
+0:0
+0:0
+0:0
+1:1
+1:1
+6:9
+15:4
+0:0
+0:0
+0:1
+0:09
+0:06
+0:06
+0:3
+0:3
+0:0
+0:0
+0:0
+0:0
+0:02 −0:09 −0:09
+−0:8
+−0:8
+0:04
+
+0:5
+
+Table 2: Average percentage gaps between the solution found by the Agg-Lin and the solution found by each method for Set 1 experiments.
+UCT with iterative priority trees has three different orderings, i.e., random, popularity, and envy-based, each of which is denoted by IPT-R,
+IPT-P, and IPT-E. As well, UCT with batch trees has the three variants: BT-R, BT-P, and BT-E. “0:0” indicates the value is equal to Agg-Lin.
+Negative values mean the temporal value of Agg-Lin is outperformed.
+
+H B
+
+(cid:11)
+
+Baseline
+
+5
+5
+15
+15
+5
+5
+15
+15
+5
+5
+15
+15
+
+5
+30
+5
+30
+5
+30
+5
+30
+5
+30
+5
+30
+
+0:0
+0:0
+0:0
+0:0
+0:2
+0:2
+0:2
+0:2
+0:4
+0:4
+0:4
+0:4
+
+Agg-Lin
+24:01
+11:85
+854:91
+362:87
+37:79
+55:79
+2740:02
+3527:88
+86:30
+294:07
+3600:21
+3600:41
+
+LPH Grdy
+0:06
+0:01
+0:19
+0:01
+0:94
+0:02
+3:34
+0:02
+0:09
+0:01
+0:44
+0:01
+1:80
+0:03
+7:14
+0:03
+0:09
+0:01
+0:54
+0:01
+2:38
+0:03
+9:24
+0:04
+
+Iterative
+10:09
+35:60
+52:11
+177:00
+15:59
+89:59
+129:87
+384:11
+15:04
+123:79
+169:40
+578:57
+
+IPT-R
+0:64
+45:38
+56:98
+167:24
+0:98
+94:44
+129:35
+376:15
+0:98
+130:87
+166:00
+606:01
+
+UCT (proposed)
+IPT-E
+0:65
+39:92
+54:31
+160:77
+0:99
+94:46
+130:38
+370:66
+0:97
+129:18
+168:14
+584:77
+
+IPT-P
+0:64
+39:84
+54:88
+166:36
+0:99
+93:57
+129:18
+370:17
+0:97
+129:49
+166:96
+574:18
+
+BT-R
+0:86
+36:93
+54:76
+149:91
+1:30
+91:78
+125:60
+343:04
+1:30
+123:63
+168:51
+553:69
+
+BT-P
+0:86
+38:83
+53:50
+139:90
+1:31
+90:11
+128:63
+362:58
+1:29
+123:91
+166:51
+571:35
+
+BT-E
+0:86
+38:03
+53:37
+139:74
+1:32
+90:06
+128:88
+361:80
+1:30
+123:89
+166:11
+572:87
+
+Table 3: Average run times for Set 1 (seconds).
+
+Figure 2: Total resident rankings (costs) of the proposed algorithms. Horizontal axis indicates the number of rounds. The dotted lines
+represent the total costs obtained by Grdy, LPH, and Agg-Lin.
+
+Assumption 1. (Conﬁdence bound) We assume
+
+P [Ui;n;m ≥ v∗
+
+i ] ≥ 1 − 1=n2:
+
+Deﬁnition 1. (∆-optimal tree) Let ∆ > 0 be arbitrary. The
+∆-optimal subtree is deﬁned recursively as follows. First,
+it includes the root of the original tree. For each node i in
+the subtree, add each children c such that v∗
+c ≤ ∆. In
+other words, ∆-optimal subtree is a subtree where each edge
+is suboptimal at most ∆. Let S(∆) be the number of the
+
+i − v∗
+
+nodes in the ∆-optimal subtree.
+Theorem 5. If Assumption 1 holds for any node i, then with
+probability at least 1 − o(N −1), UCT ﬁnds at least one node
+in the ∆-suboptimal tree if N satisﬁes
+
+N > W S(∆)
+
+(Cp)2 log N
+∆2
+
+:
+
+The proof of Theorem 5 is in the full version.
+
+Remark 2. (Implication) The solution of the node i in ∆-
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)7B
+
+10
+30
+
+Baseline
+LPH Grdy
+0:3
+1:1
+
+0:2
+0:4
+
+UCT (proposed)
+
+Iterative
+1:3
+4:8
+
+IPT-R IPT-P
+0:04
+0:1
+
+1:1
+3:7
+
+IPT-E BT-R BT-P BT-E
+0:02
+0:09
+
+0:06
+0:4
+
+0:02
+0:02
+
+0:9
+1:7
+
+Table 4: Average percentage gaps between the solution found by the Agg-Lin and the solution found by each method for JRMP.
+
+B
+
+10
+30
+
+Agg-Lin
+247:89
+438:20
+
+Baseline
+LPH
+0:08
+0:08
+
+UCT (proposed)
+
+Grdy
+9:35
+27:12
+
+Iterative
+20:42
+62:72
+
+IPT-R
+22:11
+74:68
+
+IPT-P
+21:49
+73:18
+
+IPT-E
+22:08
+73:65
+
+BT-R
+20:58
+77:30
+
+BT-P
+21:13
+74:98
+
+BT-E
+21:16
+78:20
+
+Table 5: Average run times for JRMP (seconds).
+
+suboptimal tree is at least
+
+vi ≥ v∗ − DT ∆:
+Therefore, letting ∆ be sufﬁciently small and N be sufﬁ-
+ciently large, UCT ﬁnds an almost optimal solution. The re-
+quired number of N depends on S(∆), which corresponds to
+the number of close-to-optimal children.
+
+4 Evaluation
+This section empirically evaluates our algorithm via synthetic
+and real datasets. We compare our algorithms with the ones
+by [Bobbio et al., 2021]: the greedy algorithm (Grdy), the lin-
+ear programming-based heuristic (LPH), and the aggregated
+linearization (Agg-Lin).
+
+Let us enumerate existing algorithms: First, Grdy is an al-
+gorithm that allocates B expansion seats iteratively such that
+each allocation maximizes the marginal cost reduction. Sec-
+ond, LPH ﬁrst computes a minimum cost matching without
+stability constraints via minimum-cost ﬂow to ﬁx the expan-
+sion seats, and then uses DA to obtain a stable matching.
+Finally, Agg-Lin is an exact method that uses McCormick
+envelopes and solves a mixed integer programming, which
+is computationally intensive. We warm-up Agg-Lin as sug-
+gested by [Bobbio et al., 2021].
+
+For our UCT method, we set N = B×103 in synthetic data
+experiments, N = B × 102 in real data experiments. The
+value of Cp, which determines the tradeoff between explo-
+0:002. We consider this
+ration and exploitation, is set to be
+parameter is robust enough to cover all settings. We imple-
+ment our simulation with Python 3 and solve the mathemati-
+cal programming using Gurobi, which is in favor of Agg-Lin.
+We restrict the runtime for each method to one hour.
+
+√
+
+Let us describe the procedure of generating the datasets.
+First, we build two synthetic datasets. Set 1 involves B but
+each hospital does not have its expansion limit bh. Set 2 in-
+volves B as well as bh for each hospital. Note that the setting
+of Set 1 is similar to the experimental section in [Bobbio et
+al., 2021]. Regarding the preference among the residents, we
+follow the setting [Goto et al., 2016], which involves a corre-
+lation parameter (cid:11) ≥ 0. Larger value of (cid:11) implies a stronger
+correlation among the preferences. Note that (cid:11) = 0 (no cor-
+relation) corresponds to the setting of [Bobbio et al., 2021].
+We set D := |D| = 1; 000, and conduct experiments varying
+the parameters H := |H|, B, bh, and (cid:11). For each combina-
+tion of parameters, we average the results for 10 instances.
+
+Second, we generate the dataset, JRMP, based on Japan
+Residency Matching Program 2007 [Kamada and Kojima,
+2015], which matches medical hospital students (residents)
+with residency training programs. We extracted 1; 287 res-
+idents in the Tokyo district who match with 50 + 1 (1 for
+a dummy) hospitals with a resident-side preference. We set
+B ∈ {10; 30} for the limit of capacity expansion. For each
+B, we average the results for 10 instances.
+
+Tables 2 and 3 illustrate the quality of solutions and its run-
+time for Set 1, respectively. The results for Set 2, which is
+omitted due to page limitation, are found in the full version.
+Also, we place Tables 4 and 5 for the JRMP data. Note that
+Table 2 indicates the average percentage gap in the total resi-
+dent ranking (TRR) deﬁned in Eq. (1):
+
+100 ×
+
+(TRR of the method) − (TRR of Agg-Lin)
+(TRR of the method)
+
+:
+
+Agg-Lin always outputs an optimal solution upon the com-
+pletion. However, as in Table 3, it does not run within one
+hour for large instances with positive correlation (cid:11). In that
+case, we use the temporal value that Gurobi outputs, which
+can be suboptimal and the percentage gap can be negative.
+
+Among the algorithms we consider, the two greedy meth-
+ods (Grdy and LPH) run very fast (< 10 seconds) and output
+a suboptimal solution. Both of them are outperformed by all
+variants of ours. In particular, BT outperformed iterative tree
+and IPT, and using the popularity and envy-based orderings
+outperformed the random one.
+
+Figure 2 describes the objective value as a function of
+rounds, which indicates an early termination of BT often has
+a satisfying solution. In summary, BT with envy/popularity-
+based ordering yields the best results among our algorithms.
+Our algorithms run 2–20 times faster than Agg-Lin, and the
+quality of the solution is close to optimal.
+
+5 Conclusion
+This paper sheds light on the capacity expansion in the two-
+sided matching to consider a ﬂexible allocation of extra seats
+within a given limit beforehand. To handle this NP-Complete
+problem, we develop a UCT-based search method and verify
+that it outperforms the previous approaches. Future works in-
+clude (1) extending it to matchings with constraints that need
+not admit stable matching and (2) utilizing other tree search
+algorithms such as Nested Monte-Carlo Search [Cazenave,
+2009; Rosin, 2011].
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)8[Kaufmann and Koolen, 2017] Emilie
+
+and
+Wouter M. Koolen. Monte-carlo tree search by best arm
+identiﬁcation. In NIPS, pages 4897–4906, 2017.
+
+Kaufmann
+
+[Kocsis and Szepesv´ari, 2006] Levente Kocsis and Csaba
+Szepesv´ari. Bandit based monte-carlo planning. In ECML,
+volume 4212 of Lecture Notes in Computer Science, pages
+282–293. Springer, 2006.
+
+[Manlove, 2013] David F. Manlove. Algorithmics of Match-
+ing Under Preferences. World Scientiﬁc Publishing Com-
+pany, 2013.
+
+[Moulin, 1994] Herv´e Moulin. Chapter 31 social choice. In
+Handbook of Game Theory with Economic Applications,
+volume 2, pages 1091–1125. Elsevier, 1994.
+
+[Rosin, 2011] Christopher D. Rosin. Nested rollout policy
+In IJCAI 2011,
+adaptation for monte carlo tree search.
+Proceedings of the 22nd International Joint Conference on
+Artiﬁcial Intelligence, pages 649–654, 2011.
+
+[Roth and Sotomayor, 1990] Alvin E. Roth and Marilda
+A. Oliveira Sotomayor. Two-Sided Matching: A Study in
+Game-theoretic Modeling and Analysis (Econometric So-
+ciety Monographs). Cambridge University Press, 1990.
+[Roth, 1991] Alvin E. Roth. A natural experiment in the or-
+ganization of entry level labor markets: Regional markets
+for new physicians and surgeons in the u.k. American Eco-
+nomic Review, 81:415–440, 1991.
+
+[Schaeffer, 1989] J. Schaeffer. The history heuristic and
+alpha-beta search enhancements in practice. IEEE Trans-
+actions on Pattern Analysis and Machine Intelligence,
+11(11):1203–1212, 1989.
+
+[Silver et al., 2016] David Silver, Aja Huang, Chris J. Mad-
+dison, Arthur Guez, Laurent Sifre, George van den Driess-
+che, Julian Schrittwieser, Ioannis Antonoglou, Veda Pan-
+neershelvam, Marc Lanctot, Sander Dieleman, Dominik
+Grewe, John Nham, Nal Kalchbrenner, Ilya Sutskever,
+Timothy Lillicrap, Madeleine Leach, Koray Kavukcuoglu,
+Thore Graepel, and Demis Hassabis. Mastering the game
+of go with deep neural networks and tree search. Nature,
+529(7587):484–489, Jan 2016.
+
+[Wang and Gelly, 2007] Yizao Wang and Sylvain Gelly.
+Modiﬁcations of UCT and sequence-like simulations for
+monte-carlo go. In CIG, pages 175–182. IEEE, 2007.
+[Yoshizoe et al., 2011] Kazuki Yoshizoe, Akihiro Kishi-
+moto, Tomoyuki Kaneko, Haruhiro Yoshimoto, and Yu-
+taka Ishikawa.
+Scalable distributed monte-carlo tree
+search. In SOCS. AAAI Press, 2011.
+
+References
+[Abdulkadiro˘glu and S¨onmez, 2003] Atila Abdulkadiro˘glu
+and Tayfun S¨onmez. School choice: A mechanism de-
+sign approach. American Economic Review, 93(3):729–
+747, 2003.
+
+[Bir´o et al., 2010] Peter. Bir´o, Tamas. Fleiner, Robert.W.
+Irving, and David.F. Manlove. The college admissions
+problem with lower and common quotas. Theoretical
+Computer Science, 411(34-36):3136–3153, 2010.
+
+[Bobbio et al., 2021] Federico Bobbio, Margarida Carvalho,
+Andrea Lodi, and Alfredo Torrico. Capacity expansion in
+the college admission problem. arXiv, abs/2110.00734,
+2021.
+
+[Bosc et al., 2018] Guillaume Bosc, Jean-Franc¸ois Bouli-
+caut, Chedy Ra¨ıssi, and Mehdi Kaytoue. Anytime dis-
+covery of a diverse set of patterns with monte carlo tree
+search. Data Min. Knowl. Discov., 32(3):604–650, 2018.
+[Browne et al., 2012] Cameron Browne, Edward Jack Pow-
+ley, Daniel Whitehouse, Simon M. Lucas, Peter I. Cowl-
+ing, Philipp Rohlfshagen, Stephen Tavener, Diego Perez
+Liebana, Spyridon Samothrakis, and Simon Colton. A
+survey of monte carlo tree search methods. IEEE Trans.
+Comput. Intellig. and AI in Games, 4(1):1–43, 2012.
+[Cazenave, 2009] Tristan Cazenave. Nested monte-carlo
+search. In IJCAI 2009, Proceedings of the 21st Interna-
+tional Joint Conference on Artiﬁcial Intelligence, pages
+456–461, 2009.
+
+[Feldman and Domshlak, 2014] Zohar Feldman and Carmel
+Domshlak. Simple regret optimization in online plan-
+ning for markov decision processes. J. Artif. Int. Res.,
+51(1):165–205, sep 2014.
+[Fragiadakis et al., 2016] Daniel
+
+Atsushi
+Iwasaki, Peter Troyan, Suguru Ueda, and Makoto Yokoo.
+ACM
+Strategyproof matching with minimum quotas.
+Transactions on Economics and Computation, 4, 2016.
+(an extended abstract appeared in AAMAS, pages
+1327–1328, 2012).
+
+Fragiadakis,
+
+[Gale and Shapley, 1962] D. Gale and L. S. Shapley. College
+admissions and the stability of marriage. The American
+Mathematical Monthly, 69(1):9–15, 1962.
+
+[Goto et al., 2014] Masahiro Goto, Naoyuki Hashimoto, At-
+sushi Iwasaki, Yujiro Kawasaki, Suguru Ueda, Yosuke Ya-
+suda, and Makoto Yokoo. Strategy-proof matching with
+In Thirteenth International
+regional minimum quotas.
+Conference on Autonomous Agents and Multiagent Sys-
+tems (AAMAS), pages 1225–1232, 2014.
+
+[Goto et al., 2016] Masahiro Goto, Atsushi Iwasaki, Yujiro
+Kawasaki, Ryoji Kurata, Yosuke Yasuda, and Makoto
+Yokoo. Strategyproof matching with regional minimum
+and maximum quotas. Artiﬁcial Intelligence, 235:40–57,
+2016.
+
+[Kamada and Kojima, 2015] Yuichiro Kamada and Fuhito
+Efﬁcient matching under distributional con-
+Kojima.
+straints: Theory and applications. American Economic
+Review, 105(1):67–99, 2015.
+
+ProceedingsoftheThirty-FirstInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-22)9

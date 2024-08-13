@@ -1,0 +1,10148 @@
+Article
+
+No belief propagation required: Belief
+space planning in high-dimensional state
+spaces via factor graphs, the matrix
+determinant lemma, and re-use of
+calculation
+
+Dmitry Kopitkov1 and Vadim Indelman2
+
+The International Journal of
+Robotics Research
+1088–1130
+© The Author(s) 2017
+Reprints and permissions:
+sagepub.co.uk/journalsPermissions.nav
+DOI: 10.1177/0278364917721629
+journals.sagepub.com/home/ijr
+
+Abstract
+We develop a computationally efﬁcient approach for evaluating the information-theoretic term within belief space plan-
+ning (BSP), where during belief propagation the state vector can be constant or augmented. We consider both unfocused
+and focused problem settings, whereas uncertainty reduction of the entire system or only of chosen variables is of interest,
+respectively. State-of-the-art approaches typically propagate the belief state, for each candidate action, through calcula-
+tion of the posterior information (or covariance) matrix and subsequently compute its determinant (required for entropy).
+In contrast, our approach reduces runtime complexity by avoiding these calculations. We formulate the problem in terms of
+factor graphs and show that belief propagation is not needed, requiring instead a one-time calculation that depends on (the
+increasing with time) state dimensionality, and per-candidate calculations that are independent of the latter. To that end,
+we develop an augmented version of the matrix determinant lemma, and show that computations can be re-used when eval-
+uating impact of different candidate actions. These two key ingredients and the factor graph representation of the problem
+result in a computationally efﬁcient (augmented) BSP approach that accounts for different sources of uncertainty and can
+be used with various sensing modalities. We examine the unfocused and focused instances of our approach, and compare it
+with the state of the art, in simulation and using real-world data, considering problems such as autonomous navigation in
+unknown environments, measurement selection and sensor deployment. We show that our approach signiﬁcantly reduces
+running time without any compromise in performance.
+
+Keywords
+Belief space planning, active SLAM, informative planning, active inference, autonomous navigation
+
+1. Introduction
+
+Decision making under uncertainty and belief space plan-
+ning (BSP) are fundamental problems in robotics and arti-
+ﬁcial intelligence, with applications including autonomous
+driving, surveillance, sensor deployment, object manipu-
+lation, and active simultaneous localization and mapping
+(SLAM). The goal is to autonomously determine the best
+actions according to a speciﬁed objective function, given
+the current belief about random variables of interest that
+could represent, for example, robot poses, a tracked tar-
+get, or mapped environment, while accounting for different
+sources of uncertainty.
+
+Since the true state of interest is typically unknown and
+only partially observable through acquired measurements,
+it can only be represented through a probability distribution
+conditioned on available data. BSP and decision-making
+approaches reason how this distribution (the belief ) evolves
+as a result of candidate actions and future expected obser-
+vations. Such a problem is an instantiation of a partially
+
+observable Markov decision process (POMDP), while cal-
+culating an optimal solution of a POMDP was proven to be
+computationally intractable (Kaelbling et al., 1998) for all
+but the smallest problems due to curse of history and curse
+of dimensionality. Recent research has therefore focused on
+the development of sub-optimal approaches that trade-off
+optimality and runtime complexity. These approaches can
+be classiﬁed into those that discretize the action, state, and
+measurement spaces, and those that operate over continuous
+spaces.
+
+1Technion Autonomous Systems Program (TASP), Technion - Israel Insti-
+tute of Technology, Haifa, Israel
+2Department of Aerospace Engineering, Technion - Israel Institute of
+Technology, Haifa, Israel
+
+Corresponding author:
+Dmitry Kopitkov, Technion Autonomous Systems Program (TASP), Tech-
+nion - Israel Institute of Technology, Haifa 32000, Israel.
+Email: dimkak@tx.technion.ac.il
+
+Kopitkov and Indelman
+
+1089
+
+Approaches from the former class include point-based
+value iteration methods (Pineau et al., 2006), simula-
+tionbased (Stachniss et al., 2005), and sampling-based
+approaches (Agha-Mohammadi et al., 2014; Prentice and
+Roy, 2009). On the other hand, approaches that avoid dis-
+cretization are often termed direct trajectory optimization
+methods (e.g. Indelman et al., 2015; Patil et al., 2014;
+Platt et al., 2010; Van Den Berg et al., 2012; Walls et
+al., 2015); these approaches typically calculate a locally
+optimal solution from a given nominal solution.
+
+Decision making under uncertainty, also sometimes
+referred to as active inference, and BSP can be for-
+mulated as selecting an optimal action from a set of
+candidates, based on some cost function. In information-
+based decision making, the cost function typically con-
+tains terms that evaluate the expected posterior uncertainty
+upon action execution, with commonly used costs includ-
+ing (conditional) entropy and mutual information (MI).
+Thus, for Gaussian distributions the corresponding cal-
+culations typically involve calculating a determinant of a
+posteriori covariance (information) matrices and, more-
+these calculations are to be performed for each
+over,
+candidate action.
+
+Decision making and BSP become even more chal-
+lenging problems when considering high-dimensional state
+spaces. Such a setup is common in robotics, for example
+in the context of BSP in uncertain environments, active
+SLAM, sensor deployment, graph reduction, and graph
+sparsiﬁcation. In particular, calculating a determinant of
+information (covariance) matrix for an n-dimensional state
+is in general O(n3), and is smaller for sparse matrices as in
+SLAM problems (Bai et al., 1996).
+
+Moreover, state-of-the-art approaches typically perform
+these calculations from scratch for each candidate action.
+For example, in the context of active SLAM, state-of-
+the-art BSP approaches ﬁrst calculate the posterior belief
+within the planning horizon, and then use that belief to
+evaluate the objective function, which typically includes an
+information-theoretic term (Huang et al., 2005; Indelman
+et al., 2015; Kim and Eustice, 2014; Valencia et al., 2013).
+These approaches then determine the best action by per-
+forming the mentioned calculations for each action from
+a given set of candidate actions, or by local search using
+dynamic programming or gradient descent (for continuous
+setting).
+
+Sensor deployment is another example of decision mak-
+ing in high-dimensional state spaces. The basic formula-
+tion of the problem is to determine locations to deploy
+the sensors such that some metric can be measured most
+accurately through the entire area (e.g. temperature). The
+problem can also be viewed as selecting the optimal action
+from the set of candidate actions (available locations) and
+the objective function usually contains a term of uncer-
+tainty, such as the entropy of a posterior system (Krause
+et al., 2008). Also here, state-of-the-art approaches evaluate
+a determinant over large posterior covariance (information)
+
+matrices for each candidate action, and do so from scratch
+(Zimmerman, 2006; Zhu and Stein, 2006).
+
+A similar situation also arises in measurement selection
+(Carlone et al., 2014; Davison, 2005) and graph pruning
+(Carlevaris-Bianco et al., 2014; Huang et al., 2012; Mazu-
+ran et al., 2014; Vial et al., 2011) in the context of long-term
+autonomy in SLAM. In the former case, the main idea is to
+determine the most informative measurements (e.g. image
+features) given measurements provided by robot sensors,
+thereby discarding uninformative and redundant informa-
+tion. Such a process typically involves reasoning about MI
+(see e.g. Chli and Davison, 2009; Davison, 2005), for each
+candidate selection. Similarly, graph pruning and sparsiﬁ-
+cation can be considered as instances of decision making
+in high-dimensional state spaces (Carlevaris-Bianco et al.,
+2014; Huang et al., 2012), with decision corresponding to
+determining what nodes to marginalize out (Ila et al., 2010;
+Kretzschmar and Stachniss, 2012), and avoiding the result-
+ing ﬁll-in in an information matrix by resorting to sparse
+approximations of the latter (Carlevaris-Bianco et al., 2014;
+Huang et al., 2012; Mazuran et al., 2014; Vial et al., 2011).
+Also here, existing approaches typically involve calcula-
+tion of the determinant of large matrices for each candidate
+action.
+
+In this paper we develop a computationally efﬁcient
+and exact approach for decision making and BSP in high-
+dimensional state spaces that addresses the aforementioned
+challenges. The key idea is to use the (augmented) general
+matrix determinant lemma to calculate action impact with
+complexity independent of state dimensionality n, while re-
+using calculations between evaluating impact for different
+candidate actions. Our approach supports general observa-
+tion and motion models, and non-myopic planning, and is
+thus applicable to a wide range of applications such as those
+mentioned above, where fast decision making and BSP in
+high-dimensional state spaces is required.
+
+Although many particular domains can be speciﬁed as
+decision-making and BSP problems, they all can be clas-
+siﬁed into two main categories, one where state vector is
+ﬁxed during belief propagation and another where the state
+vector is augmented with new variables. Sensor deployment
+is an example of the ﬁrst case, while active SLAM, where
+future robot poses are introduced into the state, is an exam-
+ple of the second case. Conceptually the ﬁrst category is a
+particular case of the second, but as we will see both will
+require different solutions. Therefore, in order to differenti-
+ate between these two categories, in this paper we consider
+the ﬁrst category (ﬁxed-state) as a BSP problem, and the
+second category (augmented-state) as an augmented BSP
+problem.
+
+Moreover, we show the proposed concept
+
+is appli-
+cable also to active focused inference. Unlike the
+unfocused case discussed thus far, active focused
+inference approaches aim to reduce the uncertainty over
+only a predeﬁned set of the variables. The two problems
+can have signiﬁcantly different optimal actions, with an
+
+1090
+
+The International Journal of Robotics Research 36(10)
+
+optimal solution for the unfocused case potentially per-
+forming badly for the focused setup, and vice versa (see
+e.g. Levine and How, 2013). While the set of focused
+variables can be small, exact state-of-the-art approaches
+calculate the marginal posterior covariance (information)
+matrix, for each action, which involves a computationally
+expensive Schur complement operation. For example, Mu
+et al. (2015) calculate posterior covariance matrix per each
+measurement and then use the selection matrix in order to
+obtain the marginal of the focused set. Levine and How
+(2013) developed an approach that determines MI between
+focused and unfocused variables through message-
+passing algorithms on Gaussian graphs but their approach
+is limited to only graphs with unique paths between the
+relevant variables.
+
+In contrast, we provide a novel way to calculate posterior
+entropy of focused variables, which is fast, simple, and
+general; yet, it does not require calculation of a posterior
+covariance matrix. In combination with our re-use algo-
+rithm, it provides a focused decision-making solver that
+is signiﬁcantly faster compared with standard approaches.
+Calculating the posterior information matrix in aug-
+mented BSP problems involves augmenting an appropri-
+ate prior information matrix with zero rows and columns,
+i.e. zero padding, and then adding new information due to
+candidate action (see Figure 1). While the general matrix
+determinant lemma is an essential part of our approach,
+unfortunately it is not applicable to the mentioned aug-
+mented prior information matrix since the latter is singular
+(even though the posterior information matrix is full rank).
+In this paper, we develop a new variant of the matrix deter-
+minant lemma, called the augmented matrix determinant
+lemma (AMDL), that addresses the general augmentation
+of a future state vector. Based on AMDL, we then develop
+a augmented BSP approach, considering both unfocused
+and focused cases.
+
+Finally, there is also a relation to the recently intro-
+duced concept of decision making in a conservative sparse
+information space (Indelman, 2015b, 2016). In particular,
+considering unary observation models (involving only one
+variable) and greedy decision making, it was shown that
+appropriately dropping all correlation terms and remain-
+ing only with a diagonal covariance (information) matrix
+does not sacriﬁce performance while signiﬁcantly reduc-
+ing computational complexity. While the approach pre-
+sented herein conﬁrms this concept for the case of unary
+observation models, our approach addresses a general non-
+myopic decision-making problem, with arbitrary observa-
+tion and motion models. Moreover, compared with state-
+of-the-art approaches, our approach signiﬁcantly reduces
+runtime while providing identical decisions.
+
+To summarize, our main contributions in this paper are
+as follows: (a) we formulate (augmented) BSP in terms of
+factor graphs, which allow us to see the problem in a more
+intuitive and simple way; (b) we develop an augmented
+version of matrix determinant lemma (AMDL), where the
+
+subject matrix is ﬁrst augmented by zero rows/columns and
+only then new information is introduced; (c) we develop
+an approach for a non-myopic focused and unfocused
+(augmented) BSP in high-dimensional state spaces that uses
+the (augmented) matrix determinant lemma to avoid cal-
+culating determinants of large matrices, with per-candidate
+complexity independent of state dimension; (d) we show
+how calculations can be re-used when evaluating impacts
+of different candidate actions; we integrate the calcula-
+tions re-use concept and AMDL into a general and highly
+efﬁcient BSP solver, that does not involve explicit calcu-
+lation of posterior belief evolution for different candidate
+actions, naming this approach rAMDL; (e) we introduce an
+even more efﬁcient rAMDL variant speciﬁcally addressing
+a sensor deployment problem.
+
+This paper is an extension of the work presented in
+Kopitkov and Indelman (2016, 2017). As a further contri-
+bution, in this manuscript we show the problem of (aug-
+mented) BSP can be formulated through factor graphs
+(Kschischang et al., 2001), thereby providing insights into
+the sparsity patterns of Jacobian matrices that correspond to
+future posterior beliefs. We exploit the sparsity of the aug-
+mented BSP problem and provide a solution for this case
+which outperforms our previous approach from Kopitkov
+and Indelman (2017). In addition, we present an improved
+approach, compared with Kopitkov and Indelman (2016),
+to solve the non-augmented BSP problem. Moreover, we
+develop a more efﬁcient variant of our approach, speciﬁ-
+cally addressing the sensor deployment problem (Section
+4.1), and show in detail how our augmented BSP method
+can be applied particularly to autonomous navigation in
+unknown environments and active SLAM (Section 4.2).
+This paper also includes an extensive experimental eval-
+uation using synthetic and real-world data (Section 7),
+with the aim of comparing the time performance of all
+the approaches proposed herein in a variety of challeng-
+ing scenarios, and benchmarking against the state of the
+art. Finally, here we attempt to give the reader some more
+insights on the problem, discussing theoretical interpreta-
+tion of information gain (IG) metric, relation to MI (Davi-
+son, 2005; Kaess and Dellaert, 2009) (Section 3.5), and
+practical remarks regarding the proposed approach.
+
+This paper is organized as follows. Section 2 introduces
+the concepts of BSP, and gives a formal statement of the
+problem. Section 3 describes our approach rAMDL for gen-
+eral formulation. Section 4 tailors the approach for spe-
+ciﬁc domains, providing even more efﬁcient solutions to a
+number of them. In Section 5 standard approaches are dis-
+cussed as the main state-of-the-art alternatives to rAMDL.
+Further, in Section 6 we analyze the runtime complexity
+of approaches presented herein and their alternatives. Sec-
+tion 7 presents experimental results, evaluating the pro-
+posed approach and comparing it against the mentioned
+state of the art. Conclusions are drawn in Section 8. To
+improve readability, proofs of several lemmas are given in
+the Appendix.
+
+Kopitkov and Indelman
+
+1091
+
+i(X j
+
+i (rj
+
+i is the expected value of hj
+
+i is a known nonlinear function, υj
+
+where hj
+i is zero-mean
+Gaussian noise, and rj
+i =
+E[hj
+i ) ]). Such a factor representation is a general way
+to express information about the state. In particular, it can
+represent a measurement model, in which case hj
+i is the
+observation model and rj
+i and υj
+i are the actual measurement
+z and measurement noise, respectively. Similarly, it can also
+represent a motion model (see Section 4.2). A maximum
+a posteriori (MAP) inference can be calculated efﬁciently
+(see e.g. Kaess et al., 2012) such that
+
+P( Xk|Hk) = N (X ∗
+
+k , 6k) ,
+
+(4)
+
+where X ∗
+matrix, respectively.
+
+k and 6k are the mean vector and covariance
+
+We shall refer to the posterior P( Xk|Hk) as the belief and
+
+write
+
+b[Xk]
+
+.
+= P( Xk|Hk) .
+
+(5)
+
+In the context of BSP, we typically reason about the
+evolution of future beliefs b[Xk+l] at different look-ahead
+steps l as a result of different candidate actions. A particu-
+lar candidate action can provide unique information (future
+observations and controls) in a form of newly introduced
+factors (see Figures 2 and 3) and can be more and less ben-
+eﬁcial for speciﬁc tasks such as reducing future uncertainty.
+For example, in a SLAM application, choosing a trajectory
+that is close to the mapped landmarks (see Figure 3) will
+reduce uncertainty because of loop closures. Furthermore,
+conceptually each candidate action can introduce different
+additional state variables into the future state vector, as in
+the case of the smoothing SLAM formulation in Figure
+3 where the state is augmented by a (various) number of
+future robot poses.
+
+Therefore, in order to reason about the belief b[Xk+l], ﬁrst
+it needs to be carefully modeled. More speciﬁcally, let us
+.
+= {¯a1, . . . , ¯aL}
+focus on a non-myopic candidate action a
+that is a sequence of myopic actions with planning hori-
+zon L. Each action ¯al can be represented by new factors
+k+l) , . . . , f nk+l
+Fk+l = {f 1
+k+l ) } and, possibly, new
+state variables X k+l
+new (1 ≤ l ≤ L) that are acquired/added
+while applying ¯al. Similar to (1), the future belief b[Xk+L]
+can be explicitly written as
+
+k+l (X nk+l
+
+k+l(X 1
+
+b[Xk+L] ∝ b[Xk]
+
+k+L
+
+nl
+
+Yl=k+1
+
+j=1
+Y
+
+l (X j
+f j
+
+l ) ,
+
+(6)
+
+.
+= {Xk ∪ X k+1
+
+new ∪ · · · ∪ X k+L
+
+new } contains old
+where Xk+L
+and new state variables. For example, in Figure 3 at each
+future time step k + l, a new robot pose xk+l is added
+to the state; new motion model factors {f7, f8, f9} and a
+new observation model factor are also introduced. Simi-
+lar expressions can be also written for any other lookahead
+step l. Observe in the above belief (6) that the future fac-
+tors depend on future observations, whose actual values
+are unknown.
+
+Fig. 1. Illustration of the construction of 3k+L for a given candi-
+date action in the augmented BSP case. First, 3Aug
+k+L is created by
+adding n0 zero rows and columns. Then, the new information of
+belief is added through 3k+L = 3Aug
+
+k+L + AT A.
+
+2. Notation and problem deﬁnition
+
+In this paper, we develop computationally efﬁcient
+approaches for BSP. As evaluating action impact involves
+inference over an appropriate posterior, we ﬁrst formulate
+the corresponding inference problem.
+
+Consider a high-dimensional problem-speciﬁc state vec-
+tor Xk ∈ Rn at time tk. In different applications the state
+Xk can represent the robot conﬁguration and poses (option-
+ally for whole history), environment-related variables, or
+any other variables to be estimated. In addition, consider
+i (X ni
+factors Fi = {f 1
+i (X 1
+i ) } that were added at time
+0 ≤ ti ≤ tk, where each factor f j
+i (X j
+i ) represents a speciﬁc
+measurement model, motion model or prior, and as such
+involves appropriate state variables X j
+
+i ) , . . . , f ni
+
+i ⊆ Xi.
+
+The joint probability distribution function (pdf) can then
+
+be written as
+
+P( Xk|Hk) ∝
+
+k
+
+ni
+
+f j
+i (X j
+
+i ) ,
+
+(1)
+
+i=0
+Y
+where Hk is history that contains all the information gath-
+ered until time tk (measurements, controls, etc.).
+
+j=1
+Y
+
+The inference problem can be naturally represented by a
+factor graph (Kschischang et al., 2001), which is a bipartite
+graph G =( F, 2, E) with two node types: variables nodes
+θi ∈ 2 and factor nodes fi ∈ F (see e.g. Figures 2 and
+3). Variable nodes represent state variables that need to be
+estimated, while factor nodes express different constraints
+between different variables. Each factor node is connected
+by edges eij ∈ E to variable nodes that are involved in
+the corresponding constraint. Such a formulation is general
+and can be used to represent numerous inference problems
+(e.g. SLAM), while exploiting sparsity. Furthermore, com-
+putationally efﬁcient approaches, based on such formula-
+tion and exploiting its natural sparsity, have been developed
+recently (Kaess et al., 2012, 2008).
+
+As is common in many inference problems, we will
+
+assume that all factors have a Gaussian form:
+
+f j
+i (X j
+
+i ) ∝ exp( −
+
+1
+2
+
+khj
+
+i(X j
+
+i ) −rj
+
+ik2
+j
+6
+i
+
+) ,
+
+with appropriate model
+rj
+i = hj
+i(X j
+
+i ) +υj
+i ,
+
+υj
+i ∼ N (0, 6j
+
+i ) ,
+
+(2)
+
+(3)
+
+1092
+
+The International Journal of Robotics Research 36(10)
+
+Fig. 2. Illustration of belief propagation in non-augmented BSP SLAM scenario. Prior belief b[Xk] and posterior belief b[Xk+L] are
+represented through factor graphs, with state vector being Xk = Xk+L = {x1, x2, l1, l2, l3} where xi and li denote robot poses and
+landmarks, respectively. Factor f0 is prior on the robot’s initial pose x1; factors {f2, f3, f4} are priors on landmark positions; factors
+between robot poses represent motion models; factors between pose and landmark represent observation models. Candidate action a
+introduces new measurements that are represented by new factors {f5, f6, f7}.
+
+Fig. 3. Illustration of belief propagation in the augmented BSP SLAM scenario. Prior belief b[Xk] and posterior belief b[Xk+L] are
+represented through factor graphs, with appropriate state vectors being Xk = {x1, x2, x3, l1, l2} and Xk+L = {x1, x2, x3, l1, l2, x4, x5, x6},
+where xi and li represent robot poses and landmarks, respectively. Factor f0 is prior on robot’s initial pose x1; factors {f2, f3, f4} are priors
+on landmark positions; factors between robot poses represent motion models; factors between pose and landmark represent observation
+models. Candidate action a makes the robot re-observe landmark l1; in order to do so it introduces new robot poses {x4, x5, x6} and new
+factors {f7, f8, f9, f10}.
+
+It is important to note that, according to our deﬁnition
+from Section 1, new variables are added only in the aug-
+mented setting of the BSP problem, e.g. in the active SLAM
+context in Figure 3 where new robot poses are introduced by
+a candidate action. On the other hand, in a non-augmented
+BSP setting, the states Xk+L and Xk are identical, while the
+beliefs b[Xk+L] and b[Xk] are still conditioned on different
+data. For example, in sensor deployment and measurement
+selection (see Figure 2) problems, the candidate actions
+are all possible subsets of sensor locations and of acquired
+observations, respectively. Here, when applying a candidate
+action, new information about Xk is brought in, but the state
+vector itself is unaltered.
+
+In contrast, in the augmented BSP problem new variables
+are always introduced. In particular, in both smoothing and
+ﬁltering formulations of SLAM, candidate actions (trajecto-
+ries) will introduce both new information (future measure-
+ments) and also new variables (future robot poses). While
+in ﬁltering formulation old pose variables are marginalized
+out, the smoothing formulation instead keeps past and cur-
+rent robot poses and newly mapped landmarks in the state
+vector (see Figure 3), which is beneﬁcial for better estima-
+tion accuracy and sparsity. As such, the smoothing formu-
+lation is an excellent example for augmented BSP problem,
+
+whereas the ﬁltering formulation can be considered as a
+focused BSP scenario as described below.
+
+As such the non-augmented BSP setting can be seen as
+a special case of augmented BSP. In order to use similar
+notation for both problems, however, in this paper we will
+consider X k+l
+new to be an empty set for the former case and
+non-empty for augmented BSP.
+
+It is not difﬁcult to show (see e.g. Indelman et al., 2015)
+that in the case of non-augmented BSP the posterior infor-
+mation matrix of the belief b[Xk+L], which is the inverse of
+belief ’s covariance matrix, is given by
+
+k+L
+
+nl
+
+3k+L = 3k +
+
+(H j
+
+l )T ·(6j
+
+l )−1 ·H j
+l ,
+
+(7)
+
+Xl=k+1
+
+j=1
+X
+
+where 3k is the prior information matrix and H j
+l
+are the Jacobian matrices of hj
+new factor terms in (6).
+
+.
+= 5xhj
+l
+l functions (see (2)) for all the
+
+As was already mentioned, in the case of augmented BSP,
+the joint state Xk+L includes also new variables (with respect
+to the current state Xk). Considering Xk ∈ Rn, ﬁrst, new n0
+variables are introduced into future state vector Xk+L ∈ RN
+
+Kopitkov and Indelman
+
+1093
+
+.
+= n + n0, and then new factors involving appropri-
+with N
+ate variables from Xk+L are added to form a posterior belief
+b[Xk+L], as shown in (6).
+
+Consequently, in the augmented BSP scenario the pos-
+terior information matrix of belief b[Xk+L], i.e. 3k+L, can
+be constructed by ﬁrst augmenting the current informa-
+tion matrix 3k with n0 zero rows and columns to obtain
+3Aug
+k+L ∈ RN×N , and thereafter adding new information to
+it, as illustrated in Figure 1 (see e.g. Indelman et al., 2015):
+
+3k+L = 3Aug
+
+k+L +
+
+k+L
+
+nl
+
+(H j
+
+l )T ·(6j
+
+l )−1 ·H j
+
+l
+
+(8)
+
+Xl=k+1
+
+j=1
+X
+
+.
+= 5xhj
+
+where Hl
+l are augmented Jacobian matrices of all
+new factors in (6), linearized about the current estimate of
+Xk and about initial values of newly introduced variables.
+
+After stacking all new Jacobians in (7) and (8) into a
+A, and combining all noise matrices into
+
+single matrix
+block-diagonal 9, we respectively obtain
+
+e
+3k+L = 3k +
+
+AT · 9−1 ·
+
+A = 3k + AT · A
+
+3k+L = 3Aug
+
+k+L +
+
+AT · 9−1 ·
+
+e
+
+A = 3Aug
+
+k+L + AT · A,
+
+e
+
+where
+
+e
+
+.
+e
+= 9− 1
+2 ·
+
+A
+
+A
+
+(9)
+
+(10)
+
+(11)
+
+e
+
+is an m × N matrix that represents both Jacobians and
+noise covariances of all new factor terms in (6). The above
+equations can be considered as a single iteration of Gauss–
+Newton optimization and, similar to prior work (Indelman
+et al., 2015; Kim and Eustice, 2014; Van Den Berg et
+al., 2012), we take a maximum-likelihood assumption by
+assuming they sufﬁciently capture the impact of candidate
+action. Under this assumption, the posterior information
+matrix 3k+L is independent of (unknown) future observa-
+tions (Indelman et al., 2015). One can further incorporate
+reasoning if a future measurement will indeed be acquired
+(Chaves et al., 2015; Indelman et al., 2015; Walls et al.,
+2015); however, this is outside the scope of this paper.
+
+Each block row of matrix A represents a single factor
+from new terms in (6) and has a sparse structure. Only a
+limited number of its sub-blocks is non-zero, i.e. sub-blocks
+that correspond to the involved variables X j
+l in the relevant
+factor f j
+
+l (X j
+l ).
+
+For notational convenience, we deﬁne the set of non-
+myopic candidate actions by A = {a1, a2, . . .} with appro-
+priate Jacobian matrices 8A = {A1, A2, . . .}. Although the
+planning horizon is not explicitly shown, each a ∈ A can
+represent a future belief b[Xk+L] for different number of
+lookahead steps L.
+
+A general objective function in decision making/BSP can
+
+be written as (Indelman et al., 2015)
+
+J (a)
+
+.
+= E
+
+Zk+1:k+L (cid:26)
+
+L−1
+
+Xl=0
+
+cl(b[Xk+l], uk+l) +cL(b[Xk+L])
+
+,
+(cid:27)
+(12)
+
+with L immediate cost functions cl, for each look-ahead
+step, and one cost function for terminal future belief cL.
+Each such cost function can include a number of differ-
+ent terms related to aspects such as information measure
+of future belief, distance to goal, and energy spent on con-
+trol. Arguably, evaluating the information terms involves
+the heaviest calculations of J .
+
+Thus, in this paper, we focus only on the information-
+theoretic term of terminal belief b[Xk+L], and consider dif-
+ferential entropy H (further referred to just as entropy) and
+IG as the cost functions. Both can measure the amount of
+information of future belief b[Xk+L], and will lead to the
+same optimal action. Yet, calculation of one is sometimes
+more efﬁcient than the other, as will be shown in Section 3.
+Therefore, we consider two objective functions:
+
+JH(a)
+
+.
+= H (b[Xk+L]) ,
+
+JIG(a)
+
+.
+= H(b[Xk]) −H( b[Xk+L]) ,
+
+(13)
+
+(14)
+
+where the information matrix 3k+L, that corresponds to
+the belief b[Xk+L], is a function of candidate a’s Jacobian
+matrix A, see (9) and (10). The optimal candidate a∗, which
+produces the most certain future belief, is then given by
+a∗ = arg mina∈A JH(a), or by a∗ = arg maxa∈A JIG(a) with
+both being mathematically identical.
+
+In particular, for Gaussian distributions, entropy is a
+function of the determinant of a posterior information
+(covariance) matrix, i.e. H (b[Xk+L]) ≡ H (3k+L), and the
+objective functions can be expressed as
+
+JH(a) =
+
+n · γ
+2
+
+−
+
+1
+2
+
+ln
+
+3k+L
+
+,
+
+JIG(a) =
+
+for BSP, and
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+1
+2
+
+ln
+
+(cid:12)
+(cid:12)
+
+3k+L
+3k
+
+(cid:12)
+(cid:12)
+(15)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+ln
+
+ln
+
+−
+
++
+
+1
+2
+
+1
+2
+
+3k+L
+
+JH(a)=
+
+n0 · γ
+2
+
+, JIG(a)=
+
+N · γ
+2
+
+3k+L
+3k
+(cid:12)
+(cid:12)
+(cid:12)
+(16)
+(cid:12)
+.
+(cid:12)
+= 1 + ln(2π ), and 3k+L can
+for augmented BSP, where γ
+(cid:12)
+be calculated according to (9) and (10). Thus, evaluating J
+requires determinant calculation of an n × n (or N × N)
+matrix, which is in general O(n3), per candidate action a ∈
+A. In many robotics applications, state dimensionality can
+be huge and even increasing with time (e.g. SLAM), and
+straightforward calculation of the above equations makes
+real-time planning hardly possible.
+
+(cid:12)
+(cid:12)
+
+So far, the exposition has referred to unfocused BSP
+problems, where the action impact is calculated by consid-
+ering all the random variables in the system, i.e. the entire
+state vector. However, as will be shown in the following, our
+approach is applicable also to focused BSP problems.
+
+Focused BSP, in both augmented and non-augmented
+cases, is another important problem, where in contrast to
+the former case, only a subset of variables is of interest (see
+e.g. Krause et al., 2008; Levine and How, 2013; Mu et al.,
+2015). For example, one can look for an action that reduces
+
+1094
+
+The International Journal of Robotics Research 36(10)
+
+the uncertainty of the robot’s ﬁnal pose. The complexity of
+such a problem is much higher and proposed techniques
+succeeded to solve it in O(kn3) (Krause et al., 2008; Levine
+and How, 2013) with k being the size of candidate actions
+set, and in O(˜n4) (Mu et al., 2015) with ˜n being the size of
+involved clique within a Markov random ﬁeld representing
+the system.
+
+Considering posterior entropy over the focused vari-
+
+prior covariance entries. Further, in Section 3.4 we discuss
+another key component of rAMDL: the re-use of covariance
+calculations, which exploits the fact that many calculations
+can be shared among different candidate actions. Finally, in
+Section 3.5 we describe the connection between our tech-
+nique and the MI approach from Davison (2005) and Kaess
+and Dellaert (2009), and discuss an interesting conceptual
+meaning of the IG metric.
+
+ables X F
+
+k+L ⊆ Xk+L we can write
+
+H(a) = H( X F
+J F
+
+k+L) =
+
+nF · γ
+2
+
++
+
+1
+2
+
+ln
+
+6M,F
+k+L
+
+,
+
+(17)
+
+(cid:12)
+k+L, and 6M,F
+(cid:12)
+where nF is the dimensionality of the state X F
+k+L
+is the posterior marginal covariance of X F
+k+L (sufﬁx M for
+marginal), calculated by simply retrieving appropriate parts
+of posterior covariance matrix 6k+L = 3−1
+
+(cid:12)
+(cid:12)
+
+k+L.
+
+Solving the above problem in a straightforward manner
+involves O( N 3) operations for each candidate action, where
+N = n + n0 is the dimension of the posterior system. In
+the following sections we develop a computationally more
+efﬁcient approach that addresses both unfocused and
+focused (augmented) BSP problems. As will be seen,
+this approach naturally supports non-myopic actions and
+arbitrary factor models hj
+i, and it is, in particular, attractive
+to BSP in high-dimensional state spaces.
+
+In both the developed approach and the alternative meth-
+ods described in Section 5, we are making two assump-
+tions. First, we assume that factors have statistical model
+with Gaussian white noise (see (3)). Second, we take the
+maximum-likelihood assumption (Platt et al., 2010) and
+consider a single Gauss–Newton iteration (see (9) and (10))
+is sufﬁcient to capture information impact of a candidate
+action.
+
+3. Approach
+
+Our approach, rAMDL, utilizes the well-known matrix
+determinant lemma (Harville, 1998) and re-use of calcula-
+tions to signiﬁcantly reduce the computation of the impact
+of a candidate action, as deﬁned in Section 2, for both aug-
+mented and non-augmented cases of the BSP problem. In
+Section 3.1 we reformulate these problems in terms of fac-
+tor graphs that will allow us to see another, more simpliﬁed,
+picture of the BSP problem. In Section 3.2.1 we develop a
+novel way to calculate the information-theoretic term for
+unfocused non-augmented BSP, and then extend it in
+Section 3.2.2 to the focused case. In addition, in order
+to signiﬁcantly reduce computational complexity of the
+augmented BSP problem, as deﬁned in Section 2, in Sec-
+tion 3.3.1 we extend the matrix determinant lemma for
+the matrix augmentation case. We then discuss in Sec-
+tions 3.3.2–3.3.3.2 how this extension can be used within
+unfocused and focused augmented BSP. The con-
+clusion from Sections 3.2–3.3 will be that in all investi-
+gated types of BSP problem, the information impact of
+candidate action can be calculated efﬁciently given speciﬁc
+
+3.1. BSP as a factor graph
+
+In the following we show that, similarly to the inference
+problem, the BSP problem can also be formulated in terms
+of factor graphs. The belief at time tk, b[Xk] can be repre-
+sented by a factor graph Gk =(Fk, Xk, Ek), where with little
+abuse of notation, we use Xk to denote the estimated vari-
+ables, Fk is the set of all factors acquired until time tk, and
+where Ek encodes connectivity according to the variables
+X j
+i involved in each factor f j
+i , as deﬁned in (2). The future
+belief b[Xk+L] is constructed by introducing new variables
+and by adding new factors to the belief b[Xk], as was shown
+in Section 2. Therefore, it can be represented by a factor
+graph which is an augmentation of the factor graph Gk, as
+will be shown below.
+
+More speciﬁcally, in the case of non-augmented BSP, let
+F(a) = {f 1, . . . , f na } denote all the new factors from (6)
+introduced by action a, with na being the number of such
+factors. This abstracts the explicit time notations of factors
+inside (6), which in turn can be seen as unimportant for
+the solution of the BSP problem. Then the factor graph of
+b[Xk+L] is the prior factor graph Gk with newly introduced
+factor nodes F(a) connected to appropriate variable nodes
+(see Figure 4 for illustration). Thus, it can be denoted by
+Gk+L(a):
+
+Gk+L(a) =( Fk+L, Xk+L, Ek+L) ,
+
+(18)
+
+where Fk+L = {Fk, F(a) }, Xk+L ≡ Xk are unaltered
+state variables, and Ek+L represents connectivity between
+variables and factors according to the deﬁnition of each
+factor (2).
+
+For instance, consider the running example in Fig-
+ure 2 where action a introduces new measurements in
+context of active SLAM. The state vector Xk+L ≡ Xk
+contains robot poses and landmarks {x1, x2, l1, l2, l3}. Old
+factors within Fk are priors {f0, f2, f3, f4} and motion
+model f1. Candidate action introduces new observation
+factors F(a) = {f5, f6, f7}. Thus, factors of the posterior
+factor graph Gk+L(a) =( Fk+L, Xk+L, Ek+L) are Fk+L =
+{f0, f1, f2, f3, f4, f5, f6, f7}, while Ek+L contains edges between
+nodes in Xk+L and nodes in Fk+L as depicted in the ﬁgure.
+For simplicity, we denote the augmentation of a fac-
+tor graph Gk with a set of new factors through opera-
+tor ⊕. Thus, for the non-augmented BSP setting, we have
+.
+= Gk ⊕ F(a). In addition, with a slight abuse of
+Gk+L(a)
+notation we will use the same augmentation operator ⊕ to
+deﬁne a combination of two factor graphs into one, which
+will be required in the context of augmented BSP.
+
+Kopitkov and Indelman
+
+1095
+
+Fig. 4. Illustration of belief propagation in a factor graph representation in the non-augmented case. Two actions ai and aj are
+considered, introducing two new factor sets F (ai) and F (aj), respectively, into the graph (colored in green).
+
+Fig. 5. Illustration of belief propagation in a factor graph representation in the augmented case. Two actions ai and aj are considered,
+introducing their own factor graphs G(ai) and G(aj) (colored in pink) that are connected to prior Gk through factor sets F conn(ai) and
+F conn(aj) (colored in green), respectively.
+
+1096
+
+The International Journal of Robotics Research 36(10)
+
+In the augmented BSP scenario, we denote all new state
+variables introduced by action a as Xnew, and also separate
+all new factors F(a) from (6) into two groups:
+
+F(a) = {F new(a) , F conn(a) }.
+
+(19)
+
+Factors connecting only new variables Xnew are denoted by
+F new(a),
+
+F new(a) = {f 1, . . . , f nnew },
+
+while the rest of the factors are denoted by F conn(a),
+
+F conn(a) = {f 1, . . . , f nconn },
+
+(20)
+
+(21)
+
+connecting between old and new variables.
+
+Next, let us denote an action’s factor graph as G(a) =
+( F new(a) , Xnew, Enew) with Enew representing connectivity
+according to involved variables in each factor in F new(a).
+Then the factor graph that represents the future belief
+b[Xk+L] is a combination of two factor graphs, the prior Gk
+and action’s G(a), connected by factors from F conn(a) (see
+Figure 5 for illustration). Thus,
+
+Gk+L(a) = Gk ⊕ G(a) ⊕F conn(a) =( Fk+L, Xk+L, Ek+L) ,
+
+(22)
+where Fk+L = {Fk, F new(a) , F conn(a) }, Xk+L ≡ {Xk, Xnew}
+is an augmented state vector, and Ek+L represents connectiv-
+ity between variables and factors according to factors’ def-
+inition. The separation of factors into two groups allows us
+to present future belief ’s factor graph as a simple graph aug-
+mentation, and will also be useful during derivation of our
+approach in Section 3.3. Moreover, the reason for F conn(a)
+not to be deﬁned as part of G(a) is due to the fact that factors
+inside F conn(a) involve state variables outside of G(a).
+
+For instance, consider the running example in Figure
+3 where action a represents a candidate trajectory to
+perform loop-closure in a SLAM application. Here the
+prior state vector Xk contains old and current robot poses
+{x1, x2, x3} and mapped until now landmarks {l1, l2}. The
+newly introduced state variables Xnew are the future robot
+poses {x4, x5, x6} that represent the candidate trajectory. Old
+factors within Fk are prior f0 on the initial robot pose,
+motion models {f3, f6}, and observation factors {f1, f2, f4, f5}.
+Here F new(a) consists of factors {f8, f9} (colored purple)
+that are connected only to variables from Xnew, while
+F conn(a) contains factors {f7, f10} (colored green) that con-
+nect between variables in Xk and variables in Xnew. Thus,
+state variables of the posterior factor graph Gk+L(a) are
+Xk+L = {x1, x2, x3, x4, x5, x6, l1, l2}, and factors of Gk+L(a)
+are Fk+L = {f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10}.
+
+Note that the new factors in Gk+L(a) are not fully deﬁned,
+as some of them involve future observations that are
+unknown at planning time. However, the taken maximum-
+likelihood assumption assumes that the mean vector of
+b[Xk+L] will coincide with current estimate of Xk and with
+initial values of new variables Xnew (Indelman et al., 2015;
+Platt et al., 2010; Van Den Berg et al., 2012). Knowing
+the mean vector, it is possible to calculate Jacobians of old
+
+and new factors within Gk+L(a). Since information matrix
+3 = AT A is a product of Jacobian matrices, 3k+L of future
+belief b[Xk+L] can also be calculated without knowing the
+future observations. Thus, we can reason about the infor-
+mation (and covariance) matrix of Gk+L(a), as was shown
+in Section 2.
+
+Now we can reformulate the information-theoretic objec-
+tive of the BSP problem. In order to evaluate information
+impact of action a in a non-augmented BSP setting (15), we
+need to measure the amount of information added to a fac-
+tor graph after augmenting it with new factors Gk+L(a) =
+Gk ⊕ F(a). In the case of augmented BSP (16), in order to
+evaluate the information impact of action a we need to mea-
+sure the amount of information added to a factor graph after
+connecting it to another factor graph G(a) through factors
+in F conn(a), Gk+L(a) = Gk ⊕ G(a) ⊕F conn(a).
+
+In (9) and (10) we expressed the posterior informa-
+tion matrix 3k+L of Gk+L(a) through matrix A, which is
+the weighted Jacobian of new terms from (6). In non-
+augmented BSP, each block-row of A represents a speciﬁc
+factor from F(a), while in augmented BSP block-rows in A
+represent factors from F(a) = {F new(a) , F conn(a) }. Block-
+columns of A represent all estimated variables within Xk+L.
+As was mentioned, each factor’s block-row is sparse, with
+only non-zero block entries under columns of variables
+connected to the factor within the factor graph. For exam-
+ple, the Jacobian matrix’s block-row that corresponds to a
+motion model factor p(xk+l|xk+l−1, uk+l−1) will involve only
+two non-zero block entries for the state variables xk+l and
+xk+l−1. Factors for many measurement models, such as pro-
+jection and range models, will also have only two non-zero
+blocks (see Figure 6).
+
+We deﬁne two properties for any set of factors F that will
+be used in the following to analyze the complexity of the
+proposed approach. Denote by M( F) the sum of dimen-
+sions of all factors in F, where the dimension of each factor
+is the dimension of its expected value rj
+i from (3). In addi-
+tion, let D( F) denote the total dimension of all variables
+involved in at least one factor from F. It is not difﬁcult to
+show that the Jacobian matrix A ∈ Rm×n of F has height
+m = M( F), and number of its columns that are not entirely
+equal to zero is D( F). The letter D is used here because the
+density of the information matrix is affected directly by the
+value of D( F). It is important to note that, for any candidate
+action a, the total dimension of new factors M( F(a)) and
+the dimension of involved variables D( F(a)) are indepen-
+dent of n, which is the dimension of the belief at planning
+time b[Xk]. Instead, both properties are only functions of the
+planning horizon L.
+
+In the following sections we describe our BSP approach,
+
+using the above notions of factor graphs.
+
+3.2. BSP via the matrix determinant lemma
+
+BSP
+3.2.1. Unfocused
+involves evaluating the costs from (15), operations that
+
+case Information-theoretic
+
+Kopitkov and Indelman
+
+1097
+
+Table 1. Different partitions of state variables in BSP
+
+Notation
+
+Description
+
+Xk = Xk+L
+IX
+
+¬IX
+
+k+L = X F
+k+L = X U
+
+k = X F
+X F
+k = X U
+X U
+IX U
+
+¬IX U
+
+state vector at times k and k + L
+subset of Xk+L with variables involved in
+new terms in (6)
+subset of Xk+L with variables not involved
+in new terms in (6)
+subset of Xk+L with focused variables
+subset of Xk+L with unfocused variables
+subset of X U with variables involved
+in new terms in (6)
+subset of X U with variables not involved
+in new terms in (6)
+
+Consequently, only speciﬁc entries from the covariance
+matrix 6k are really required, and sparse matrix techniques
+exist to calculate them efﬁciently (Golub and Plemmons,
+1980; Kaess and Dellaert, 2009). More formally, denote
+by IX the set of all variables that are connected to factors
+in F(a) (see Table 1), i.e. these are the variables that are
+involved in at least one factor among the new factors gen-
+erated due to the currently considered candidate action a,
+see (6). Clearly, the columns of A that correspond to the
+rest of the variables, ¬IX , are entirely ﬁlled with zeros (see
+Figure 6). Thus, equation (23) can be re-written as
+
+Fig. 6. Concept illustration of A’s structure. Each column rep-
+resents some variable from the state vector. Each row repre-
+sents some factor from (6). Here, A represents a set of factors
+F = {f1(xi−1, xi) , f2(xi, lj) }, where factor f1 of motion model
+that involves two poses xi and xi−1 will have non-zero values only
+at columns of xi and xi−1. Factor f2 of observation model that
+involves together variables xi and lj will have non-zero values only
+at columns of xi and lj.
+
+require calculating the determinant of a large n × n matrix
+(posterior information matrix), with n being the dimension-
+ality of the state Xk+L. State-of-the-art approaches typically
+perform these calculations from scratch for each candidate
+action.
+
+In contrast, our approach contains a one-time calculation
+that depends on the state dimension and will be re-used
+afterwards to calculate the impact of each candidate action
+(see Section 3.4). As we show below, the latter depends only
+on M( F(a)) and D( F(a)), while being independent of the
+state dimension.
+
+Recalling notation from the previous section, we would
+like to measure the amount of information gained after
+graph augmentation Gk+L(a) = Gk ⊕ F(a). We can mea-
+sure it through the IG as the utility function. It is not dif-
+ﬁcult to show that IG from (15) can be written as JIG(a) =
+
+3k + AT A
+3k
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+, where A ∈ Rm×n is the Jacobian of fac-
+
+1
+2 ln (cid:12)
+(cid:12)
+(cid:12)
+tors in F(a) weighted by their noise, with m = M( F(a)).
+Using the generalized matrix determinant lemma (Harville,
+1998), this equation can be written as
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+JIG(a) =
+
+1
+2
+
+ln
+
+Im + A · 6k · AT
+
+, 6k ≡ 3−1
+k
+
+(23)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+as previously suggested in Ila et al. (2010) and Mu
+et al. (2015) in the context of compact pose-SLAM and
+focused active inference.
+
+Equation (23) provides an exact and general solution
+for information-based decision making, where each action
+candidate can produce any number of new factors (non-
+myopic planning) and where factors themselves can be of
+any motion or measurement model (unary, pairwise, etc.).
+
+In many problem domains, such as SLAM, inference is
+typically performed in the information space and, as such,
+the joint covariance matrix 6k is not readily available and
+needs to be calculated upon demand, which is expensive in
+general. While, at ﬁrst sight, it might seem the entire joint
+covariance matrix needs to be recovered, in practice this is
+not the case due to sparsity of the Jacobian matrix A, as was
+mentioned above.
+
+JIG(a) =
+
+1
+2
+
+ln
+
+Im + IA · 6M,IX
+
+k
+
+·( IA)T
+
+,
+
+(24)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+where IA is constructed from A by removing all zero
+columns, and 6M,IX
+is a prior joint marginal covariance of
+variables in IX , which should be calculated from the (square
+root) information matrix 3k. Note that dimension of IX is
+D( F(a)).
+
+k
+
+Intuitively, the posterior uncertainty reduction that corre-
+sponds to action a is a function of only the prior marginal
+covariance over variables involved in F(a) (i.e. 6M,IX
+) and
+the new information introduced by the F(a)’s Jacobian A,
+with the latter also involving the same variables IX . More-
+over, from the above equation it can be seen that uncertainty
+reduction in the posterior will be signiﬁcant for large entries
+in A and high prior uncertainty over the variables IX .
+
+k
+
+In particular, in the case of myopic decision making
+with unary observation models (that involve only a single
+state variable), calculation of IG(a) for different candidate
+actions only requires recovering the diagonal entries of 6k,
+regardless of the actual correlations between the states, as
+was recently shown in Indelman (2015b, 2016). However,
+while in the mentioned papers the per-action calculation
+takes O(n), the IG(a) calculation is not dependent on n at
+all, as will be shown in Section 3.4.
+
+Given a prior marginal covariance 6M,IX
+
+, whose
+the calculation in
+is bounded by calculating the determinant of
+in general,
+
+dimension is D( F(a)) ×D( F(a)),
+(24)
+an M( F(a)) ×M( F(a)) matrix, which is,
+
+k
+
+1098
+
+The International Journal of Robotics Research 36(10)
+
+O( M( F(a))3 ), where M( F(a)) is the number of con-
+straints due to new factors (for a given candidate action
+a). This calculation should be performed for each candi-
+date action in the set A. Furthermore, in many problems it is
+logical to assume that M( F(a)) (cid:28) n, as M( F(a)) depends
+mostly on the planning horizon L, which is typically deﬁned
+and constant, while n (state dimensionality) can be huge and
+grow with time in real systems (e.g. SLAM). Consequently,
+given the prior covariance our complexity for selecting best
+action is O( |A|), i.e. independent of state dimensionality n.
+To conclude this section, we showed that calculation of
+the impact of an action for a single candidate action does not
+depend on n. While this result is interesting by itself in the
+context of active inference, in Section 3.4 we go a step fur-
+ther and present an approach to calculate covariance entries,
+required by all candidates, with one-time calculation that
+can be re-used afterwards.
+
+3.2.2. Focused case In this section, we present a novel
+approach to calculate the change in entropy of a focused
+set of variables after factor graph augmentation Gk+L(a) =
+Gk ⊕ F(a), combining it with the ideas from the previ-
+ous sections (the generalized matrix determinant lemma
+and IG cost function) and showing that the impact of one
+candidate action can be calculated independently of state
+dimension n.
+
+k ≡ X F
+
+First we recall deﬁnitions from Section 2 and introduce
+k+L ∈ RnF
+additional notation (see also Table 1): X F
+denotes the set of focused variables (equal to X F
+k+L to
+remind us that prior and posterior states are identical in the
+k ∈ RnU is a set of the
+non-augmented case), X U
+k
+remaining unfocused variables with n = nF + nU . The
+nF × nF prior marginal covariance and information matri-
+ces of X F
+(sufﬁx M for
+marginal) and 3M,F
+)−1. Furthermore, we partition
+the joint information matrix 3k as
+
+k are denoted, respectively, by 6M,F
+
+k ≡(6M,F
+
+.
+= Xk/X F
+
+k
+
+k
+
+6k =
+
+6M,U
+k
+(6M,UF
+k
+(cid:20)
+
+6M,UF
+k
+)T 6M,F
+
+, 3k =
+
+3U
+k
+( 3U,F
+k
+(cid:20)
+
+3U,F
+k
+)T 3F
+
+,
+
+k
+
+(cid:21)
+
+k (cid:21)
+(25)
+k ∈ RnF ×nF is constructed by retrieving from 3k
+k (it is actually
+k , conditioned on the
+k ∈ RnU ×nU is deﬁned similarly
+∈ RnU ×nF contains the remaining blocks
+
+where 3F
+only the rows and the columns related to X F
+conditional information matrix of X F
+rest of the variables X U
+k , and 3U,F
+for X U
+of 3k as shown in (25).
+
+k ), 3U
+
+The marginal
+
+information matrix of X F
+k ,
+
+can be calculated via the Schur complement 3M,F
+k )−1 ·3UF
+3F
+k
+complement’s properties (Ouellette, 1981) is
+3M,F
+, from which we can conclude that
+k
+
+i.e. 3M,F
+,
+=
+. However, one of the Schur
+=
+
+k −( 3UF
+k
+
+)T ·( 3U
+
+3U
+k
+
+3k
+
+·
+
+k
+
+k
+
+k
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+3M,F
+k
+
+=
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+1
+6M,F
+k
+
+=
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+.
+
+3k
+3U
+(cid:12)
+k
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(26)
+
+Therefore, the posterior entropy of X F
+function of the posterior 3k+L and its partition 3U
+
+k+L (see (17)) is a
+
+k+L:
+
+H(a) = H( X F
+J F
+
+k+L) =
+
+nF · γ
+2
+
+−
+
+ln
+
+1
+2
+
+3k+L
+3U
+
+.
+
+(27)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+k+L = 3U
+(cid:12)
+(cid:12)
+
+k+L
+From (9) one can observe that 3U
+k +( AU )T ·AU ,
+where AU ∈ Rm×nU is constructed from Jacobian A by
+taking only the columns that are related to variables in X U
+k .
+The next step is to use IG instead of entropy, with the
+same motivation and beneﬁts as in the unfocused case
+(Section 3.2.1). The optimal action a∗ = arg maxa∈A J F
+IG(a)
+will maximize J F
+k+L), and by combin-
+ing (27) with the generalized matrix determinant lemma we
+can write
+
+IG(a) = H( X F
+
+k ) −H( X F
+
+J F
+IG(a) =
+
+1
+2
+
+−
+
+ln
+
+Im + A · 6k · AT
+
+(cid:12)
+ln
+(cid:12)
+
+(cid:12)
+Im + AU · 6U|F
+(cid:12)
+
+k
+
+1
+2
+
+·( AU )T
+
+,
+
+(28)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+where 6U|F
+k
+conditioned on X F
+
+∈ RnU ×nU is a prior covariance matrix of X U
+k
+k , and it is actually the inverse of 3U
+k .
+
+Further, AU can be partitioned into IAU and ¬IAU , rep-
+resenting unfocused variables that are, respectively,
+involved (IX U ) or not involved (¬IX U ) (see also Table 1).
+Note that ¬IAU contains only zeros, and it can be concluded
+that
+
+Im + AU · 6U|F
+
+k
+
+=
+
+·( AU )T
+
+Im + IAU · 6
+
+,
+(29)
+(cid:12)
+(cid:12)
+(cid:12)
+is the prior covariance of IX U conditioned on
+
+·( IAU )T
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+IX U |F
+k
+
+IX U |F
+k
+
+(cid:12)
+(cid:12)
+where 6
+X F
+k .
+Taking into account (24) and (29), J F
+
+IG(a) can be calcu-
+
+lated through
+
+J F
+IG(a) =
+
+1
+2
+
+−
+
+ln
+
+Im + IA · 6M,IX
+
+k
+
+·( IA)T
+
+(cid:12)
+(cid:12)
+ln
+(cid:12)
+
+1
+2
+
+Im + IAU · 6
+(cid:12)
+(cid:12)
+(cid:12)
+
+IX U |F
+k
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+·( IAU )T
+
+.
+
+(30)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+We can see that the focused and unfocused IGs have
+a simple relation between them
+
+J F
+IG(a) = JIG(a) −
+
+1
+2
+
+ln
+
+Im + IAU · 6
+
+IX U |F
+k
+
+·( IAU )T
+
+.
+
+(31)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+The second term in (31) is negative and plays the role
+of a penalty, reducing the action’s impact on the posterior
+entropy of X F
+k+L. In Section 3.5 we discuss the intuition
+behind this penalty term. Note that when all involved vari-
+ables are focused, IX ⊆ X F
+k+L, the variable set IX U is
+empty and second term’s matrix will be an identity matrix
+Im. In such a case, the second term becomes zero and we
+have J F
+
+IG(a) = JIG(a).
+
+Also here, given prior covariances 6M,IX
+
+and 6
+,
+calculation of focused IG (30)
+is independent of
+state dimensionality n, with complexity bounded by
+O( M( F(a))3 ). In Section 3.4 we show how the required
+covariances can be efﬁciently retrieved.
+
+IX U |F
+k
+
+k
+
+Kopitkov and Indelman
+
+1099
+
+Table 2. Different partitions of state variables in augmented BSP
+
+Notation Description
+
+Xk
+Xk+L
+X F
+k+L
+Xold
+Xnew
+IXold
+
+¬IXold
+
+state vector at time k
+state vector at time k + L
+subset of Xk+L with focused variables
+subset of Xk+L with old variables, i.e. Xk
+subset of Xk+L with new variables
+subset of Xold with variables involved
+in new terms in (6)
+subset of Xold with variables not involved
+in new terms in (6)
+
+Focused augmented BSP (X F
+
+k+L ⊆ Xnew), Section 3.3.3.1
+
+X F
+new
+X U
+new
+
+subset of Xnew with focused variables
+subset of Xnew with unfocused variables
+
+Focused augmented BSP (X F
+
+k+L ⊆ Xold), Section 3.3.3.2
+
+IX F
+old
+IX U
+old
+¬IX F
+old
+¬IX U
+old
+
+subset of IXold with focused variables
+subset of IXold with unfocused variables
+subset of ¬IXold with focused variables
+subset of ¬IXold with unfocused variables
+
+In addition, we can extend the AMDL lemma for a spe-
+ciﬁc structure of matrix A. As was explained in Section 3.1,
+in the case of augmented BSP, the new factors can be sep-
+arated into two sets F new(a) and F conn(a). It is not difﬁcult
+to see that A’s structure in such a case will be
+
+A =
+
+Aold Anew
+
+=
+
+Bold Bnew
+Dold Dnew
+
+=
+
+Bold Bnew
+Dnew
+0
+
+(cid:1)
+
+(cid:0)
+
+(cid:18)
+
+(cid:19)(34)
+where B’s rows represent factors from F conn(a), and D’s
+rows represent factors from F new(a) (see also Figure 7).
+Note that Dold ≡ 0.
+
+(cid:18)
+
+(cid:19)
+
+Fig. 7. Partitions of Jacobians and the state vector Xk+L in the
+augmented BSP case, in the unfocused scenario. Note that the
+shown variable ordering is only for illustration, while the devel-
+oped approach supports any arbitrary variable ordering. Also note
+that all white blocks consist of only zeros. Top: Jacobian A of fac-
+tor set F (a) = {F conn(a) , F new(a) }. Bottom: Jacobians B and D
+of factor sets F conn(a) and F new(a), respectively.
+
+3.3. Augmented BSP via AMDL
+
+3.3.1. AMDL In order to simplify calculation of IG within
+augmented BSP (16) one could resort, similar to previous
+sections, to the matrix determinant lemma. However, due to
+zero-padding, the information matrix 3Aug
+k+L is singular and,
+thus, the matrix determinant lemma cannot be applied. In
+this section we develop a variant of the matrix determinant
+lemma for the considered augmented case (further referred
+to as AMDL).
+
+Speciﬁcally, we want to solve the following problem:
+recalling 3+ = 3Aug + AT · A (see also (10)), and dropping
+the time indices to avoid clutter, our objective is to express
+the determinant of 3+ in terms of 3 and 6 = 3−1.
+
+Lemma 1. The ratio of determinants of 3+ and 3 can be
+calculated through
+
+,
+
+(32)
+
+Lemma 2. The ratio of determinants of 3+ and 3 where A
+has structure from (34) can be calculated through
+
+3+
+3
+
+=
+
+1
+
+·
+
+new · 1−1 · Anew
+AT
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+.
+(cid:12)
+(cid:12)
+old, where the matrices Aold ∈ Rm×n
+= Im +Aold ·6 ·AT
+with 1
+(cid:12)
+and Anew ∈ Rm×n0
+are constructed from A by retrieving
+columns of only old n variables (denoted as Xold) and only
+new n0 variables (denoted as Xnew), respectively (see Figure
+7 and Table 2).
+
+(cid:12)
+(cid:12)
+
+3+
+3
+
+=
+
+11
+
+·
+
+new · 1−1
+BT
+
+1
+
+· Bnew + DT
+
+new · Dnew
+
+(35)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+.
+(cid:12)
+(cid:12)
+(cid:12)
+= Imconn + Bold · 6 · BT
+old and mconn = M( F conn(a)),
+with 11
+(cid:12)
+(cid:12)
+where partitions of B and D are deﬁned above in (34) and
+can also be seen in Figure 7.
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+The proof of Lemma 1 is given in Appendix A.1.
+
+Remark 1. It is not difﬁcult to show that AMDL for the
+matrix update of the form 3+ = 3Aug +
+A (see
+(10)) assumes the form
+
+AT · 9−1 ·
+
+3+
+3
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+.
+(cid:12)
+(cid:12)
+= 9 +
+(cid:12)
+(cid:12)
+
+with
+
+1
+
+=
+
+9−1
+
+·
+
+1
+
+·
+
+AT
+
+new ·
+
+e
+1−1 ·
+
+e
+
+Anew
+
+(33)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+Aold · 6 ·
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)e
+AT
+old.
+
+(cid:12)
+(cid:12)e
+
+e
+
+e
+
+(cid:12)
+(cid:12)
+
+e
+
+e
+
+e
+
+The proof of Lemma 2 is given in Appendix A.2.
+We note the above equations are general standalone
+solutions for any augmented positive-deﬁnite symmetric
+matrix.
+To
+
+summarize, we
+lemmas
+additional
+
+augmented
+(32) and (35), with the latter
+determinant
+struc-
+exploiting
+ture. The dimension of matrix 1 from (32)
+is
+M( F(a)) ×M( F(a)), whereas the dimension of 11
+
+about A’s
+
+knowledge
+
+developed
+
+two
+
+1100
+
+The International Journal of Robotics Research 36(10)
+
+is M( F conn(a)) ×M( F conn(a)). Thus,
+
+the
+from (35)
+complexity of calculation in (35) is lower than in (32) since
+M( F conn(a)) ≤ M( F(a)). In the following sections we
+use both of the lemmas in order to develop an efﬁcient
+solution to the augmented BSP problem.
+
+3.3.2. Unfocused augmented BSP through IG Here we
+show how the AMDL from Section 3.3.1 can be used to efﬁ-
+ciently calculate the unfocused IG as deﬁned in (16), e.g.
+change in system’s entropy after factor graph augmentation
+Gk+L(a) = Gk ⊕ G(a) ⊕F conn(a) (see Figure 5).
+
+First we introduce different partitions of the joint state
+Xk+L, and the corresponding sub-matrices in the Jacobian
+matrix A from (10) (see Table 2 and Figure 7). Recall def-
+initions of Xnew and Xold (see Section 3.3.1) and let IXold
+and ¬IXold denote, respectively, the old involved and the old
+uninvolved state variables in the new terms in (6). We rep-
+resent by IAold and ¬IAold the columns of matrix A that cor-
+respond to the state variables IXold and ¬IXold, respectively
+(see Figure 7). Note, ¬IAold ≡ 0.
+
+Next, using the AMDL (Lemma 1), the determinant ratio
+
+between posterior and prior information matrices is
+
+=
+
+C
+
+·
+
+new · C−1 · Anew
+AT
+
+,
+
+(36)
+
+3k+L
+3k
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+.
+(cid:12)
+= Im + Aold · 6k · AT
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+where C
+
+old.
+Consequently, the IG objective from (16) can be re-
+
+written as
+
+JIG(a) =
+
+n0 · γ
+2
+
++
+
+1
+2
+
+ln
+
+C
+
++
+
+1
+2
+
+ln
+
+new · C−1 · Anew
+AT
+
+. (37)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+Moreover, considering the above partitioning of Aold, we
+old = IAold · 6M,IXold
+conclude that Aold · 6k · AT
+·( IAold)T ,
+where 6M,IXold
+is the marginal prior covariance of IXold.
+Thus, matrix C can be rewritten as
+
+k
+
+k
+
+(cid:12)
+(cid:12)
+
+C = Im + IAold · 6M,IXold
+
+k
+
+·( IAold)T .
+
+(38)
+
+k
+
+Observe that, given 6M,IXold
+, all terms in (38) have relatively
+small dimensions and M( F(a)) ×M( F(a)) matrix C can
+be computed efﬁciently for each candidate action, with time
+complexity no longer depending on state dimension n, sim-
+ilarly to the non-augmented BSP approach in Section 3.2.1.
+Calculation of the inverse C−1, which is required in (37),
+is O( M( F(a))3 ) and will also not depend on n. The run-
+time of overall calculation in (37) will have complexity
+O( M( F(a))3 +n03) and will depend only on the number
+of new factors M( F(a)) and number of new variables
+n0. Both are functions of the planning horizon L and can
+be considered as being considerably smaller than the state
+dimension n. Moreover, higher ratios n/M( F(a)) lead to
+a bigger advantage of our approach versus the alternatives
+(see Section 7).
+
+It
+
+is worthwhile to mention a speciﬁc case, where
+M( F(a)) = n0, which happens for example in SLAM
+
+application when candidate action a introduces only motion
+(or odometry) factors between the new variables. In such a
+case, it is not difﬁcult to show that (37) will be reduced to
+JIG(a) = n0·γ
+. In other words, the IG in such a
+case depends only on the partition Anew of A (see Figure 7),
+(cid:12)
+Jacobian entries related to new variables, while the prior 3k
+(cid:12)
+is not involved in the calculations at all.
+
+2 + ln
+
+Anew
+
+(cid:12)
+(cid:12)
+
+Remark 2. It is possible that posterior state dimension N =
+n + n0 will be different for different candidate actions (see
+e.g. Section 7). In such a case, the entropy (or IG), being
+a function of the posterior eigenvalues’ product, will be
+of different scale for each candidate and cannot be com-
+pared directly. Thus, dimension normalization of (37) may
+be required. Even though the term n0·γ
+2 may already play the
+role of such a normalization, the detailed investigation of
+this aspect is outside the scope of this paper.
+
+We can further enhance the presented above approach by
+considering the structure of A from (34) (see also Figure
+7). This will allow us to slightly improve the complexity of
+JIG(a)’s calculation. By applying the AMDL (Lemma 2), we
+can show that information gained from connecting Gk (with
+covariance matrix 6k) and G(a) (with information matrix
+3a = DT
+new · Dnew) through factors F conn(a) will be
+
+JIG(a) =
+
+n0 · γ
+2
+
++
+
+1
+2
+
+ln
+
+C1
+
++
+
+1
+2
+
+ln
+
+new · C−1
+BT
+
+1
+
+· Bnew + 3a
+
+,
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+C1 = Imconn + Bold · 6k · BT
+
+old,
+
+(39)
+(cid:12)
+(cid:12)
+(40)
+
+where matrix B =
+F conn(a).
+
+Bold Bnew
+
+is the Jacobian of factors in
+
+(cid:1)
+Since Bold is sparse (see Figure 7), the same as partition
+
+(cid:0)
+
+Aold in (36), C1 also can be calculated efﬁciently:
+
+C1 = Imconn + IBold · 6M,IXold
+
+k
+
+·( IBold)T .
+
+(41)
+
+It is interesting to note that the terms of the above-presented
+solution for the unfocused augmented BSP problem
+(39) and (41) can be recognized as belonging to differ-
+ent operands in augmentation Gk ⊕ G(a) ⊕F conn(a): prior
+covariance matrix 6M,IXold
+represents information coming
+from prior factor graph Gk, information matrix 3a provides
+information of an action’s factor graph G(a), and various
+partitions of matrix B introduce information coming from
+connecting factors F conn(a).
+
+k
+
+Although the above solution (39) and (41) look some-
+what more complicated,
+its matrix terms have slightly
+lower dimensions compared with matrix terms in the gen-
+eral solution presented in (37) and (38), with complex-
+ity O( M( F conn(a))3 +n03), and therefore can be calculated
+more quickly, as will be shown in our simulations below.
+Moreover, equations (39) and (41) have more independent
+terms that can be calculated in parallel, further improving
+time performance.
+
+Kopitkov and Indelman
+
+1101
+
+AU
+new, that correspond, respectively, to columns of new vari-
+ables that are focused and unfocused. Denote the former set
+of variables as X F
+new (see also Table 2).
+new ≡ X F
+Note, X F
+
+new and the latter as X U
+k+L.
+
+Lemma 3. The posterior entropy of X F
+given by
+
+new (equation (17)) is
+
+J F
+H(a) =
+
+nF · γ
+2
+1
+2
+
+ln
+
+−
+
++
+
+ln
+
+(AU
+
+1
+2
+new · C−1 · Anew
+AT
+
+(cid:12)
+(cid:12)
+
+new)T ·C−1 · AU
+new
+
+(cid:12)
+(cid:12)
+
+(42)
+
+,
+
+(cid:12)
+(cid:12)
+
+where C is deﬁned in (38).
+
+(cid:12)
+(cid:12)
+
+k
+
+The proof of Lemma 3 is given in Appendix A.3.
+We obtained an exact solution for J F
+
+H(a) that, given
+6M,IXold
+, can be calculated efﬁciently with complexity
+O( M( F(a))3 +n03), similarly to unfocused augmented
+BSP in Section 3.3.2. In Section 3.4, we explain how
+the prior marginal covariance term (6M,IXold
+) can be efﬁ-
+ciently retrieved, providing a fast solution for focused
+augmented BSP.
+
+k
+
+(AU
+
+2 ln
+
+new)T ·C−1 · AU
+new
+
+In addition, it is interesting to note that there is an efﬁ-
+cient way to calculate the term 1
+−
+1
+new · C−1 · Anew
+AT
+2 ln
+from (42). First, we calculate the
+(cid:12)
+.
+new · C−1 · Anew. Note that each row/column
+= AT
+(cid:12)
+matrix V
+(cid:12)
+of V represents one of the new variables in Xnew. Next, we
+(cid:12)
+reorder rows and columns of V to obtain matrix V UF where
+ﬁrst go rows and columns of X U
+new, followed by rows and
+columns of X F
+new. Now, we can perform Cholesky decompo-
+sition of V UF = LT · L and retrieve L’s diagonal entries that
+new, denoted by rF
+belong to variables X F
+i,i. It is not difﬁcult to
+show that
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+1
+2
+
+ln
+
+(AU
+
+new)T ·C−1 · AU
+new
+
+−
+
+1
+2
+
+ln
+
+new · C−1 · Anew
+AT
+
+(cid:12)
+= −
+(cid:12)
+
+log rF
+ii .
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(43)
+(cid:12)
+
+i
+X
+
+Further, as in Section 3.3.2, we additionally exploit the spe-
+cial structure of A from (34) (see also Figure 8). Similarly to
+unfocused augmented BSP, this will allow us to improve
+the complexity of J F
+H(a)’s calculation.
+
+Lemma 4. The posterior entropy of X F
+where A has the structure from (34), is given by
+
+new (equation (17)),
+
+J F
+H(a) =
+
+( BU
+
+new)T ·C−1
+
+1
+
+· BU
+
+new + 3U|F
+
+a
+
+· Bnew + 3a|,
+
+(cid:12)
+(44)
+(cid:12)
+
+nF · γ
+2
+1
+2
+
+−
+
++
+
+ln
+
+1
+2
+(cid:12)
+new · C−1
+(cid:12)
+
+1
+
+ln |BT
+
+Fig. 8. Partitions of Jacobians and state vector Xk+L in the aug-
+mented BSP case, focused (X F
+k+L ⊆ Xnew) scenario. Note
+that the shown variable ordering is only for illustration, while the
+developed approach supports any arbitrary variable ordering. Also
+note that all white blocks consist of only zeros. Top: Jacobian A of
+factor set F (a) = {F conn(a) , F new(a) }. Bottom: Jacobians B and
+D of factor sets F conn(a) and F new(a), respectively.
+
+3.3.3. Focused augmented BSP The focused scenario
+in the augmented BSP setting, with the factor graph aug-
+mentation Gk+L(a) = Gk ⊕ G(a) ⊕F conn(a), can be sep-
+arated into different cases. One such case is when the
+set of focused variables X F
+k+L contains only new variables
+added during BSP augmentation, as illustrated in Figure 8,
+i.e. X F
+k+L ⊆ Xnew are the variables coming from factor graph
+G(a). Such a case happens, for example, when we are inter-
+ested in reducing the entropy of a robot’s last pose within the
+planning horizon. Another case is when the focused vari-
+ables X F
+k+L contain only old variables, as shown in Figure 9,
+i.e. X F
+k+L ⊆ Xold ≡ Xk are the variables coming from factor
+graph Gk. This, for example, could correspond to a scenario
+where reducing entropy of already-mapped landmarks is of
+interest (e.g. improve 3D reconstruction quality). The third
+option is for both new and old variables to be inside X F
+k+L. In
+the following we develop a solution for the ﬁrst two cases;
+the third case can be handled in a similar manner.
+
+Remark 3. In most cases, actual variable ordering will be
+more sporadic than that depicted in Figures 7, 8, and 9. For
+example, iSAM (Kaess et al., 2012) determines variable
+ordering using COLAMD (Davis et al., 2004) to enhance
+the sparsity of the square root information matrix. We note
+that our approach applies to any arbitrary variable ordering,
+with the equations derived herein remaining unchanged.
+
+3.3.3.1 Focused augmented BSP (X F
+k+L ⊆ Xnew): focused
+variables belong to G(a) First we deﬁne additional parti-
+tions of Jacobian A (see Figure 8). The sub-matrices Aold,
+Anew, IAold, and ¬IAold were already introduced in the sec-
+tions above. We now further partition Anew into AF
+new and
+
+where C1 is deﬁned in (41), 3a = DT
+new · Dnew is the
+information matrix of the action’s factor graph G(a), and
+3U|F
+a =( DU
+new is the information matrix of variables
+new conditioned on X F
+X U
+new and calculated from distribution
+represented by G(a).
+
+new)T ·DU
+
+1102
+
+The International Journal of Robotics Research 36(10)
+
+Lemma 5. The focused IG of X F
+
+k is given by
+
+( ln
+
+1
+2
+− ln
+
+J F
+IG(a) =
+
+C
+
++ ln
+
+new · C−1 · Anew
+AT
+
+− ln
+
+S
+
+where C is deﬁned in (38), and
+
+new · S−1 · Anew
+AT
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(45)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+) ,
+
+(cid:12)
+(cid:12)
+
+.
+= Im + IAU
+
+old · 6
+
+old |F
+
+IX U
+k
+
+S
+
+·( IAU
+
+old)T ,
+
+(46)
+
+IX U
+and where 6
+k
+tioned on X F
+k .
+
+old |F
+
+is the prior covariance of IX U
+
+old condi-
+
+The proof of Lemma 5 is given in Appendix A.5.
+Similarly to the cases discussed above (Sections 3.3.2
+
+IX U
+k
+
+k
+
+It
+
+old |F
+
+and 6
+
+and 3.3.3.1), given 6M,IXold
+, calculation of
+J F
+IG(a) per each action a can be performed efﬁciently with
+complexity O( M( F(a))3 +n03),
+independently of state
+dimension n.
+is
+
+interesting to note the speciﬁc case where
+M( F(a)) = n0. In other words, the number of new mea-
+surements is equal to the number of new state variables,
+which can happen for example when only new robot poses
+and new motion model factors are added. In such a case,
+it is not difﬁcult to show that (45) will always return zero.
+We can conclude that for this speciﬁc case (M( F(a)) = n0)
+there is no new information about the old focused variables
+X F
+k .
+In addition, similar to previous sections, we use the spe-
+cial structure of A from (34) (see also Figure 9) in order to
+improve the complexity of J F
+
+IG(a)’s calculation.
+
+Lemma 6. The focused IG of X F
+structure from (34), is given by
+
+k , where A has the
+
+( ln
+
+1
+2
+− ln
+
+1
+
+(cid:12)
+(cid:12)
+
+new · S−1
+BT
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+J F
+IG(a) =
+
+C1
+
++ ln
+
+new · C−1
+BT
+
+1
+
+· Bnew + 3a
+
+− ln
+
+S1
+
+· Bnew + 3a
+
+) ,
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(47)
+(cid:12)
+(cid:12)
+
+where C1 is deﬁned in (41), 3a = DT
+information matrix of an action’s factor graph G(a), and
+
+new · Dnew is the
+
+(cid:12)
+(cid:12)
+
+S1 = Imconn + IBU
+
+old · 6
+
+old |F
+
+IX U
+k
+
+·( IBU
+
+old)T ,
+
+(48)
+
+IX U
+and where 6
+k
+tioned on X F
+k .
+
+old |F
+
+is the prior covariance of IX U
+
+old condi-
+
+The proof of Lemma 6 is given in Appendix A.6.
+The matrix terms from the above solution (47) and
+(48) have lower dimensions compared with the matrix
+terms from the general solution presented in (45) and (46),
+with complexity O( M( F conn(a))3 +n03) given the prior
+marginal covariance matrices 6M,IXold
+. The next
+section presents our approach to calculate the appropriate
+entries in the prior covariance only once and re-use the
+result whenever required.
+
+and 6
+
+IX U
+k
+
+old |F
+
+k
+
+Fig. 9. Partitions of Jacobians and state vector Xk+L in the aug-
+mented BSP case, focused (X F
+k+L ⊆ Xold) scenario. Note that
+the shown variable ordering is only for illustration, while the
+developed approach supports any arbitrary variable ordering. Also
+note that all white blocks consist of only zeros. Top: Jacobian A of
+factor set F (a) = {F conn(a) , F new(a) }. Bottom: Jacobians B and
+D of factor sets F conn(a) and F new(a), respectively.
+
+The proof of Lemma 4 is given in Appendix A.4.
+Also here, the matrix terms from the above solution of the
+focused augmented BSP problem (44) have lower dimen-
+sions compared with the matrix terms from the general
+solution presented in (42). Given the prior marginal covari-
+ance 6M,IXold
+its complexity is O( M( F conn(a))3 +n03). We
+demonstrate a runtime superiority of this solution in our
+simulations below.
+
+k
+
+It is important to mention that the information-based
+planning problem for a system that is propagated through
+the (extended) Kalman ﬁlter (Van Den Berg et al., 2012;
+Walls et al., 2015), where the objective is to reduce the
+uncertainty of only marginal future state of the system, is
+an instance of the focused augmented BSP (X F
+k+L ⊆
+Xnew) problem. Thus, the solution provided in this section
+is applicable also for Kalman ﬁlter planning.
+
+old and ¬IAF
+
+old. In particular, ¬IAU
+
+3.3.3.2 Focused augmented BSP (X F
+k+L ⊆ Xold): focused
+variables belong to Gk Similarly to the previous section,
+we ﬁrst introduce additional partitions of Jacobian A for the
+considered case (see Figure 9). From the top part of the ﬁg-
+ure we can see that ¬IAold can be further partitioned into
+¬IAU
+old represents columns
+of old variables that are both not involved and unfocused,
+and ¬IAF
+old represents columns of old variables that are both
+not involved and focused. We denote the former group of
+variables by ¬IX U
+old and the latter by ¬IX F
+old (see Table 2).
+Likewise, IAold can be partitioned into IAU
+old and IAF
+old, rep-
+resenting old involved variables that are, respectively, unfo-
+cused (IX U
+old). Note that in this case, the set
+of focused variables is X F
+old} and is
+contained in factor graph Gk.
+
+old) or focused (IX F
+
+k = {¬IX F
+
+k+L = X F
+
+old ∪ IX F
+
+Kopitkov and Indelman
+
+1103
+
+3.4. Re-use calculations technique
+
+As we have seen above, unfocused and focused (aug-
+mented) BSP problems require different prior covariance
+entries, in order to use the developed expressions. The
+required entries for each problem are summarized in Table
+and 6M,IXold
+3. Note that 6M,IX
+both represent exactly
+k
+the same thing, prior marginal covariance of old variables
+involved in new terms in (6), and have slightly differ-
+ent notation due to the speciﬁcs of augmented and non-
+IX U |F
+augmented settings of BSP. The same goes for 6
+k
+
+k
+
+old |F
+
+IX U
+k
+
+and 6
+, with both representing prior covariance of
+unfocused and involved old variables IX U
+old conditioned
+on focused variables X F. In this section we use the nota-
+tion of augmented BSP (6M,IXold
+), considering
+the non-augmented BSP setting as its special case.
+
+and 6
+
+IX U
+k
+
+old |F
+
+k
+
+From Table 3 it is seen that all approaches require prior
+marginal covariance of the involved old variables, i.e. IXold.
+In terms of factor graphs, in non-augmented BSP the IXold
+represents variables connected to factors from set F(a) and
+has dimension D( F(a)), whereas in the augmented BSP
+scenario the IXold represents variables from prior factor
+graph Gk connected to factors in the set F conn(a) and has
+dimension D( F conn(a)). Although each candidate action
+may induce a different set of involved variables, in prac-
+tice these sets will often have many variables in common
+as they are all related to the belief at the current time (e.g.
+about the robot pose), in one way or another. With this in
+mind, we perform a one-time calculation of prior marginal
+covariance for all involved variables (due to at least one
+candidate action) and re-use it for efﬁciently calculating IG
+and entropy of different candidate actions.
+
+k
+
+More speciﬁcally, denote by XAll ⊆ Xk the subset of vari-
+ables that were involved in new terms in (6) for at least one
+candidate action. We can now perform a one-time calcula-
+tion of the prior marginal covariance for this set, i.e. 6M,XAll
+.
+The complexity of such calculation may be different for
+different applications. For example, when using an informa-
+tion ﬁlter, the system is represented by information matrix
+3k, and in general the inverse of the Schur compliment of
+XAll variables should be calculated. However, there are tech-
+niques that exploit the sparsity of the underlying matrices
+in SLAM problems, in order to efﬁciently recover marginal
+covariances (Kaess and Dellaert, 2009), and more recently,
+to keep and update them incrementally (Ila et al., 2015). In
+Section 7 we show that the calculation time of 6M,XAll
+while
+exploiting sparsity (Golub and Plemmons, 1980; Kaess and
+Dellaert, 2009) is relatively small compared with the total
+decision-making time of alternative approaches. Still, the
+more detailed discussion about complexity of covariance
+retrieval can be found in Kaess and Dellaert (2009) and
+Ila et al. (2015). The pseudo-code for BSP problems that
+require only marginal prior covariances 6M,IXold
+(see Table
+3) can be found in Algorithm 1.
+
+k
+
+k
+
+For focused BSP (Section 3.2.2) and for focused
+k+L ⊆ Xold) (Section 3.3.3.2) cases, we
+
+augmented BSP (X F
+
+also need the term 6
+(see (30) and (46)). This term
+can be computed using two different methods as described
+below.
+
+old |F
+
+IX U
+k
+
+First method: calculate it
+through additional marginal
+covariance entries. First we calculate the prior marginal
+
+M,(IX U
+k
+
+old ,F)
+
+k },
+covariance 6
+and then compute the Schur complement over the relevant
+
+for the set of variables {IX U
+
+old, X F
+
+partitions in 6
+
+M,(IX U
+k
+
+old ,F)
+
+(where sufﬁx M denotes marginal):
+
+old |F
+
+IX U
+k
+
+6
+
+= 6
+
+M,IX U
+old
+k
+
+− 6
+
+old F
+
+M,IX U
+k
+
+·(6M,F
+k
+
+)−1 ·6
+
+M,FIX U
+old
+k
+
+.
+
+(49)
+
+Consequently, we can use a one-time calculation also for
+the focused BSP and for focused augmented BSP
+(X F
+k+L ⊆ Xold) cases as follows. Let us extend the set
+XAll to contain also all focused variables. Once 6M,XAll
+is calculated, 6
+will be just its partition and can
+be easily retrieved from it. As a result, the calculation
+
+M,(IX U
+k
+
+old ,F)
+
+k
+
+old |F
+
+IX U
+k
+
+of 6
+per candidate action becomes computationally
+cheap (through (49)). Furthermore, the term (6M,F
+)−1 can
+be calculated only once for all candidates. The pseudo-code
+of this approach can be found in Algorithm 2.
+
+k
+
+Second method: compute 6
+matrix partitioning. Recall Xk = {X F
+the following partitioning of a prior information matrix:
+
+through information
+k , X U
+old} and consider
+
+old |F
+
+IX U
+k
+
+3k =
+
+3F
+k
+( 3F,U
+"
+k
+
+3F,U
+k
+X U
+old
+k #
+
+)T 3
+
+,
+
+(50)
+
+where ﬁrst go rows/columns of focused variables X F
+k ,
+and then rows/columns of old unfocused variables X U
+old.
+Note that a partition of information matrix 3k that belongs
+X U
+to X U
+old
+old, 3
+k
+distribution
+
+, is an information matrix of the conditional
+
+P( X U
+
+old|X F
+
+X U
+k ) = N −1( ×, 3
+old
+k
+
+) = N ( ×, 6
+
+X U
+old |F
+k
+
+) ,
+
+(51)
+
+old |F
+
+IX U
+k
+
+X U
+old
+=( 3
+k
+
+is just a partition of 6
+
+)−1 and recalling IX U
+
+where × is the information or mean vector of this distribu-
+X U
+old |F
+old ⊆ X U
+tion. Since 6
+old, it
+k
+X U
+old |F
+follows that 6
+that belongs
+k
+to old unfocused involved variables IX U
+old. Therefore, we
+X U
+old
+need to calculate speciﬁc entries of the inverse of 3
+.
+k
+To do so, our one-time calculation will be as follows. We
+denote by X U
+All ⊆ Xk the subset of unfocused variables
+that were involved in new terms in (6) for at least one can-
+
+X U
+old
+inverse of 3
+k
+
+didate action. Next, we calculate 6
+
+X U
+All|F
+k
+that belong to X U
+All (e.g. via the method
+old |F
+
+, the entries of the
+
+IX U
+k
+
+from Kaess and Dellaert (2009)). Now, the required 6
+X U
+All|F
+k
+
+is just a partition of 6
+and can be retrieved easily for
+each candidate action. The pseudo-code of this approach is
+summarized in Algorithm 3.
+
+1104
+
+The International Journal of Robotics Research 36(10)
+
+Table 3. Different problems and required entries of prior covariance: BSP denotes non-augmented belief space planning; Augmented
+BSP denotes augmented belief space planning
+
+Problem
+
+Unfocused BSP,
+Section 3.2.1
+
+Focused BSP,
+Section 3.2.2
+
+Unfocused Augmented BSP,
+Section 3.3.2
+
+Focused Augmented BSP (X F
+Section 3.3.3.1
+
+k+L ⊆ Xnew),
+
+Focused Augmented BSP (X F
+Section 3.3.3.2
+
+k+L ⊆ Xold),
+
+Required covariance entries
+
+6M,IX
+k
+involved in new terms in (6))
+
+(prior marginal covariance of variables
+
+IX U |F
+and 6
+k
+
+6M,IX
+k
+involved variables IX U conditioned on focused variables X F )
+
+(prior covariance of unfocused and
+
+6M,IXold
+k
+involved in new terms in (6))
+
+(prior marginal covariance of old variables
+
+6M,IXold
+k
+
+IX U
+6M,IXold
+and 6
+k
+k
+involved old variables IX U
+
+old|F
+
+(prior covariance of unfocused and
+
+old conditioned on focused variables X F )
+
+Algorithm 1: Pseudo-code for BSP problems requiring only prior marginal covariance entries.
+
+A: candidate actions {a1, a2, . . .}
+
+a∗: optimal action
+
+1 Inputs:
+2
+3 Outputs:
+4
+
+5 begin:
+6
+
+Xall ← union of old involved variables IXold from each candidate action ai
+Calculate prior marginal covariances 6M,XAll
+(2009))
+for ai ∈ A do
+
+k
+
+of variables in Xall (e.g. via the method from Kaess and Dellaert
+
+Calculate information impact (IG or posterior entropy), using required prior marginal covariances from
+6M,XAll
+k
+
+end
+Select candidate a∗ with maximal IG or minimal posterior entropy
+
+7
+
+8
+
+9
+10 end
+
+The ﬁrst method is a good option when the dimension of
+X F
+k is relatively small. In such a case, equation (49) can be
+calculated very quickly. When this is not the case, i.e. the
+number of focused variables is large, the second technique
+becomes much faster and, thus, is preferable over the ﬁrst
+technique.
+
+Remark 4. As we show in Section 4.2, there are cases where
+IX U
+old is identical between all candidate actions. In such cases
+IX U
+can be calculated only once and further reused by
+k
+
+old |F
+
+6
+each candidate action.
+
+To summarize this section, the presented technique per-
+forms time-consuming calculations in one computational
+effort; the results are then used for efﬁciently evaluating
+the impact of each candidate action. This concept thus pre-
+serves expensive CPU resources of any given autonomous
+system.
+
+3.5. Connection to the MI approach and theoret-
+
+ical meaning of IG
+
+Mutual information I(a|b) is one additional metric from
+information theory that is used frequently in the ﬁeld of
+information-based decision making. Basically it encodes
+the quantity of information about set of variables a that
+we would obtain in the case that the value of variables in
+the other set b would be revealed to us. For example, this
+metric was used in Davison (2005) and Kaess and Dellaert
+(2009) to determine the most informative measurements in
+a measurement selection problem, and more recently in Bai
+et al. (2016) for information-based active exploration, with
+both problems being very similar. In addition, it was used
+in Carlevaris-Bianco et al. (2014) to create a sparse approx-
+imation of the true marginalization using a Chow–Liu tree.
+
+In this section we explore the connection between our
+BSP approach that uses IG (see Section 3.2) and the MI
+
+8
+
+9
+
+10
+
+11
+
+12
+
+13
+
+14
+
+8
+
+9
+
+10
+
+11
+
+12
+
+13
+
+14
+
+Kopitkov and Indelman
+
+1105
+
+Algorithm 2: Pseudo-code for BSP problems requiring both prior marginal and conditional covariance entries: ﬁrst
+method.
+
+A: candidate actions {a1, a2, . . .}
+X F: focused old variables
+
+a∗: optimal action
+
+1 Inputs:
+2
+
+3
+4 Outputs:
+5
+
+6 begin:
+7
+
+Xall ← union of old involved variables IXold from each candidate action ai
+Xall = Xall ∪ X F
+Calculate prior marginal covariances 6M,XAll
+(2009))
+Calculate (6M,F
+k
+for ai ∈ A do
+
+)−1 explicitly, by retrieving 6M,F
+
+from 6M,XAll
+k
+
+k
+
+k
+
+and inverting it
+
+Calculate 6
+
+via (49), by retrieving appropriate 6
+
+old |F
+
+IX U
+k
+
+from 6M,XAll
+k
+and required prior marginal covariances from 6M,XAll
+
+and 6
+
+old F
+
+M,IX U
+k
+
+M,IX U
+old
+k
+
+k
+
+old |F
+
+IX U
+k
+
+of variables in Xall (e.g. via the method from Kaess and Dellaert
+
+Calculate IG of X F using 6
+
+end
+Select candidate a∗ with maximal IG
+
+15
+16 end
+
+Algorithm 3: Pseudo-code for BSP problems requiring both prior marginal and conditional covariance entries: second
+method.
+
+A: candidate actions {a1, a2, . . .}
+X F: focused old variables
+
+a∗: optimal action
+
+1 Inputs:
+2
+
+3
+4 Outputs:
+5
+
+6 begin:
+7
+
+Xall ← union of old involved variables IXold from each candidate action ai
+Calculate prior marginal covariances 6M,XAll
+(2009))
+X U
+all ← union of old involved unfocused variables IX U
+X U
+k ← partition of prior information matrix 3k that belongs to old unfocused variables X U
+old
+X U
+X U
+All|F
+that belong to X U
+old
+k ← entries of the inverse of 3
+k
+
+old from each candidate action ai
+
+3
+
+k
+
+of variables in Xall (e.g. via the method from Kaess and Dellaert
+
+All (e.g. via the method from Kaess and Dellaert (2009))
+
+old = Xk r X F
+
+6
+for ai ∈ A do
+
+Calculate IG of X F, by retrieving 6
+
+end
+Select candidate a∗ with maximal IG
+
+15
+16 end
+
+M,IX U
+old
+k
+
+from 6M,XAll
+k
+
+and 6
+
+old |F
+
+IX U
+k
+
+from 6
+
+X U
+All|F
+k
+
+approach that is applied in Davison (2005) and Kaess and
+Dellaert (2009); we show that objective functions of both
+are mathematically identical and calculate exactly the same
+metric, even though calculations in our approach are made
+in a much more efﬁcient way. Moreover, we also present the
+theoretical meaning of IG that provides better intuition for
+equations (23) and (28).
+
+In a MI approach we would like to select the most infor-
+mative measurements from the available set {z1, z2, . . .} and
+also to account for possible measurement correlation. Each
+
+candidate measurement has a speciﬁc measurement model
+zi = hi(X i
+k) +υi with υi ∼ N (0, 9i). The candidate mea-
+surements are a priori unknown and can be viewed as ran-
+dom variables whose statistic properties are fully deﬁned
+by a random state vector Xk and random noises υi, due to
+measurement models. Combining candidate measurements
+with the state vector, we have
+
+W =(Xk, z1, z2, . . . )T ,
+
+(52)
+
+1106
+
+The International Journal of Robotics Research 36(10)
+
+and similarly to the mentioned papers, it can be shown that
+the covariance matrix of W is
+
+6k
+A1 · 6k
+A2 · 6k
+e
+.
+.
+.
+e
+
+6W = 
+
+
+
+
+
+where
+
+T
+
+6k ·
+A1 · 6k ·
+
+A1
+T
+A1
+e
+A2 · 6k ·
+e
+.
+.
+.
+
+e
+
++ 91
+T
+
+A1
+
+T
+
+T
+
+6k ·
+A2
+A1 · 6k ·
+A2
+T
+e
+A2
+.
+.
+.
+e
+
+A2 · 6k ·
+e
+
++ 92
+e
+
+
+
+,
+
+· · ·
+· · ·
+· · ·
+. . .
+
+e
+
+e
+
+e
+
+Ai
+
+
+
+
+
+
+(53)
+is the Jacobian of the measurement model
+function hi(X i
+k) and where it was not yet combined with
+model noise 9i, similarly to
+A deﬁned in (9). The MI
+approach (Davison, 2005; Kaess and Dellaert, 2009) cal-
+culates I(Xk|zi) for each candidate zi from 6W and selects
+candidates with the highest MI.
+
+e
+
+e
+
+Now we will show that objective I(Xk|zi) is mathe-
+matically identical to our JIG( zi) from Section 3.2.1 (see
+also (23)). First, note that 6Xk |zi
+Ai)−1
+(easy to check by using Schur complement from left and
+Woodbury matrix identity from right). Further, MI for
+Gaussian distributions can be calculated through covariance
+matrices as
+
+W =( 3k +
+
+· 9−1
+i
+
+Ai
+
+e
+
+e
+
+·
+
+T
+
+I(Xk|zi) = H(Xk) −H(Xk|zi) =
+
+1
+2
+
+ln
+
+6M,Xk
+W
+6Xk |zi
+W
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+6M,Xk
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+W
+(cid:12)
+W )−1 ·6M,ziXk
+·(6M,zi
+(cid:12)
+(cid:12)
+6k
+
+W
+
+(cid:12)
+(cid:12)
+(cid:12)
+T + 9i)−1 ·
+
+(cid:12)
+W − 6M,Xk zi
+6M,Xk
+(cid:12)
+(cid:12)
+
+W
+
+=
+
+=
+
+1
+2
+
+1
+2
+
+ln
+
+ln
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+6k − 6k ·
+
+Ai
+
+T ·(
+
+(cid:12)
+(cid:12)
+Ai · 6k ·
+Ai
+(cid:12)
+(cid:12)
+
+e
+
+e
+
+e
+
+Ai · 6k
+(cid:12)
+(54)
+(cid:12)
+(cid:12)
+
+e
+
+and
+
+further
+T
+Ai
+
+3k +
+
+can
+· 9−1
+·
+i
+
+Ai
+
+be
+
+reduced
+
+to
+
+I(Xk|zi) =
+
+which
+
+1
+2 ln (cid:12)
+(cid:12)
+3k
+(cid:12)
+(cid:12)
+unfocused IG from (23)
+the case when the
+(cid:12)
+(cid:12)
+(cid:12)
+candidate action ai ≡ zi introduces a single factor into the
+factor graph.
+
+exactly
+
+e
+(cid:12)
+(cid:12)
+(cid:12)
+
+the
+
+for
+
+e
+
+is
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+While both approaches are obviously calculating the
+same metric, the computation complexity is not the same.
+In both Davison (2005) and Kaess and Dellaert (2009), the
+objective was calculated through (54) and its complexity
+was dependent on the dimension of Xk. In contrast, our
+approach rAMDL does so independently of state dimen-
+sion through (24) as has been shown above, making it more
+efﬁcient compared with the MI technique.
+
+In addition, Kaess and Dellaert (2009) presented the
+approach to sequentially select informative measurements
+that accounts for measurements correlation and redundancy,
+but without the need to update state estimation during each
+decision. In Section 4.1 we present our algorithm Sequen-
+tial rAMDL where we combine a similar idea together with
+the rAMDL technique in order to eliminate the need for a
+marginal covariance calculation at each decision.
+
+Most importantly, from the above equations we can see
+conceptually a very interesting meaning of the metric that
+is calculated (IG or MI). Without omitting the noise matrix
+9 from our formulation, we can show that the unfocused
+IG of future measurement z is
+
+JIG( z) =
+
+1
+2
+
+ln
+
+Im + A · 6k · AT
+
+=
+
+(cid:12)
+(cid:12)
+
+9 +
+
+ln
+
+1
+2
+
+A · 6k ·
+9
+
+AT
+
+.
+
+(cid:12)
+(cid:12)
+e
+(55)
+(cid:12)
+AT is the
+(cid:12)
+
+e
+(cid:12)
+A · 6k ·
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+.
+= 9 +
+
+Further, from (53) we see that 6z
+covariance matrix of the random z. Thus, we can see that
+
+JIG( z) =
+
+1
+2
+
+ln
+
+6z
+
+−
+
+1
+2
+
+ln
+
+9
+
+e
+e
+= H( z) −H( υ) ,
+
+(56)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+where υ is random noise from z’s measurement model, with
+(cid:12)
+υ ∼ N (0, 9). From (56) we see that IG is exactly the differ-
+ence between entropies of future measurement and its noise.
+It can be explained in the following way: as was mentioned
+previously, random variable z is fully deﬁned by random
+variables Xk and υ through measurement model. When z’s
+value is revealed it obviously provides information about
+both state and noise. The information about the state (the
+IG) will then be the whole received information (the entropy
+of random variable z) minus the information about the noise
+υ.
+
+From the above we can see that in order for measurement
+z to be notably informative, three conditions should apply.
+First, its noise should have small entropy H( υ), which also
+comes from general knowledge about measurement estima-
+tion. In addition, z should have large entropy H( z) from
+which we can conclude the second and third conditions: the
+involved variables IX from the measurement model should
+have high prior uncertainty (high prior entropy), as also
+IA (the Jacobian of measurement model at the lin-
+their
+earization point of IX ) should contain high absolute values
+(the sign does not matter because of the quadratic term of
+A
+e
+in (55)).
+
+In the same way we can review the equation for
+e
+focused IG (28). The ﬁrst term 1
+Im + A · 6k · AT
+measures the amount of information about whole state Xk,
+(cid:12)
+while the second term
+(cid:12)
+
+2 ln
+
+(cid:12)
+(cid:12)
+
+1
+2
+
+=
+
+ln
+
+Im + AU · 6U|F
+
+·( AU )T
+
+9 +
+
+(cid:12)
+(cid:12)
+ln
+
+1
+2
+
+(cid:12)
+(cid:12)
+
+k
+AU · 6U|F
+k
+9
+
+f
+
+·(
+
+(cid:12)
+AU )T
+(cid:12)
+
+f
+
+(cid:12)
+(cid:12)
+
+= H( z|X F
+
+k ) −H( υ)
+
+(57)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+measures the information given that X F
+k was provided,
+meaning information for only unfocused variables. The
+difference between total information and information of
+only unfocused variables will provide the information
+about the focused set X F
+k .
+
+Such interpretation of IG’s meaning through the entropy
+of future measurement and of its noise can be consid-
+ered not only for the measurement selection problem, but
+also for the more general formulation from Section 2, thus
+constituting a possible direction for future research.
+
+Kopitkov and Indelman
+
+1107
+
+4. Application to different problem domains
+
+In Section 3, we provided an efﬁcient solution for a general
+BSP problem, considering both non-augmented and aug-
+mented cases. In this section, we discuss various problem
+domains of (augmented) BSP and show how our approach
+can be applied for each case. More concretely, we focus
+on sensor deployment (Section 4.1), active SLAM (Sec-
+tion 4.2), and graph reduction (Section 4.3), as speciﬁc
+non-augmented and augmented BSP applications. For the
+former, we develop a more computationally efﬁcient variant
+of our approach. For each case, we ﬁrst brieﬂy formulate the
+problem and then describe our solution.
+
+4.1. Sensor deployment
+
+Sensor deployment is one of the most frequently researched
+problems of decision making. The basic idea is to measure
+a speciﬁc metric in domain space such as, e.g., temperature
+within a building space. The goal is to ﬁnd the best locations
+for available sensors in order to estimate the metric in the
+entire domain in the most accurate way.
+
+Typically discretization of the domain space is made due
+to computation complexity considerations. Thus, we have n
+.
+= {l1, . . . , ln}, where sen-
+available locations in the space, L
+sors can be deployed. The metric’s values in these locations
+can be modeled as random variables and combined into a
+state vector: X = {x1, . . . , xn}.
+
+Putting a sensor at location li will allow us to take mea-
+surement zi at that location, which will provide information
+about the metric at place xi. Assume that the measurement
+model of a sensor is known and is
+
+zi = hi(xi) +υi,
+
+υi ∼ N (0, 6υ,i) .
+
+(58)
+
+In addition, correlation between different locations may
+be known a priori. Such prior can be presented as X ’s joint
+distribution, P0( X ). Assuming that it is Gaussian, it may be
+represented as (Indelman, 2016; Krause et al., 2008; Zhu
+and Stein, 2006; Zimmerman, 2006)
+
+X ∼ P0( X ) = N ( µ, 60) = N −1( η, 30) .
+
+(59)
+
+Note that, in practice, in typical sensor deployment prob-
+lems 30 is not actually available and 60 is used instead.
+Nevertheless, in further formulation we assume that 30 was
+calculated a priori (as 6−1
+0 ) and therefore is available to us.
+Finding the best sensor locations in order to estimate
+the metric in the most accurate way is another instance of
+information-based non-augmented BSP and therefore can
+be viewed through a prism of factor graphs (see Figure 10)
+as we show below.
+
+Conceptually, the space of candidate actions in a sensor
+deployment setting contains all subsets of possible sensor
+locations S ⊆ L with the usual constraint on cardinality
+of subset S, |S| ≤ c, to represent that the number of sen-
+sors is limited. However, considering all subsets of size c is
+n
+usually unrealistic as the number of all possible subsets
+c
+
+(cid:0)
+
+(cid:1)
+
+is astronomical due to its combinatorial nature. Therefore,
+typically the problem is solved in a greedy way.
+
+We propose a sub-optimal approach where a sequence
+of decisions must be made instead of one decision. Dur-
+.
+= c0,
+ing each decision we are looking for subset S0, |S0|
+with c0 locations chosen from locations that were not yet
+selected. The optimal S0 is the one that maximizes X ’s esti-
+mation accuracy. The algorithm ends when the overall set
+of locations S = {S0
+2, . . .} grows to cardinality of c.
+Note that the number of locations in each subset, c0, should
+be such that the number of S0 candidates,
+, is small
+enough to be evaluated in a realistic time period. Thus, c0
+is scenario-dependent and should be selected manually.
+
+1, S0
+
+n
+c0
+
+(cid:1)
+
+(cid:0)
+
+More speciﬁcally, we assume that until time tk the dis-
+k} of locations were selected, where
+j = {l1
+j } provided measure-
+j }. Given these measurements, the
+
+joint subsets {S0
+1, . . . , S0
+each location subset S0
+j , . . . , zc0
+ments Zj = {z1
+joint pdf at time tk is
+
+j , . . . , lc0
+
+P(X |Z1:k) ∝ P0( X )
+
+k
+
+c0
+
+P( zi
+
+j|xi
+
+j) ,
+
+(60)
+
+i=1
+Y
+
+j=1
+Y
+j) is deﬁned in (58).
+
+where observation model P( zi
+
+j|xi
+MAP estimation of X according to information in (60)
+.
+= P( X |Z1:k) =
+will provide current state belief bk[X ]
+N (X ∗
+k , 6k), and following (7) the information matrix of
+k
+bk[X ] is 3k = 6−1
+j )T ·(6υ,j,i)−1 ·H i
+k = 30 +
+j
+j=1
+.
+= 5xhi
+where H i
+j are the Jacobian matrices of observation
+j
+P
+model (58) for all measurement terms in (60), linearized
+about the current estimate X ∗
+k . Note that the belief bk[X ]
+can be naturally represented by a factor graph Gk as was
+explained in Section 3.1 (see also Figure 10).
+
+c0
+i=1(H i
+
+P
+
+The next decision requires us to select next candidate
+action a: a location subset S0
+k+1 that will minimize pos-
+terior uncertainty. Therefore, candidate space contains all
+subsets of the form S0 ⊆ L \ {S0
+k} and |S0| = c0.
+Each such candidate subset a ≡ S0 = {l1, . . . , lc0} will pro-
+vide future measurements Z0 = {z1, . . . , zc0} and thus future
+belief bk+1[X ] and its information matrix will be
+
+1 ∪ · · · ∪ S0
+
+bk+1[X ] = P( X |Z1:k, Z0) ∝ bk[X ]
+
+P( zi|xi) ,
+
+c0
+
+c0
+
+i=1
+Y
+
+3k+1 = 3k +
+
+(H i)T ·(6υ,i)−1 ·H i.
+
+(61)
+
+i=1
+X
+
+Thus, the candidate S0 introduces to Gk the factor set F(a),
+which contains exactly c0 factors. Each of the factors is con-
+nected to one variable: the xi that represents location of
+factor’s sensor (see Figure 10).
+
+Similarly to the general formulation in Section 2, stack-
+ing all new Jacobians in the above equation together into
+a single matrix and combining all noise matrices into
+a block-diagonal one will lead to (9). Hence, the opti-
+mal candidate subset S0 will be the one that maximizes
+IG from (15).
+
+1108
+
+The International Journal of Robotics Research 36(10)
+
+Fig. 10. Illustration of belief propagation in factor graph representation: sensor deployment scenario. The space is discretized through
+.
+= {l1, . . . , l9}. Factor f0 within prior factor graph Gk represents our prior belief about state vector, P0( X ). Factors
+a grid of locations L
+f1–f3 represent measurements taken from sensors deployed at locations l1, l2, and l4. Two actions ai = {l3, l6} and aj = {l7, l8} are
+considered, introducing into graph two new factor sets F (ai) and F (aj), respectively (colored in green). In this example value of c0 is 2.
+
+Note that the block-columns of Jacobian matrix A ∈
+Rm×n from (9) represent all possible sensor locations
+and block-rows represent new c0 measurement factors
+from (61). As was mentioned before, only involved vari-
+ables will have non-zero values in their block-columns. It
+is not difﬁcult to show that in the sensor deployment prob-
+lem, the involved variables are xi that belong to locations in
+subset S0. Block-columns of all other variables in A will be
+zeros.
+
+The rest of the problem deﬁnition (objective func-
+tions, unfocused and focused settings) for the sensor
+deployment problem is identical to the general formulation.
+In particular, in the unfocused setting the optimal S0
+will be found through
+
+k+1
+
+S0
+k+1 =
+
+arg max
+1,...,S0
+
+k },|S0|=c0
+
+S0⊆X \{S0
+
+JIG( S0) =
+
+1
+2
+
+ln
+
+Im + AS0 ·6k · AT
+S0
+
+,
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(62)
+(cid:12)
+
+where AS0 is the Jacobian matrix of candidate S0.
+
+Solution: Sequential rAMDL The above problem can
+be straightforwardly solved using the rAMDL approach,
+through (24) and (30). However, for each sequential deci-
+sion the marginal covariance should be calculated for a set
+of variables involved in any of the candidate actions, and
+it is not difﬁcult to show that this set will contain all as-
+yet unoccupied locations. In scenarios with a high number
+of possible sensor locations, this can negatively affect the
+overall time performance.
+
+Here we present an enhanced approach, Sequential
+rAMDL, that performs the same sub-optimal sequence of
+decisions as described above, but uses only the prior covari-
+ance matrix 60, without recalculating covariance entries
+
+after each decision. Such an approach gives an approxi-
+mated solution (compared with the sub-optimal sequence of
+decisions described above), but without paying computation
+resources for expensive manipulation of high-dimensional
+matrices.
+
+The ﬁrst decision will be performed in exactly the same
+way: we will look for the best subset S0
+1 of size c0 that max-
+imizes IG (62), for the unfocused case. However, upon
+ﬁnding such a subset, the estimation solution of the system
+will not be updated due to measurements from new sensors.
+Instead, in each next decision we will look for a subset S0
+that maximizes the following objective
+
+k+1
+
+JIG(
+
+S) =
+
+1
+2
+
+ln
+
+I
+
+m + A
+
+S · 60 · AT
+S
+
+,
+
+e
+
+(cid:12)
+(cid:12)
+
+e
+
+e
+
+e
+
+(cid:12)
+(cid:12)
+
+(63)
+
+S0
+k+1 =
+
+S0⊆X \{S0
+
+k },|S0|=c0
+
+arg max
+1,...,S0
+AS0
+1
+:
+AS0
+k
+AS0
+
+
+
+
+
+
+
+
+
+
+
+A
+
+S = 
+
+e
+
+.
+= {S0
+
+S
+
+1, . . . , S0
+where
+appropriate Jacobians combined together.
+
+k, S0}, and A
+
+S is a matrix with all
+
+e
+
+e
+
+Note that the sequential decision making through (63)
+will yield an exact solution, compared with sequential deci-
+sion making through (62), if Jacobian matrices H i (equa-
+tion (61)) do not change after acquiring measurements from
+newly deployed sensors. This is the case, for instance, when
+linearization point X ∗
+k remains the same or when measure-
+ment model (58) is linear with respect to xi (i.e. zi = xi +νi).
+Otherwise, equation (63) will merely be the approximation
+of the above approach.
+
+Kopitkov and Indelman
+
+1109
+
+After looking into (63) one can see that matrix inside is
+
+actually
+
+I
+
+m + A
+
+S · 60 · AT
+
+VS0
+1
+YS0
+2,S0
+1
+...
+YS0,S0
+1
+
+YS0
+1,S0
+2
+VS0
+2
+...
+YS0,S0
+2
+YS0
+
+· · · YS0
+1,S0
+· · · YS0
+2,S0
+...
+. . .
+· · · VS0
+.
+= AS0
+i
+
+i ,S0
+j
+
+S = 
+
+
+
+
+
+e
+
+VS0
+
+e
+
+e
+.
+= Im + AS0 · 60·(AS0)T ,
+
+
+
+,
+
+
+
+
+
+· 60 · AT
+S0
+j
+(64)
+
+,
+
+i ,S0
+j
+
+can be efﬁciently calculated (indepen-
+where VS0 and YS0
+dently of state dimension) due to the sparsity of Jacobians.
+Moreover, after 60 is calculated (or given) at the beginning
+of the algorithm, all its required entries are freely accessible
+through the entire runtime of the algorithm.
+
+i ,S0
+j
+
+It can be seen that all diagonal matrices VS0 were already
+calculated during the ﬁrst decision and can be kept and re-
+used. In addition, all the correlation matrices YS0
+(except
+k ,S0) were calculated in previous decisions. The only
+for YS0
+required calculation in every decision for each candidate S0
+k ,S0 and determinant of the combined matrix.
+is the matrix YS0
+Our unfocused Sequential rAMDL approach can be
+seen as providing a little increase in the per-candidate cal-
+culation in order to escape the necessity of prior covariance
+calculation for each decision, similarly to the method of
+sequential informative measurements selection presented in
+Kaess and Dellaert (2009). This approach can be a good
+alternative to the rAMDL technique when one-time calcula-
+tion part of rAMDL (Section 3.4) is more time-consuming
+than the part of candidates evaluation, as will be shown
+in our simulations. The focused Sequential rAMDL
+approach is also possible, by following similar derivations.
+Moreover, the same idea is applicable to other sequential
+domains such as the measurement selection problem.
+
+4.2. Augmented BSP in unknown environments
+
+In this section, we discuss a speciﬁc case of the augmented
+BSP problem from Section 2, considering a SLAM setting.
+Such a speciﬁcation provides the reader with an illustrative
+example of the augmented BSP problem for better intuition.
+Let us reﬁne the deﬁnition. In the smoothing formulation
+of visual SLAM the state vector Xk represents robot poses
+per each time step, {x0, . . . , xk}, and landmarks mapped
+.
+= {l1, . . . , lnk }. Further, we model robot
+until now, Lk
+motion dynamics and sensor observations through
+
+xi+1 = f (xi, ui) +ωi, ωi ∼ N (0, 6ω,i)
+
+zi,j = h(xi, lj) +υi,j,
+
+υi,j ∼ N (0, 6υ,i,j) ,
+
+(65)
+
+(66)
+
+where ui is control at time ti, zi,j represents observation of
+landmark lj by a robot from position xi at time ti, and where
+ωi and υi,j are the motion and measurement noises, respec-
+tively. Note that the motion model can be easily presented
+
+i(X j
+
+i = hj
+
+i ) +υj
+
+in the form of a general factor model rj
+(3) by moving the left side to the right:
+0 = f (xi, ui)−xi+1 +ωi = ¯f (xi, xi+1) +ωi , ωi ∼ N (0, 6ω,i) .
+(67)
+The joint pdf for the SLAM problem at time tk (or current
+belief ) is then
+
+i from
+
+b[Xk] = P( Xk|Z0:k, u0:k−1) ∝ P( x0)
+
+k
+
+P( xi|xi−1, ui−1)
+
+(cid:26)
+
+j=1
+Y
+
+ni
+
+i=1
+Y
+P( zi,j|xi, lj)
+
+(68)
+
+,
+(cid:27)
+
+where P( x0) is a prior on the robot’s ﬁrst pose, Zi =
+{zi,1, . . . , zi,ni } represents all observations at time ti, with
+ni being the number of such observations. The motion
+and observation models P( xi|xi−1, ui−1) and P( zi,j|xi, lj) are
+deﬁned by (65) and (66). A factor graph representation,
+considering for simplicity only two landmarks l1 and l2,
+is shown in Figure 11. Performing MAP inference over
+the belief b[Xk], one can write b[Xk] = N (X ∗
+k , 6k), with
+appropriate mean vector X ∗
+
+k and covariance matrix 6k.
+
+The space of candidate actions in SLAM setting contains
+all control sequences uk+1:k+L−1, where L is the planning
+horizon and can vary between different candidates. Typi-
+cally a ﬁnite set of candidates is pooled from this inﬁnite
+space according to their relevance to robot’s current desti-
+nation or to loop-closure maneuver, for example through
+simulation (Stachniss et al., 2005) and sampling (Agha-
+Mohammadi et al., 2014; Prentice and Roy, 2009). Similar
+.
+= P( Xk+L|Z0:k+L, u0:k+L−1) for
+to (6), future belief b[Xk+L]
+particular candidate action a = uk+1:k+L−1 can be explicitly
+written as
+
+b[Xk+L] ∝ b[Xk]
+
+P( xl|xl−1, ul−1)
+
+P( zl,j|xl, lj)
+
+,
+
+k+L
+
+nl
+
+Yl=k+1 (cid:26)
+
+j=1
+Y
+
+(cid:27)
+(69)
+
+where Xk+L is the state vector at the Lth lookahead step. It
+contains all variables from the current state vector Xk and
+is augmented by new robot poses Xnew = {xk+1, . . . , xk+L}.
+Also note that in (69) we consider only new observations
+of landmarks that were already mapped until time tk. It is
+also possible to reason about observing not as-yet mapped
+landmarks (Indelman, 2015a), but it is outside the scope of
+this paper.
+
+k+1, . . . , f M
+
+from Section 3.1,
+
+Following the model
+
+the candi-
+date’s factor graph G(a) =( F new(a) , Xnew, Enew) will con-
+tain all new robot poses connected by motion model fac-
+tors F new(a) = {f M
+k+L−1} with appropriate motion
+models {¯f (xk+1, xk+2) , . . . , ¯f (xk+L−1, xk+L) }, whereas fac-
+tors from F conn(a), which connect old variables Xk and
+new variables Xnew, will contain one motion model fac-
+(with motion model ¯f (xk, xk+1)) and all of obser-
+tor f M
+k
+vation model factors connecting new poses with observed
+landmarks (see Figure 11).
+
+1110
+
+The International Journal of Robotics Research 36(10)
+
+Fig. 11. Illustration of belief propagation in factor graph representation: SLAM scenario. Nodes xi represent robot poses, while nodes
+li represent landmarks. Factor f0 is prior on robot’s initial position x1; factors between robot poses represent the motion model (65);
+factors between pose and landmark represent the observation model (66). Two actions ai and aj are considered, performing loop-closure
+to re-observe landmarks l1 and l2, respectively. Both actions introduce their own factor graphs G(ai) and G(aj) (colored in pink) that
+are connected to prior Gk through factor sets F conn(ai) and F conn(aj) (colored in green), respectively.
+
+Following the general formulation, the posterior infor-
+mation matrix of belief b[Xk+L], i.e. 3k+L, can be con-
+structed by ﬁrst augmenting the current information matrix
+3k ≡ 6−1
+k with L zero block-rows and block-columns, each
+block having dimension np of robot pose variable, to obtain
+3Aug
+k+L ∈ RN×N with N = n + L · np, and thereafter adding
+to it new information, as illustrated in Figure 1 (see e.g.
+Indelman et al., 2015):
+
+3k+L = 3Aug
+
+k+L +
+
+k+L
+
+nl
+
+l · 6−1
+FT
+
+ω,l · Fl +
+
+H T
+j
+
+· 6−1
+
+υ,l,j · Hj
+
+,
+
+j=1
+X
+
+Xl=k+1 (cid:26)
+.
+= 5xf and Hj
+
+(cid:27)
+(70)
+.
+= 5xh are augmented Jacobian
+where Fl
+matrices of all new factors in (69) (motion and observation
+terms all together), linearized about the current estimate of
+Xk and about initial values of newly introduced robot poses.
+Again, after stacking together all new Jacobians in the
+above equation and combining all noise matrices into a
+block-diagonal matrix, we obtain the same posterior infor-
+mation expression as in (10).
+
+Note that
+
+the block-columns of matrix A ∈ Rm×N
+from (10) represent all old robot poses, mapped until now
+landmarks, and new robot poses from L-horizon future.
+Here A’s block-rows represent new motion and observa-
+tion factors from (69). As mentioned before, only involved
+variables will have non-zero values in their block-columns.
+It is not difﬁcult to see that in SLAM the involved ones
+are: all new robot poses, current robot pose xk, and all
+landmarks that will be observed following the current can-
+didate’s actions. Block-columns of all other variables in A
+will be zeros.
+
+The rest of the problem deﬁnition (objective functions,
+unfocused and focused settings) for the active SLAM
+problem is identical to the general formulation in Section 2.
+
+Solution: rAMDL applied to SLAM The augmented BSP
+problem for the SLAM case, described in the previous sec-
+tion, can be naturally solved by our general approach from
+Section 3.3. However, we go one step further and provide
+a solution tailored speciﬁcally to the SLAM domain, as an
+example of applying rAMDL to a real problem and in order
+to show the underlying structure of the SLAM solution.
+
+First, let us model informative partitions of Jacobian
+matrices B and D from (34), IBold, Bnew, and Dnew (see
+also Figure 7), for one of the candidate actions, action a.
+As was mentioned above, the factors from action’s factor
+graph G(a), F new(a), contain all new motion model factors
+from (69), except for factor f M
+k . Therefore, Dnew will have
+the following form:
+
+( columns of xk+1, . . . , xk+L)
+
+Dnew =
+
+
+
+
+
+block-row for ¯f (xk+1, xk+2)
+...
+block-row for ¯f (xk+L−1, xk+L)
+
+=
+
+
+
+
+
+( xk+1)
+
+( xk+2)
+
+( xk+3)
+
+( xk+4)
+
+− 1
+2
+new ·
+
+9
+
+Fk+1
+0
+0
+0
+...
+0
+0
+0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+−I
+Fk+2
+0
+0
+...
+0
+0
+0
+
+0
+−I
+Fk+3
+0
+...
+0
+0
+0
+
+0
+0
+−I
+Fk+4
+...
+0
+0
+0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Kopitkov and Indelman
+
+1111
+
+· · ·
+
+( xk+L−2)
+
+( xk+L−1)
+
+( xk+L)
+
+· · ·
+· · ·
+· · ·
+· · ·
+. . .
+· · ·
+· · ·
+· · ·
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+0
+0
+0
+0
+...
+−I
+Fk+L−2
+0
+
+0
+0
+0
+0
+...
+0
+−I
+Fk+L−1
+
+0
+0
+0
+0
+...
+0
+0
+−I
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.
+= 9
+
+− 1
+2
+new ·
+
+Dnew
+
+e
+
+(71)
+
+.
+= 5xf
+
+(cid:12)
+(cid:12)
+
+where Fk+l
+
+x=xk+l
+
+is the Jacobian of motion model
+function f from (65) with respect to xk+l, −I is Jacobian
+of ¯f from (67) with respect to second pose and is actually
+an identity matrix with dimension equal to the dimension
+of the robot pose. Matrix 9new is block-diagonal, combin-
+ing all noise matrices of F new(a) factors. In addition, we
+denote by
+Dnew the Jacobian entries of Dnew not weighted
+by factors’ noise 9new.
+e
+
+Assume that following a’s controls the set of landmarks
+La ⊆ Lk will be observed. In addition, deﬁne the set of all
+new observation factors F obs(a) as
+
+F obs(a) = { factor f O
+
+i with observation model hi( x, l) :
+
+x ∈ Xnew, l ∈ La, 1 ≤ i ≤ no},
+
+(72)
+
+where no is the number of such factors. Thus, the connect-
+ing factors are F conn(a) = {f M
+k , F obs(a) }; and involved old
+variables will be IXold = {La, xk}, containing xk because of
+ﬁrst factor’s motion model ¯f (xk, xk+1). Therefore, IBold and
+Bnew will be
+
+( columns of La, xk, xk+1, . . . , xk+L)
+
+IBold Bnew
+
+=
+
+(cid:0)
+
+(cid:1)
+
+
+
+
+
+
+
+block-row for ¯f (xk, xk+1)
+block-row for h1
+...
+block-row for hno
+
+
+
+
+
+
+
+0 Fk
+HLa
+1 0
+...
+...
+HLa
+no 0
+
+IBold = 9
+
+− 1
+conn · 
+2
+
+
+
+
+
+HLa
+1
+...
+HLa
+no
+
+
+
+
+
+
+HLa
+
+.
+= 
+
+
+
+
+= 9
+
+− 1
+2
+conn ·
+
+0 Fk
+HLa 0
+
+(cid:18)
+
+,
+
+(cid:19)
+
+
+
+
+
+
+
+
+(74)
+
+F
+HXnew
+
+(cid:18)
+
+,
+
+(cid:19)
+
+,(75)
+
+
+
+−I
+Hxk+1
+1
+...
+Hxk+1
+no
+
+Bnew = 9
+
+− 1
+conn · 
+2
+
+
+
+
+
+1
+
+0
+
+· · ·
+· · · Hxk+L
+...
+. . .
+· · · Hxk+L
+
+no
+
+F .
+=
+
+−I · · · 0
+
+, HXnew .
+
+= 
+
+
+
+= 9
+
+− 1
+2
+conn ·
+
+
+
+
+
+Hxk+1
+1
+...
+Hxk+1
+no
+
+1
+
+· · · Hxk+L
+...
+. . .
+· · · Hxk+L
+
+no
+
+(cid:0)
+
+(cid:1)
+
+
+
+
+
+
+.
+where HLa
+= 5Lahi is the Jacobian of the ith observa-
+i
+tion factor hi from (66) with respect to variables La, and
+thus only one of its block-columns, corresponding to an
+.
+observed landmark, is non-zero. Here Hxk+l
+= 5xk+l hi is
+the Jacobian of hi with respect to xk+l, and therefore is
+non-zero only if a factor’s observation was taken from pose
+xk+l. Matrix 9conn is block-diagonal, combining all noise
+matrices of F conn(a) factors.
+
+i
+
+As can be seen from the above, the Jacobian matrices
+IBold, Bnew, and Dnew are sparse and can be efﬁciently manip-
+ulated. More speciﬁcally, the information matrix of factor
+graph G(a), 3a = DT
+new · Dnew, which is required in our
+approach, can be calculated quickly as a product of sparse
+matrices 3a =
+Dnew due to the formulation
+in (71); in addition, it can be shown to be singular and
+block-tridiagonal.
+e
+
+e
+The matrix C1 from (41) can also be reduced to the
+
+new · 9−1
+
+new ·
+
+DT
+
+following form:
+
+C1 = Imconn + 9
+
+− 1
+2
+conn ·
+Fk · 6M,xk
+HLa · 6M,{La/xk }
+k
+
+k
+
+· FT
+k
+· FT
+k
+
+Fk · 6M,{xk /La}
+k
+HLa · 6M,La
+
+·( HLa )T
+·( HLa )T
+
+k
+
+!
+
+·9
+
+− 1
+2
+conn
+− 1
+2
+conn ·
+
+= 9
+
+9conn +
+
+"
+
+Fk · 6M,xk
+HLa · 6M,{La/xk }
+k
+
+· FT
+k
+· FT
+k
+
+k
+
+Fk · 6M,{xk /La}
+k
+HLa · 6M,La
+
+·( HLa )T
+·( HLa )T
+
+k
+
+! #
+
+(76)
+
+( La)
+
+( xk)
+
+( xk+1)
+
+· · ·
+
+( xk+L)
+
+− 1
+2
+conn
+
+·9
+
+.
+= 9
+
+− 1
+2
+conn · C2 · 9
+
+− 1
+2
+conn,
+
+= 9
+
+− 1
+2
+conn ·
+
+0
+HLa
+1
+...
+HLa
+no
+
+
+
+
+
+
+
+Fk
+0
+...
+0
+
+−I
+Hxk+1
+1
+...
+Hxk+1
+no
+
+0
+
+· · ·
+· · · Hxk+L
+. . .
+· · · Hxk+L
+
+...
+
+1
+
+no
+
+
+
+
+
+
+
+(73)
+
+.
+= 9conn +
+
+C2
+
+where 6M,{xk /La}
+k
+variables xk and La.
+
+Fk · 6M,xk
+HLa · 6M,{La/xk }
+k
+
+· FT
+k
+· FT
+k
+
+k
+
+Fk · 6M,{xk /La}
+k
+HLa · 6M,La
+
+·( HLa )T
+·( HLa )T
+
+!
+(77)
+is the prior cross-covariance between
+
+k
+
+ 
+ 
+ 
+1112
+
+The International Journal of Robotics Research 36(10)
+
+In addition, C1’s determinant and its inverse can be
+
+calculated through
+
+=
+
+C1
+
+C2
+9conn
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+Next, we can calculate term BT
+
+, C−1
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+1 = 9
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+· Bnew =
+1
+2
+
+(cid:0)
+conn · C−1
+2
+
+1
+
+new · C−1
+·
+
+FT ( HXnew )T
+− 1
+1
+(cid:1)
+2
+2
+conn ·
+conn · 9
+
+· 9
+
+1
+
+new · C−1
+BT
+− 1
+2
+conn · 9
+
+9
+
+=
+
+FT ( HXnew )T
+
+· C−1
+2
+
+·
+
+(cid:0)
+
+(cid:1)
+
+F
+HXnew
+
+(cid:18)
+
+(cid:19)
+
+where
+
+Bnew
+
+.
+=
+
+F
+HXnew
+
+(cid:18)
+
+(cid:19)
+
+1
+2
+
+conn · C−1
+2
+
+1
+2
+conn.
+
+· 9
+
+(78)
+
+· Bnew from (39) as
+
+F
+HXnew
+
+(cid:18)
+=
+
+(cid:19)
+new · C−1
+BT
+
+2
+
+e
+
+·
+
+Bnew,
+
+(79)
+
+e
+
+contains the Jacobian entries
+
+of Bnew not weighted by factors’ noise 9conn. Then, the
+unfocused IG objective from (16) in the SLAM setting
+is given by
+
+e
+
+JIG(a) =
+
+9conn
+
++
+
+C2
+
+n0 · γ
+2
+C−1
+2
+
+−
+
+ln
+
+1
+2
+Bnew +
+
++
+
+1
+2
+
+ln|
+
+BT
+
+new ·
+
+ln
+
+1
+2
+(cid:12)
+new ·
+(cid:12)
+
+·
+
+(cid:12)
+(cid:12)
+
+e
+
+e
+
+e
+
+e
+
+DT
+
+(80)
+
+(cid:12)
+Dnew|.
+(cid:12)
+
+new · 9−1
+(cid:12)
+(cid:12)
+Above we have shown in detail how our rAMDL approach
+can be applied to information-based SLAM planning prob-
+lem types. The derived equation (80) is very similar to the
+general solution from (39), having exactly the same run-
+time complexity. However, within both (80) and (77) we
+can see a clear separation between noise of factor model
+and the actual Jacobian entries. Such a separation can pro-
+vide further theoretical insight about how different terms of
+the SLAM problem affect the information impact of candi-
+date action a = uk:k+L−1. Moreover, it can provide a good
+starting point for the derivation of JIG(a)’s gradient with
+respect to uk:k+L−1, which, in turn, can be used for gradient-
+descent algorithms that search for locally optimal controls
+(Indelman et al., 2015; Van Den Berg et al., 2012). Note
+the variable ordering in the above equation serves only for
+visualization; the derivation remains valid for an arbitrary
+variable ordering.
+
+In addition, for the sake of completeness we also pro-
+vide a SLAM-speciﬁc solution for focused cases, where
+we consider either reducing the entropy of the last pose
+(X F
+k ≡ Lk).
+The corresponding derivation can be found in Appendices
+A.7 and A.8.
+
+k+L ≡ xk+L) or of all the mapped landmarks (X F
+
+4.3. Graph reduction
+
+It is a known fact that in long-term SLAM applications,
+the state dimension of smoothing techniques can grow
+unboundedly. In such cases, even the most efﬁcient state-of-
+the-art estimation algorithms such as iSAM2 (Kaess et al.,
+2012) can become slow and will not support online opera-
+tion. Approaches such as graph reduction and graph sparsi-
+ﬁcation try to tackle the problem by reducing the number of
+
+variables (Ila et al., 2010; Kretzschmar and Stachniss, 2012;
+Paull et al., 2016) and sparsifying entries of the information
+matrix (Carlevaris-Bianco et al., 2014; Huang et al., 2012;
+Mazuran et al., 2014; Vial et al., 2011), respectively.
+
+Graph reduction requires us to ﬁrst select nodes to expel.
+In such cases, having a state vector X with variables
+{x1, . . . , xn}, it would be logical to remove the most uncer-
+tain node, say xi, without which the rest of the variables
+.
+= {X \ xi} would have the smallest entropy H( Xi). In
+Xi
+this section we outline a new approach for such a selection
+which is closely related to our rAMDL technique.
+
+Similarly to the focused objective function from (17),
+i among state vari-
+
+the best choice for expelled variable x∗
+ables will minimize the following objective function:
+
+x∗
+i = arg min
+
+xi∈X
+
+JGR(xi)
+
+= H( Xi) =
+
+(n − nx) ·γ
+2
+
+−
+
+1
+2
+
+ln
+
+3M,Xi
+
+,
+
+(81)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+where H( Xi) is entropy of the state variables without xi, and
+nx is xi’s dimension.
+
+Using Equation (26) from our approach, in order to
+
+calculate 3M,Xi , we can reduce our objective function to
+
+JGR(xi) =
+
+(n − nx) ·γ
+2
+
+−
+
+1
+2
+
+ln
+
+3
+
++
+
+1
+2
+
+ln
+
+3xi
+
+,
+
+(82)
+
+(cid:12)
+where 3 is the information matrix of the whole X , and 3xi
+(cid:12)
+is its partition related to variable xi.
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+Given that all xi variables have the same dimension
+i will also
+
+nx, eventually we can conclude that optimal x∗
+minimize
+
+x∗
+i = arg min
+
+xi∈X
+
+JGR(xi) = ln
+
+3xi
+
+(83)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+which practically implies calculating the determinant of
+every partition 3xi and choosing the state variable xi with
+minimal determinant value. In cases where all xi are scalars,
+3xi
+is just a value from the diagonal of the information
+matrix 3. In cases where xi’s dimension is nx, we will have
+(cid:12)
+to calculate the determinants of n matrices, each one of
+(cid:12)
+dimension nx × nx. Taking into account that nx is usually
+not big at all (e.g. a 3D pose has six dimensions), the overall
+calculation is very fast and is just O(n).
+
+(cid:12)
+(cid:12)
+
+5. Alternative approaches
+
+We compare the presented rAMDL approach with two alter-
+natives, namely the From-Scratch and iSAM techniques.
+
+In From-Scratch, the posterior information matrix 3k+L
+is computed by adding new information AT · A, followed
+by the calculation of its determinant. In the focused sce-
+nario, the marginal information matrix of X F
+k+L is retrieved
+through the Schur complement performed on 3k+L, and its
+determinant is then computed.
+
+The second alternative, uses the iSAM algorithm (Kaess
+et al., 2012) to incrementally update the posterior. Here the
+
+Kopitkov and Indelman
+
+1113
+
+(linearized) system is represented by a square root informa-
+tion matrix Rk, which is encoded, while exploiting sparsity,
+by the Bayes tree data structure. The posterior matrix Rk+L
+is acquired (e.g. via Givens rotations (Kaess et al., 2012)
+or another incremental factorization update method), and
+
+then the determinant is calculated |3k+L| =
+
+N
+
+r2
+ii, with
+
+i=1
+Q
+
+rii being the ith entry on the diagonal of triangular Rk+L.
+For the focused case, the marginal covariance matrix of
+X F
+k+L is computed by recursive covariance per-entry equa-
+tions (Kaess and Dellaert, 2009) that exploit the sparsity of
+matrix Rk+L.
+
+While the iSAM technique outperforms batch From-
+Scratch, it still requires calculating Rk+L for each action,
+which can be expensive, particularly in loop closures,
+and requires a copy/clone of the original matrix Rk. In
+contrast, in rAMDL, the per-candidate action calculation
+(e.g. in (37)) has constant complexity in general, given
+the prior marginal covariance terms that are calculated
+only once.
+
+6. Computational complexity analysis
+
+In this section, we analyze the computational complex-
+ity of the developed-herein family of rAMDL algorithms,
+and of alternative approaches from Section 5. We sum-
+marize the runtime complexity of different approaches in
+Table 4.
+
+The computational complexity of rAMDL algorithms
+consists of two parts. First, there is a one-time computation
+of prior covariance entries 6M,IXold
+old |F
+,
+k
+see Section 3.4). Second, there is a per-candidate compu-
+tation of an approach-speciﬁc objective function. There-
+fore, overall computational complexity is equal to O(one-
+time complexity ) +O(per-action complexity × number of
+candidate actions).
+
+(and sometimes 6
+
+IX U
+k
+
+The prior covariance 6M,IXold
+
+is calculated from the
+k
+square root information matrix Rk using a recursive method
+as described in Golub and Plemmons (1980) and Kaess and
+Dellaert (2009). Its complexity is bounded by O(n2
+nz · n),
+where n is the state dimension and nnz is the number of
+non-zero entries in the Rk. However, typically its complex-
+ity depends on variable ordering within Rk and is much
+lower. For more detailed complexity analysis of this covari-
+ance recovery method, see Kaess and Dellaert (2009) and
+
+old |F
+
+IX U
+k
+
+Ila et al. (2015). For cases where 6
+is also required,
+we consider the method described in Algorithm 2 that
+calculates the prior conditional covariance entries through
+the Schur complement. Its complexity is bounded by the
+inverse calculation (6M,F
+)−1, which is O( |X F|3) with |X F|
+k
+being the dimension of focused variables.
+
+The per-action complexity of rAMDL algorithms was
+analyzed in Sections 3.2–3.3, next to the equation deﬁnition
+of each approach, and is summarized in Table 4.
+
+The complexity of both focused and unfocused
+From-Scratch approaches is governed by the term O( N 3),
+with N being the posterior state dimension.
+In the
+unfocused case, the From-Scratch method calculates a
+determinant of dimension N for each candidate action. In
+the focused case, the From-Scratch method calculates a
+Schur complement per each candidate, which is typically
+more computationally expensive than the computation of a
+matrix determinant.
+
+The iSAM technique propagates posterior belief per each
+candidate action and then evaluates the appropriate pos-
+terior entropy (unfocused or focused). This belief
+propagation is done efﬁciently through a Bayes tree, yet
+its runtime complexity is difﬁcult to analyze. It is declared
+in Kaess et al. (2012) that typically belief propagation
+takes O( N 1.5). In the unfocused case, |3k+L| is calcu-
+lated in O( N) through diagonal entries of Rk+L, providing
+a ﬁnal per-candidate complexity of O( N 1.5) for the iSAM
+Unfocused approach. In the focused case the marginal
+covariance matrix of focused variables X F
+k+L is computed
+via the method from Kaess and Dellaert (2009), which
+is O( N 2
+nz · N) where N is the posterior state dimension
+and Nnz is the number of non-zero entries in the posterior
+square root information matrix Rk+L. Further, the determi-
+nant of the marginal covariance matrix is computed, which
+takes O( |X F|3). In total the iSAM Focused approach will
+nz ·N +|X F|3).
+have per-candidate complexity of O( N 1.5 +N 2
+the per-candidate
+complexity of rAMDL does not depend on the state
+dimension while the complexity of both iSAM and From-
+in the unfocused case,
+Scratch does. For example,
+rAMDL requires O( M( F(a))3 ), while iSAM and From-
+Scratch need O( N 1.5) and O( N 3), respectively. Since
+M( F(a)) represents the total dimension of newly intro-
+duced factors by candidate action a, it is typically con-
+siderably smaller than the posterior state dimension N,
+i.e. M( F(a)) (cid:28) N. This difference makes the rAMDL
+technique signiﬁcantly faster, as will be shown further in
+Section 7.
+
+From Table 4 we can see that
+
+Note that we do not analyze the BSP complexity in terms
+of the horizon lag of a candidate action. Instead, we use
+dimensions of different components of prior and posterior
+factor graphs since these give a better insight on the real
+complexity of the factor-graph-based algorithms presented
+herein.
+
+7. Results
+
+In this section, we evaluate the performance of the pro-
+posed approach and compare it with alternative approaches
+considering unfocused and focused instantiations of
+several fundamental problems: sensor deployment, mea-
+surement selection, and autonomous navigation in unknown
+environments.
+
+In sensor deployment, each candidate action represents
+a set of possible locations for deploying a sensor, with a
+
+1114
+
+The International Journal of Robotics Research 36(10)
+
+Table 4. The presented approaches and their alternatives, along with the corresponding runtime complexity. Used symbols are: n is the
+dimension of prior state vector Xk; nnz is the number of non-zero entries in a prior square root information matrix Rk; n0 is the dimension
+of newly introduced variables Xnew by candidate action a; N = n + n0 is the dimension of posterior state vector Xk+L; Nnz is the number
+of non-zero entries in a posterior square root information matrix Rk+L; F (a) represents newly introduced factors by candidate action a;
+M( F (a)) is the total dimension of newly introduced factors F (a); F conn(a) represents a subset of factors from F (a) that involves at
+least one old variable from Xk; M( F conn(a)) is the total dimension of factors in F conn(a). Further details can be found in Section 6.
+
+Approach
+
+Per-action complexity
+
+One-time complexity
+
+Non-augmented BSP rAMDL approaches
+rAMDL Unfocused, equation (24)
+rAMDL Focused, equation (30)
+Augmented BSP rAMDL approaches
+rAMDL Unfocused, equations (37), (38)
+rAMDL-Extended Unfocused, equations (39), (41)
+rAMDL Focused New , equations (42), (38)
+rAMDL-Extended Focused New , equations (44), (41)
+rAMDL Focused Old, equations (45), (46)
+rAMDL-Extended Focused Old, equations (47), (48)
+Alternative approaches
+From-Scratch Unfocused & Focused, Section 5
+iSAM Unfocused, Section 5
+iSAM Focused, Section 5
+
+O( M( F (a))3 )
+O( M( F (a))3 )
+
+O( M( F (a))3 )
+O( M( F conn(a))3 +n03)
+O( M( F (a))3 +n03)
+O( M( F conn(a))3 +n03)
+O( M( F (a))3 +n03)
+O( M( F conn(a))3 +n03)
+
+O(n2
+O(n2
+
+nz · n)
+nz · n + |X F |3)
+
+O(n2
+O(n2
+O(n2
+O(n2
+O(n2
+O(n2
+
+nz · n)
+nz · n)
+nz · n)
+nz · n)
+nz · n + |X F |3)
+nz · n + |X F |3)
+
+O( N 3)
+O( N 1.5)
+O( N 1.5 + N 2
+
+nz · N + |X F |3)
+
+-
+-
+-
+
+single sensor deployment corresponding to a unary factor.
+We consider a non-myopic setting and let each candidate
+action represent two sensor locations. In the measurement
+selection problem, we consider a greedy decision-making
+paradigm in the context of aerial visual SLAM with pair-
+wise factors.
+
+Further, we present simulation results of applying our
+approach to autonomous navigation in unknown environ-
+ments (both unfocused and focused cases) on syn-
+thetic and real-world datasets. The robot has to visit a
+sequence of goals while minimizing an objective function
+comprising two terms (to be deﬁned in the sequel): dis-
+tance to goal, and an uncertainty metric. Candidate actions
+are non-myopic and involve multiple new and old state
+variables.
+
+In all cases, the presented simulations reﬂect the com-
+putational performance of different approaches developed
+within this paper, and alternative methods that are described
+in Section 5. In Table 5 we summarize the considered
+approaches in each of the above problems, and refer to
+appropriate equations for each case. Moreover, we empha-
+size that all techniques presented herein, rAMDL and their
+alternatives, are mathematically identical in the sense that
+they determine identical optimal actions given a set of
+candidate actions.
+
+The code is implemented in Matlab; for measurement
+selection and autonomous navigation we use the GTSAM
+library (Dellaert, 2012; Kaess et al., 2012). All scenarios
+were executed on a Linux machine with an i7 2.40 GHz
+processor and 32 GB of memory.
+
+7.1. Sensor deployment ( focused and
+
+unfocused)
+
+In this section, we apply our approach rAMDL to the sen-
+sor deployment problem, considering both focused and
+unfocused instantiations of this problem (see Section 4.1
+for a detailed formulation). The prior of the sensor ﬁeld is
+represented by the information matrix 3 and it is dense as
+usual in the problem of sensor deployment.
+
+We compare our rAMDL approach against the batch
+From-Scratch technique that is described in Section 5, and
+also against the Sequential rAMDL described in Section 4.1,
+which does not require marginal covariance computation at
+each decision.
+
+While decision making involves evaluating the impact of
+an action for all candidate actions A, we ﬁrst analyze action
+impact calculation (JIG(a)) for a single candidate a ∈ A,
+comparing rAMDL with the From-Scratch approach for the
+unfocused case. Figure 12 shows these timing results as
+a function of state dimension n (Figure 12a) and as function
+of Jacobian A’s height m (Figure 12b). As expected, n effects
+the running time of both the From-Scratch technique and
+calculation of 6k (inverse of 3k, which is dense in the case
+of sensor deployment), while m only effects the calculation
+of the IG objective of rAMDL (red line).
+
+One might think, based on Figure 12a and (b), that the
+proposed approach is slower than the From-Scratch alterna-
+tive because of the time needed for inverse calculation to
+obtain 6k. Yet, it is exactly here that our calculation re-use
+paradigm comes into play (see Section 3.4): this calcula-
+tion is performed only once for all candidate actions A,
+
+Kopitkov and Indelman
+
+1115
+
+Table 5. Considered approaches in different problems from Section 7, along with their appropriate equations
+
+Problem
+
+Approach
+
+Equations/Section
+
+Sensor Deployment,
+Section 7.1
+
+Measurement selection,
+Section 7.2
+Autonomous Navigation,
+Section 7.3
+
+rAMDL Unfocused
+rAMDL Focused
+Sequential rAMDL
+Partitions
+From-Scratch, Unfocused & Focused
+rAMDL Unfocused
+iSAM Unfocused
+rAMDL Unfocused
+rAMDL-Extended Unfocused
+rAMDL Focused New
+rAMDL-Extended Focused New
+rAMDL Focused Old
+rAMDL-Extended Focused Old
+From-Scratch, Unfocused & Focused
+iSAM, Unfocused & Focused
+
+Equation (24)
+Equation (30)
+Equations (63), (64)
+Givens rotations & Equation (27)
+Section 5
+Equation (24)
+Section 5
+Equations (37), (38)
+Equations (39), (41)
+Equations (42), (38)
+Equations (44), (41)
+Equations (45), (46)
+Equations (47), (48)
+Section 5
+Section 5
+
+while, given 6k, calculating IG for each action is no longer
+a function of n.
+
+The substantial
+
+reduction in running time of our
+approach, compared with the From-Scratch approach, can
+be clearly seen in Figure 12c, which considers the entire
+decision-making problem, i.e. evaluation of all candidate
+actions A. The ﬁgure shows the running time for sequen-
+tial decision making, where at each time instant we choose
+the best locations of two sensors, with around |A| = 105
+candidate actions. The number of all sensor locations is
+n = 625 in this example. Overall, 15 sequential decisions
+were made. As seen, decision making using our approach
+requires only about 5 seconds, while the From-Scratch
+approach requires about 400 seconds.
+
+The Sequential rAMDL technique is not always faster
+than rAMDL, as can be seen in Figure 12c. As described in
+Section 4.1 this technique will be superior in cases where
+the covariance calculation makes up a signiﬁcant part of
+the whole decision calculation. We can see that this is the
+case in Figure 12f, where the number of candidates is lim-
+ited to 100, and where the covariance calculation time is the
+biggest part in the decision making of the rAMDL approach.
+There we can see that Sequential rAMDL provides better
+performance than all other alternatives.
+
+We now consider the focused version of the sensor
+deployment problem (17). In other words, the goal is to ﬁnd
+sensor locations that maximally reduce uncertainty about
+chosen focused variables X F. We have 54 such variables,
+which are shown in Figure 13c, while the rest of the problem
+setup remains identical to the unfocused case.
+
+In Figure 13 we show the corresponding results of
+rAMDL, compared with the From-Scratch. The latter ﬁrst
+calculates, for each candidate action, the posterior 3+ =
+3 + AT A, followed by calculation of the Schur comple-
+ment 3M,F of the focused set X F, and its determinant
+3M,F
+H(a) (17). We also compare it
+with an additional approach, termed Partitions, which uses
+(cid:12)
+(cid:12)
+
+in order to obtain J F
+
+(cid:12)
+(cid:12)
+
+Givens rotations to compute R+ and instead of performing
+the Schur complement, calculates the posterior entropy of
+the focused set via (27). This equation is one of our main
+contributions, being an essential step in the derivation of our
+approach, and we show here that compared with the From-
+Scratch technique, the Partitions approach is considerably
+faster. Our focused approach applies the matrix determi-
+nant lemma, transforming (27) into (30), which, together
+with the re-use concept (Section 3.4), makes it possible to
+drastically reduce the running time as shown in Figure 13a
+(10 seconds versus about 1000 seconds in Partitions and
+1300 seconds in From-Scratch).
+
+7.2. Measurement selection in SLAM
+
+In this section, we consider a measurement selection prob-
+lem (see Section 3.5) within a visual aerial SLAM frame-
+work, where one has to choose the most informative image
+feature observations from the numerous image features
+typically calculated for each incoming new image.
+
+We demonstrate application of our approach in this prob-
+lem, which, in contrast to the sensor selection problem,
+involves pairwise factors of the type p( zi,j|xi, lj), relating
+between an image observation zi,j, camera pose xi, and
+landmark lj.
+
+A top view of the considered aerial scenario is shown
+in Figure 14a: an aerial vehicle performs visual SLAM,
+mapping the environment and at the same time localizing
+itself. The ﬁgure shows the landmarks and the estimated
+trajectory, along with the uncertainty covariance for each
+time instant. One can clearly see the impact of loop-closure
+observations on the latter. In the considered scenario there
+are about 25,000 landmarks and roughly 500 image features
+in each view.
+
+The number of image features that correspond to previ-
+ously seen landmarks is relatively small (around 30–50, see
+Figure 14b), which corresponds to a much smaller set of
+
+1116
+
+The International Journal of Robotics Research 36(10)
+
+Fig. 12. Unfocused sensor deployment scenario. Running time, for simplicity termed as “Time” within graphs, for calculating the
+impact of a single action as a function of state dimension n (a) and as a function of Jacobian A’s height m (b). In (a) m = 2 and in (b)
+n = 625. rAMDL Unfocused Objective represents only the calculation time of candidates’ impacts (IG objective for all actions),
+without one-time calculation of prior covariance; Covariance Inverse represents the time it took to calculate covariance matrix 6k from
+dense information matrix 3k, 6k = 3−1
+. (c) Running time for sequential decision making, i.e. evaluating the impact of all candidate
+k
+actions, each representing candidate locations of two sensors. (d) Prior and ﬁnal uncertainty of the ﬁeld, with red dots marking selected
+locations; note locations with negligible uncertainty are the observed locations where sensors were deployed. (e) Number of action
+candidates per decision. (f) Running time for sequential decision making, with the number of candidates limited to 100.
+
+actions A compared with the sensor deployment problem
+(Section 7.1) where the cardinality of A was huge (105).
+Such a dataset was chosen on purpose in order to show
+the behavior of the proposed algorithm in domains with a
+small number of candidates. In addition, in this scenario
+the actions are myopic since the measurements are greedily
+selected.
+
+In addition, as opposed to the sensor deployment prob-
+lem, in the current problem, state dimensionality n grows
+with time as more poses and landmarks are added into
+inference (see Figure 14c) and the information matrix is
+sparse.
+
+Figure 14d shows the timing results for choosing 10 most
+informative image observations comparing the proposed
+
+Kopitkov and Indelman
+
+1117
+
+Fig. 13. Focused sensor deployment scenario. (a) Overall time it took to make a decision with different approaches; rAMDL
+Focused Objective represents only the calculation of candidates’ impacts (IG objective for all actions) while rAMDL Focused
+represents both one-time calculation of prior covariance 6k and candidates’ evaluation. (b) Final uncertainty of the ﬁeld, with red
+dots marking selected locations; note locations with negligible uncertainty are the observed locations where sensors were deployed. (c)
+Focused set of variables (green circles) and locations selected by algorithm (red dots). (d) Overall system entropy (above) and entropy
+of focused set (bottom) after each decision, with the blue line representing the unfocused algorithm and the red line representing
+the focused algorithm. Note that all unfocused methods make exactly the same decisions, with difference only in their runtime
+complexity. The same is also true for all focused methods.
+
+rAMDL with the iSAM approach (computing the poste-
+rior square root information matrix using iSAM, and then
+calculating the determinant; see Section 5). This BSP prob-
+lem is solved sequentially, each time a new image is
+acquired. As seen, our approach rAMDL is substantially
+faster than the iSAM, while providing identical results (the
+same decisions). In particular, the running time of the iSAM
+approach for the last time index with n = 10,000 state
+dimensionality, is around 7 seconds. In contrast, rAMDL
+takes about 0.05 seconds: calculation time of action impacts
+via calculation re-use is negligible (red line), while the
+one-time calculation of marginal covariance 6M,XAll
+(yel-
+low line) is performed efﬁciently, in the current implemen-
+tation, via sparse factorization techniques using GTSAM
+(Dellaert, 2012; Kaess et al., 2012).
+
+k
+
+7.3. Autonomous navigation in an unknown
+
+environment
+
+In this section we present simulation results of apply-
+ing our approach to autonomous navigation in unknown
+environments (both unfocused and focused cases) on
+synthetic and real-world datasets.
+
+In the synthetic scenario (Figure 15c), the robot’s task is
+to visit a predeﬁned set of goals G = {G1, . . . , G14} in an
+unknown environment while reducing an uncertainty met-
+ric. More speciﬁcally, the state vector Xk contains all robot
+poses and landmarks mapped until time tk (see Section
+4.2). At each point of time, the robot autonomously selects
+an optimal non-myopic action a = uk:k+L−1, performs
+its ﬁrst control uk, and subsequently observes landmarks
+within a radius of 900 meters from its new position. The
+
+1118
+
+The International Journal of Robotics Research 36(10)
+
+Fig. 14. Measurement selection scenario. (a) Simulated trajectory of a robot; black dots are the landmarks, blue marks and surrounding
+ellipses are the estimated trajectory along with the uncertainty covariance for each time instant, red mark is the robot’s initial pose. (b)
+Number of measurement candidates per decision. (c) State’s dimension n per decision. (d) Overall time it took to evaluate the impacts of
+all poses’ measurements, with different approaches; rAMDL Unfocused Objective represents only the calculation of candidates’
+impacts (IG objective for all actions) while rAMDL Unfocused represents both one-time calculation of marginal covariance 6M,XAll
+and candidates’ evaluation.
+
+k
+
+landmarks can be either old (seen before) or new (seen
+for the ﬁrst time). Next, a SLAM solution is calculated
+given these new observations and a motion model. To that
+end, the factor graph from the previous inference time
+is updated with the new observation and motion model
+factors, and new variable nodes, representing the current
+robot pose and new landmarks, are added (see Section
+4.2). Afterwards, the next action is chosen and executed,
+and so on.
+
+The set of candidate actions A contains one action that
+navigates the robot from its current pose xk to the current
+goal Gi from a predeﬁned set G (see Figure 15c); it also
+contains a set of “loop-closure” actions that are generated in
+the following way. We start by taking all mapped landmarks
+within a radius of 1000 meters from the robot’s current pose.
+We cluster these landmarks, similarly to Kim and Eustice
+(2014), and obtain a set of landmark clusters. Each cluster’s
+center gcl represents a “loop-closure” goal and contributes
+
+a “loop-closure” action acl = uk:k+L−1 that navigates the
+robot from xk to gcl.
+
+Each action in A, taking the robot from xk to location g,
+is constructed by ﬁrst discretizing the map into a grid and
+thereafter searching for an optimal trajectory from the cur-
+rent position to g using an A∗ search algorithm, similarly
+to Kim and Eustice (2014) and Indelman et al. (2015). The
+optimal candidate action is chosen by evaluating an objec-
+tive that has the following two terms: distance to the current
+goal Gi and a term of uncertainty
+
+J (a) = d(xk+L, Gi) +J F
+
+H/IG(a) .
+
+(84)
+
+In the scenarios from Figures 15, 16, 17, and 19 we con-
+sider as the term of uncertainty the entropy J F
+H(a) of the
+last pose xk+L in the planning segment (Section 3.3.3.1),
+while in the scenario from Figure 18 we instead use the
+IG of mapped until now landmarks J F
+IG(a) (Section 3.3.3.2).
+Note that the running time presented in the ﬁgures refers
+
+Kopitkov and Indelman
+
+1119
+
+Fig. 15. Focused BSP scenario with focused robot’s last pose. (a) Dimensions of the BSP problem (state dimension n, average
+number of new factor terms m, average number of new variables n0, average number of old involved variables l) at each time. (b)
+Number of action candidates at each time. (c) Final robot trajectory. Blue dots are mapped landmarks, the red line with small ellipses is
+the estimated trajectory with pose covariances, the blue line is the real trajectory, the red pluses with numbers beside them are robot’s
+goals. The green mark is the robot’s start position. (d) Enlarged view of the robot’s trajectory near goal 12.
+
+only to the uncertainty term, since it is the focus of this
+paper and because the calculation complexity of the ﬁrst
+term (Euclidean distance d(xk+L, Gi)) is relatively insigniﬁ-
+cant. As can be seen from above, we consider a non-myopic
+setting and let each candidate action represent trajectories
+of various length. Limiting the clustering process to a spe-
+ciﬁc radius is done in order to bound the horizon laIn the
+scenarios fromg of candidate actions.
+
+In parallel, in scenarios from Figures 16 and 17, an
+unfocused uncertainty objective JIG(a) is calculated
+(Section 3.3.2), mainly for the purpose of performance
+comparison between focused and unfocused cases.
+The robot’s motion is controlled only by the focused
+objective function.
+
+Four techniques were applied to solve the planning prob-
+lem: more common techniques From-Scratch and iSAM
+(Section 5) and the proposed techniques, our general
+approach rAMDL and its extension rAMDL-Extended that
+exploits the Jacobian inner structure from (34) (see Table 5,
+and Sections 3.3.2 and 3.3.3.1). The calculated values of the
+objective function were numerically compared to validate
+that all four approaches are calculating exactly the same
+
+metric, thus yielding the same decisions and only differ in
+running time.
+
+In Figures 16 and 17 it can be clearly seen that while
+iSAM is faster than From-Scratch, the running time of
+both techniques is increasing with state dimensionality, as
+was mentioned previously. On the other hand, the running
+time of the rAMDL approach is shown to be bounded,
+due to horizon lag of all candidate actions being lim-
+ited (see Figure 15a). The number of candidate actions in
+our scenario is around 20 at each planning phase (Figure
+15b). Even with such a relatively small candidate set, the
+rAMDL approach is faster than its alternatives iSAM and
+From-Scratch, while the rAMDL-Extended approach is the
+fastest of all. This trend appears to be correct for both
+focused and unfocused objective functions, though
+for the later, iSAM comes very close to the rAMDL
+technique.
+
+While comparing the running time of both From-Scratch
+and iSAM in focused and unfocused objective func-
+tions, it is easy to see that the unfocused case is evalu-
+ated much faster. The reason for this is that the focused
+calculations contain computation of marginal covariance of
+
+1120
+
+The International Journal of Robotics Research 36(10)
+
+Fig. 16. Focused BSP scenario with focused robot’s last pose. (a) Running time of planning, i.e. evaluating the impact of all
+candidate actions, each representing a possible trajectory. Results are shown both for focused and unfocused cases. (b) Enlarged
+view of the fastest approaches from (a). (c) Focused approaches from (b). Note that iSAM Focused is not depicted because, as seen
+in (a), it is much slower compared with other focused techniques. (d) Unfocused approaches from (b). The lowest line, labeled
+Marginal Cov, represents the time it took to calculate prior marginal covariance 6M,XAll
+in rAMDL approach (see Section 3.4). As
+can be seen, while the rAMDL technique (Unfocused and Focused) is faster than From-Scratch and iSAM, the rAMDL-Extended
+technique gives even better performance. Further, it is interesting to note that the performance of Unfocused and Focused rAMDL
+is almost the same, as so is the performance of Unfocused and Focused rAMDL-Extended.
+
+k
+
+the focused variable (last pose xk+L) for each candidate
+action, which requires marginalization over the posterior
+information matrix 3k+L. Although this can be performed
+efﬁciently by exploiting the sparsity of matrix 3k+L (Kaess
+and Dellaert, 2009), the time complexity is signiﬁcantly
+affected by variable elimination ordering of the iSAM algo-
+rithm (Kaess et al., 2012). While in our simulation we
+did not modify the default ordering of iSAM (COLAMD
+heuristic), different strategies of ordering can be a point for
+future investigation.
+
+In contrast, for the rAMDL approach both unfocused
+(37)
+
+and focused objective
+
+(equations
+
+functions
+
+and (42)) have a similar complexity, which is sup-
+ported by the shown times. The same is correct for the
+rAMDL-Extended approach (equations (39) and (44)).
+
+Next, we repeated our autonomous navigation scenario,
+but this time X F
+k+L contained only landmarks seen by time
+k (see Figure 18). The IG of such a focused set X F
+k+L
+can be used as an objective function for example in the
+case when we want to improve 3D reconstruction quality.
+As can be seen in Figure 18, this focused set causes both
+From-Scratch and iSAM techniques to be much slower com-
+pared with their performance in the ﬁrst scenario, where
+k+L contained only xk+L. The reason for this is that X F
+X F
+k+L’s
+
+Kopitkov and Indelman
+
+1121
+
+Fig. 17. Focused BSP scenario with focused robot’s last pose. Running times from Figure 16 normalized by the number of
+candidates.
+
+dimension is much higher here, representing the dimen-
+sions of all landmarks, and computation of its marginal
+covariance is signiﬁcantly more expensive. In contrast, the
+performance of rAMDL has barely changed thanks to the
+re-use of calculations (see Section 3.4). Moreover, rAMDL-
+Extended performs even better than rAMDL, with candidate
+action impact evaluation being insigniﬁcant compared with
+the one-time calculation of marginal covariance, as can be
+seen in Figures 18e and (f).
+
+We also performed a hybrid simulation where part of the
+real-world Victoria Park dataset (Guivant et al., 2012) was
+used for ofﬂine planning (see Figure 19). At each timestep
+we collected candidate actions by clustering landmarks seen
+until that time, just as was done in the ﬁrst simulation. Fur-
+ther, we considered a focused objective function for each
+
+candidate with X F
+k+L containing only xk+L. After evaluat-
+ing all candidates, the robot was moved to the next pose
+according to the dataset. Recalling that our main contri-
+bution is to reduce time complexity, such an evaluation
+allowed us to compare the time performance of all of the
+considered techniques, despite not actually using the cal-
+culated actions in the hybrid simulation. As can be seen,
+here rAMDL and rAMDL-Extended also outperform both of
+the alternatives, From-Scratch and iSAM, keeping the same
+trends that were observed in previous simulations.
+
+8. Conclusions
+
+We have developed a computationally efﬁcient and exact
+approach for non-myopic focused and unfocused
+
+1122
+
+The International Journal of Robotics Research 36(10)
+
+Fig. 18. Focused BSP scenario with focused landmarks. (a) Number of action candidates at each time. (b) Final robot trajectory.
+(c) Running time of planning, i.e. evaluating the impact of all candidate actions, each representing a possible trajectory. (d) Running
+time from (c) normalized by number of candidates. (e) Enlarged view of the fastest approaches from (c). (f) Enlarged view of the
+fastest approaches from (d). The lowest line, labeled Marginal Cov, represents the time it took to calculate the prior marginal covariance
+6M,XAll
+k
+
+in the rAMDL approach (see Section 3.4).
+
+BSP in both augmented and non-augmented settings, in
+high-dimensional state spaces. As a key contribution, we
+have developed an augmented version of the well-known
+general matrix determinant lemma and used both of them
+to efﬁciently evaluate the impact of each candidate action
+
+on posterior entropy, without explicitly calculating the pos-
+terior information (or covariance) matrices. The second
+ingredient of our approach is the re-use of calculations,
+that exploits the fact that many calculations are shared
+among different candidate actions. Our approach drastically
+
+Kopitkov and Indelman
+
+1123
+
+Fig. 19. Focused BSP scenario with focused robot’s last pose, using the Victoria Park dataset. (a) Number of action candidates at
+each time. (b) Final robot trajectory. (c) Running time of planning, i.e. evaluating the impact of all candidate actions, each representing
+a possible trajectory. (d) Running time from (c) normalized by the number of candidates. (e) Enlarged view of the fastest approaches
+from (c). (f) Enlarged view of the fastest approaches from (d). The lowest line, labeled Marginal Cov, represents time it took to calculate
+the prior marginal covariance 6M,XAll
+
+in the rAMDL approach (see Section 3.4).
+
+k
+
+reduces running time compared with the state of the art,
+especially when the set of candidate actions is large, with
+running time being independent of state dimensionality that
+increases over time in many of BSP domains. The approach
+has been examined in three problems, sensor deployment,
+measurement selection in visual SLAM, and autonomous
+navigation in unknown environments, using both simulated
+and real-world datasets, and exhibiting in each superior per-
+formance compared with the state of the art, and reducing
+
+running time by several orders of magnitude (e.g. 5 versus
+400 seconds in sensor deployment).
+
+Funding
+
+The author(s) disclosed receipt of the following ﬁnancial support
+for the research, authorship, and/or publication of this article: This
+work was supported by the Israel Science Foundation.
+
+1124
+
+References
+
+Agha-Mohammadi AA, Chakravorty S and Amato NM (2014)
+FIRM: Sampling-based feedback motion planning under
+motion uncertainty and imperfect measurements. The Interna-
+tional Journal of Robotics Research 33(2): 268–304.
+
+Bai S, Wang J, Chen F and Englot B (2016) Information-theoretic
+exploration with Bayesian optimization. In: IEEE/RSJ Interna-
+tional Conference on Intelligent Robots and Systems (IROS).
+IEEE, pp. 1816–1822.
+
+Bai Z, Fahey G and Golub G (1996) Some large-scale matrix
+computation problems. Journal of Computational and Applied
+Mathematics 74(1): 71–89.
+
+Carlevaris-Bianco N, Kaess M and Eustice RM (2014) Generic
+node removal for factor-graph SLAM. IEEE Transactions on
+Robotics 30(6): 1371–1385.
+
+Carlone L, Censi A and Dellaert F (2014) Selecting good
+measurements via L1 relaxation: A convex approach for
+robust estimation over graphs. In: IEEE/RSJ International
+Conference on Intelligent Robots and Systems (IROS). IEEE,
+pp. 2667–2674.
+
+Chaves SM, Walls JM, Galceran E and Eustice RM (2015) Risk
+aversion in belief-space planning under measurement acqui-
+sition uncertainty. In: IEEE/RSJ International Conference on
+Intelligent Robots and Systems (IROS). IEEE, pp. 2079–2086.
+Chli M and Davison AJ (2009) Active matching for visual track-
+ing. Robotics and Autonomous Systems 57(12): 1173–1187.
+Davis T, Gilbert J, Larimore S and Ng E (2004) A column approx-
+imate minimum degree ordering algorithm. ACM Transactions
+on Mathematical Software 30(3): 353–376.
+
+Davison A (2005) Active search for real-time vision. In: Interna-
+tional Conference on Computer Vision (ICCV), pp. 66–73.
+Dellaert F (2012) Factor graphs and GTSAM: A hands-on intro-
+duction. Technical Report GT-RIM-CP&R-2012-002, Georgia
+Institute of Technology.
+
+Golub G and Plemmons R (1980) Large-scale geodetic least-
+squares adjustment by dissection and orthogonal decomposi-
+tion. Linear Algebra and Its Applications 34: 3–28.
+
+Guivant J, Nieto J and Nebot E (2012) Victoria park dataset.
+Available at: http://www-personal.acfr.usyd.edu.au/nebot/vic
+toria_park.htm
+
+Harville DA (1998) Matrix algebra from a statistician’s perspec-
+
+tive. Technometrics 40(2): 164–164.
+
+Huang G, Kaess M and Leonard J (2012) Consistent sparsiﬁca-
+tion for graph optimization. In: Proceedings of the European
+Conference on Mobile Robots (ECMR), pp. 150–157.
+
+Huang S, Kwok N, Dissanayake G, Ha Q and Fang G (2005)
+Multi-step look-ahead trajectory planning in SLAM: Possi-
+bility and necessity. In: IEEE International Conference on
+Robotics and Automation (ICRA). IEEE, pp. 1091–1096.
+
+Ila V, Polok L, Solony M, Smrz P and Zemcik P (2015) Fast covari-
+ance recovery in incremental nonlinear least square solvers. In:
+IEEE International Conference on Robotics and Automation
+(ICRA). IEEE, pp. 4636–4643.
+
+Ila V, Porta JM and Andrade-Cetto J (2010) Information-based
+compact Pose SLAM. IEEE Transactions on Robotics 26(1):
+78–93.
+
+Indelman V (2015a) Towards cooperative multi-robot belief space
+planning in unknown environments. In: Proceedings of the
+International Symposium on Robotics Research (ISRR).
+
+The International Journal of Robotics Research 36(10)
+
+Indelman V (2015b) Towards information-theoretic decision mak-
+ing in a conservative information space. In: American Control
+Conference, pp. 2420–2426.
+
+Indelman V (2016) No correlations involved: Decision making
+under uncertainty in a conservative sparse information space.
+IEEE Robotics and Automation Letters 1(1): 407–414.
+
+Indelman V, Carlone L and Dellaert F (2015) Planning in the
+continuous domain: a generalized belief space approach for
+autonomous navigation in unknown environments. The Inter-
+national Journal of Robotics Research 34(7): 849–882.
+
+Kaelbling LP, Littman ML and Cassandra AR (1998) Planning
+and acting in partially observable stochastic domains. Artiﬁcial
+Intelligence 101(1): 99–134.
+
+Kaess M and Dellaert F (2009) Covariance recovery from a square
+root information matrix for data association. Robotics and
+Autonomous Systems 57(12): 1198–1210.
+
+Kaess M, Johannsson H, Roberts R, Ila V, Leonard J and Dellaert
+F (2012) iSAM2: Incremental smoothing and mapping using
+the Bayes tree. The International Journal of Robotics Research
+31: 217–236.
+
+Kaess M, Ranganathan A and Dellaert F (2008) iSAM: Incremen-
+tal smoothing and mapping. IEEE Transactions on Robotics
+24(6): 1365–1378.
+
+Kim A and Eustice RM (2014) Active visual SLAM for robotic
+area coverage: Theory and experiment. The International Jour-
+nal of Robotics Research 34(4–5): 457–475.
+
+Kopitkov D and Indelman V (2016) Computationally efﬁcient
+decision making under uncertainty in high-dimensional state
+spaces. In: IEEE/RSJ International Conference on Intelligent
+Robots and Systems (IROS). IEEE, pp. 1793–1800.
+
+Kopitkov D and Indelman V (2017) Computationally efﬁcient
+belief space planning via augmented matrix determinant
+lemma and re-use of calculations. IEEE International Confer-
+ence on Robotics and Automation (ICRA) and IEEE Robotics
+and Automation Letters (RA-L), Mutual Submission.
+
+Krause A, Singh A and Guestrin C (2008) Near-optimal sensor
+placements in Gaussian processes: Theory, efﬁcient algorithms
+and empirical studies. Journal of Machine Learning Research
+9: 235–284.
+
+Kretzschmar H and Stachniss C (2012) Information-theoretic
+compression of pose graphs for laser-based SLAM. The Inter-
+national Journal of Robotics Research 31(11): 1219–1230.
+Kschischang F, Frey B and Loeliger HA (2001) Factor graphs and
+the sum-product algorithm. IEEE Transactions on Information
+Theory 47(2): 498–519.
+
+Levine D and How JP (2013) Sensor selection in high-
+dimensional gaussian trees with nuisances. In: Advances in
+Neural Information Processing Systems (NIPS), pp. 2211–
+2219.
+
+Mazuran M, Tipaldi GD, Spinello L and Burgard W (2014) Non-
+linear graph sparsiﬁcation for SLAM. In: Robotics: Science
+and Systems (RSS), pp. 1–8.
+
+Mu B, Agha-mohammadi Aa, Paull L, Graham M, How J and
+Leonard J (2015) Two-stage focused inference for resource-
+constrained collision-free navigation. In: Robotics: Science and
+Systems (RSS).
+
+Ouellette DV (1981) Schur complements and statistics. Linear
+
+Algebra and its Applications 36: 187–295.
+
+Patil S, Kahn G, Laskey M, Schulman J, Goldberg K and Abbeel
+P (2014) Scaling up Gaussian belief space planning through
+
+Kopitkov and Indelman
+
+1125
+
+covariance-free trajectory optimization and automatic differen-
+tiation. In: International Workshop on the Algorithmic Founda-
+tions of Robotics (WAFR), pp. 515–533.
+
+Paull L, Huang G and Leonard JJ (2016) A uniﬁed resource-
+constrained framework for graph SLAM. In: IEEE Interna-
+tional Conference on Robotics and Automation (ICRA). IEEE,
+pp. 1–8.
+
+Pineau J, Gordon GJ and Thrun S (2006) Anytime point-based
+approximations for large POMDPs. Journal of Artiﬁcial Intel-
+ligence Research 27: 335–380.
+
+Platt R, Tedrake R, Kaelbling L and Lozano-Pérez T (2010) Belief
+space planning assuming maximum likelihood observations.
+In: Robotics: Science and Systems (RSS), Zaragoza, Spain, pp.
+587–593.
+
+Prentice S and Roy N (2009) The belief roadmap: Efﬁcient plan-
+ning in belief space by factoring the covariance. The Interna-
+tional Journal of Robotics Research 28(11–12): 1448–1465.
+Stachniss C, Grisetti G and Burgard W (2005) Information gain-
+based exploration using Rao–Blackwellized particle ﬁlters. In:
+Robotics: Science and Systems (RSS), pp. 65–72.
+
+Valencia R, Morta M, Andrade-Cetto J and Porta J (2013) Plan-
+ning reliable paths with pose SLAM. IEEE Transactions on
+Robotics 29(4): 1050–1059.
+
+Van Den Berg J, Patil S and Alterovitz R (2012) Motion planning
+under uncertainty using iterative local optimization in belief
+space. The International Journal of Robotics Research 31(11):
+1263–1278.
+
+Vial J, Durrant-Whyte H and Bailey T (2011) Conservative sparsi-
+ﬁcation for efﬁcient and consistent approximate estimation. In:
+IEEE/RSJ International Conference on Intelligent Robots and
+Systems (IROS). IEEE, pp. 886–893.
+
+Walls JM, Chaves SM, Galceran E and Eustice RM (2015) Belief
+space planning for underwater cooperative localization. In:
+IEEE/RSJ International Conference on Intelligent Robots and
+Systems (IROS). IEEE, pp. 2264–2271.
+
+Zhu Z and Stein ML (2006) Spatial sampling design for prediction
+with estimated parameters. Journal of Agricultural, Biological,
+and Environmental Statistics 11(1): 24–44.
+
+Zimmerman DL (2006) Optimal network design for spatial pre-
+diction, covariance parameter estimation, and empirical predic-
+tion. Environmetrics 17(6): 635–652.
+
+Appendix
+
+A.1. Proof of Lemma 1
+
+Problem deﬁnition: given a positive-deﬁnite and symmetric
+matrix 3 ∈ Rn×n (e.g. a prior information matrix) and its
+inverse 6 (prior covariance matrix), ﬁrst 3 is augmented
+by k zero rows and columns and the result is stored in 3Aug.
+Then we have matrix A ∈ Rm×(n+k) and calculate 3+ =
+3Aug + AT · A (see Figure 1). We would like to express the
+determinant of 3+ in terms of 3 and 6.
+
+We start by modeling the matrix 3Aug through 6. By
+introducing k new variables, before adding any new con-
+straints involving these variables, we can say that new vari-
+ables are uncorrelated with old variables, and their uncer-
+tainty is inﬁnite (nothing yet is known about them). Then
+the appropriate covariance matrix after augmentation, 6Aug,
+can just be created by adding k zero rows and columns to 6,
+
+and setting new diagonal entries with parameter θ , noting
+that θ → ∞:
+
+6Aug =
+
+6
+0
+
+(cid:20)
+
+0
+θ · I
+
+.
+(cid:21)
+
+(85)
+
+Next, note that the inverse of 6Aug is given by the
+
+following expression:
+
+(6Aug)−1 =
+
+3 0
+(cid:15) · I
+0
+
+(cid:20)
+
+,
+(cid:21)
+
+(86)
+
+.
+= 1
+
+θ . Taking the limit (cid:15) → 0 into account, we
+where (cid:15)
+can see that the above equation converges to 3Aug as was
+deﬁned above. Then, in the limit, we have that ( 3Aug)−1 =
+6Aug. In addition, note that (cid:15) → 0, even that it never
+becomes zero, (cid:15) 6= 0, thus if needed we can divide by (cid:15)
+without worry.
+
+Taking into account the limit of (cid:15), expressing 3Aug
+through (86) will not change the problem deﬁnition. How-
+ever, such a model allows us to take the inverse of 3Aug:
+
+( 3Aug)−1 = 6Aug =
+
+6
+0
+
+(cid:20)
+
+0
+θ · I
+
+,
+
+(cid:21)
+
+(87)
+
+and therefore to use the generalized matrix determinant
+lemma (Harville, 1998):
+
+3+
+
+=
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+·
+(cid:12)
+(cid:12)
+
+Im + A · 6Aug · AT
+
+·
+
+3Aug
+Im + Aold · 6 · AT
+
+=
+
+3
+old + θ · Anew · AT
+(cid:12)
+(cid:12)
+new
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+· (cid:15)k
+
+(88)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+where matrices Aold ∈ Rm×n and Anew ∈ Rm×k are
+constructed from A by retrieving columns of only old n
+variables and of only new k variables, respectively (see
+Figure 7).
+
+Using the matrix determinant lemma once more, we
+
+obtain
+
+3+
+
+=
+
+3
+
+· (cid:15)k ·
+
+1
+
+·
+
+Ik + θ · AT
+
+new · 1−1 · Anew
+
+(89)
+
+(cid:12)
+where 1
+(cid:12)
+
+.
+(cid:12)
+= Im + Aold · 6 · AT
+(cid:12)
+
+(cid:12)
+(cid:12)
+Moving (cid:15) inside the last determinant term, we have
+
+old.
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+3+
+
+=
+
+3
+
+·
+
+1
+
+·
+
+(cid:15) · Ik + (cid:15) · θ · AT
+
+new · 1−1 · Anew
+
+(90)
+
+Recalling that (cid:15) → 0 and (cid:15) · θ = 1, we arrive at
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+3+
+
+=
+
+3
+
+·
+
+1
+
+·
+
+new · 1−1 · Anew
+AT
+
+.
+
+(91)
+
+The augmented determinant ratio will be
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+3+
+3
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+=
+
+Im +Aold · 6 · AT
+old
+
+·
+
+new·( Im +Aold · 6 · AT
+AT
+
+old)−1 ·
+
+new · 1−1 · Anew
+AT
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+Anew
+(cid:12)
+
+=
+
+1
+
+·
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+.
+
+(cid:12)
+(cid:12)
+
+(92)
+
+(cid:4)
+
+1126
+
+The International Journal of Robotics Research 36(10)
+
+A.2. Proof of Lemma 2
+
+For A’s structure given in (34), 1 from (32) will be
+
+From (10) we can see that the partition of the posterior
+
+information matrix 3R
+
+k+L can be calculated as
+
+1 = Im +
+
+Bold
+0
+
+(cid:18)
+
+(cid:19)
+
+· 6 ·
+
+BT
+old
+
+0
+
+=
+
+11
+0
+
+(cid:18)
+
+0
+Imnew (cid:19)
+
+(cid:0)
+
+(cid:1)
+old, mconn = M( F conn(a)),
+
+where 11 = Imconn + Bold · 6 · BT
+and mnew = M( F new(a)).
+
+Then we can conclude that
+
+1
+
+=
+
+11
+
+and that
+
+(cid:12)
+(cid:12)
+1−1 =
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+1−1
+1
+0
+
+(cid:12)
+(cid:12)
+0
+Imnew (cid:19)
+
+(cid:18)
+Now, by exploiting the structure of Anew we obtain
+
+(94)
+
+(95)
+
+.
+
+new · 1−1 · Anew =
+AT
+
+new DT
+BT
+
+new
+
+·
+
+1−1
+0
+1
+0 Imnew (cid:19)
+
+·
+
+(cid:18)
+
+Bnew
+Dnew
+
+(cid:18)
+new · Dnew.
+
+(cid:19)
+(96)
+
+(cid:0)
+= BT
+
+new · 1−1
+
+1
+
+(cid:1)
+· Bnew + DT
+
+Then we can conclude that the augmented determinant
+lemma will be:
+
+,
+
+(93)
+
+3R
+
+k+L = 3Aug,R
+
+k
+
++ AT
+
+RAR,
+
+(100)
+
+k
+
+where 3Aug,R
+can be constructed by augmenting 3k with
+zero rows and columns in the number of X U
+new’s dimension
+(see Figure 8). The above equation has an augmented deter-
+minant form as deﬁned in Section 3.3.1, and so the aug-
+mented determinant lemma can be applied on it. Using (32)
+we have
+
+=
+
+C
+
+·
+
+(AU
+
+new)T ·C−1 · AU
+new
+
+,
+
+(101)
+
+3R
+k+L
+3k
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+where C is deﬁned in (38).
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+Next, dividing (101) by (36), we obtain
+
+(cid:12)
+(cid:12)
+
+3R
+k+L
+3k+L
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(102)
+
+6M,F
+k+L
+
+=
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+=
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+·
+
+(cid:12)
+(cid:12)
+
+=
+
+3R
+3k
+k+L
+3k
+3k+L
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+new)T ·C−1 · AU
+(AU
+(cid:12)
+(cid:12)
+(cid:12)
+new
+(cid:12)
+(cid:12)
+(cid:12)
+new · C−1 · Anew
+AT
+
+(cid:12)
+(cid:12)
+(cid:12)
+,
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+k+L is given by
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+3+
+3
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+=
+
+11
+
+·
+
+new · 1−1
+BT
+
+1
+
+· Bnew + DT
+
+new · Dnew
+
+.
+
+(97)
+
+and posterior entropy of X F
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:4)
+
+J F
+H(a) =
+
+A.3. Proof of Lemma 3
+
+Consider the scenario of focused augmented BSP where
+the focused set X F
+k+L contains only newly added variables as
+deﬁned in Section 3.3.3.1, with an appropriate illustration
+shown in Figure 8.
+
+First, let us given an overview of the various partitions
+of Jacobian A that are relevant to our current problem
+(Figure 8). Here Aold, Anew, IAold, and ¬IAold have been
+introduced in previous sections. Further, we can partition
+Anew into AF
+new columns of new variables that are focused
+k+L ∈ RnF and AU
+new ≡ X F
+X F
+new columns of new unfocused
+variables X U
+new. Considering the ﬁgure, the set of all unfo-
+new} ∈ RnR ,
+cused variables in Xk+L will be X R
+k+L
+such that N = nF + nR, providing another A partition
+AR = [Aold, AU
+
+.
+= {Xold ∪ X U
+
+new].
+
+Next, we partition the posterior information matrix 3k+L
+k+L and X R
+
+k+L deﬁned above as
+
+respectively to the sets X F
+
+new)T ·C−1 · AU
+new
+
+nF · γ
+2
+1
+2
+
+ln
+
+−
+
++
+
+ln
+
+(AU
+
+1
+2
+new · C−1 · Anew
+AT
+
+(cid:12)
+(cid:12)
+
+.
+
+(cid:12)
+(cid:12)
+
+(103)
+
+(cid:12)
+(cid:12)
+
+(cid:4)
+Note that the variables inside information matrices do not
+have to be ordered in any particular way, and that the proof
+provided above is correct for any ordering whatsoever.
+
+(cid:12)
+(cid:12)
+
+A.4. Proof of Lemma 4
+For A’s structure given in (34), the term AT
+from (103), similarly to (96), will be
+
+new · C−1 · Anew
+
+new · C−1 · Anew = BT
+AT
+
+new · C−1
+
+1
+
+· Bnew + DT
+
+new · Dnew, (104)
+
+where C1 is deﬁned in (41).
+
+In the same way, we can conclude (see Figure 8) that
+
+(AU
+
+new)T ·C−1 · AU
+
+new =( BU
+
+new)T ·C−1
+
+1
+
+· BU
+
+Therefore, the posterior entropy of X F
+
+new+( DU
+
+new)T ·DU
+
+new.
+(105)
+k+L from (103) is
+
+3k+L =
+
+3R,F
+3R
+k+L
+k+L
+( 3R,F
+k+L)T 3F
+(cid:20)
+
+k+L(cid:21)
+
+.
+
+(98)
+
+given by
+
+As was shown in (26), determinant of the marginal covari-
+ance of X F
+
+k+L can be calculated through
+
+6M,F
+k+L
+
+=
+
+.
+
+(99)
+
+(cid:12)
+(cid:12)
+Now let us focus on the 3R
+k+L term from the right-hand side.
+
+(cid:12)
+(cid:12)
+
+3R
+k+L
+3k+L
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+J F
+H(a) =
+
+nF · γ
+2
+1
+2
+
+ln
+
+−
+
++
+
+ln
+
+1
+2
+(cid:12)
+new · C−1
+BT
+(cid:12)
+
+1
+
+( BU
+
+new)T ·C−1
+
+1
+
+· BU
+
+new + 3U|F
+
+a
+
+· Bnew + 3a
+
+,
+
+(cid:12)
+(106)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+where 3a = DT
+(cid:12)
+action’s factor graph G(a), and where 3U|F
+is the information matrix of variables X U
+
+new · Dnew is the information matrix of an
+new)T ·DU
+new
+new conditioned
+
+a =( DU
+
+Kopitkov and Indelman
+
+1127
+
+new ≡ X F
+on X F
+represented by G(a).
+
+k+L and calculated from the distribution
+
+(cid:4)
+Note that the variables inside information matrices do not
+have to be ordered in any particular way, and that the proof
+provided above is correct for any ordering whatsoever.
+
+A.5. Proof of Lemma 5
+
+Consider the scenario of focused augmented BSP where
+the focused set X F
+k+L contains only old variables, with
+appropriate illustration shown in Figure 9 and with various
+partitions of Jacobian A deﬁned in Section 3.3.3.2.
+
+First, let us look again over relevant partitions of Jaco-
+bian A (Figure 9). The Aold, Anew, IAold, and ¬IAold were
+already introduced in previous sections. From the ﬁgure
+we can see that ¬IAold can further be separated into ¬IAU
+old
+columns of old variables that are both not involved and
+unfocused (¬IX U
+old) and ¬IAF
+old columns of old variables that
+are both not involved and focused (¬IX F
+old). In addition, IAold
+can be partitioned into IAU
+old columns of old variables that
+are both involved and unfocused (IX U
+old), and IAF
+old columns
+of old variables that are both involved and focused (IX F
+old)
+(see Table 2). The set of focused variables is then X F
+k+L =
+old} ∈ RnF , containing both involved and not
+{¬IX F
+involved variables. We use the notation X F
+to
+remind us that the focused set of variables is part of both
+Xk+L and Xk.
+
+old ∪ IX F
+
+.
+= X F
+k
+
+k+L
+
+k+L
+
+old ∪ IX U
+
+.
+= {¬IX U
+
+Likewise, the set of all remained, unfocused variables
+old ∪ Xnew} ∈ RnR , containing all
+is X R
+new variables and some of the old ones (which can be
+involved or not involved), and providing A’s partition AR =
+[¬IAU
+old, Anew]. Moreover, for the purpose of simpliﬁca-
+tion of coming equations we will denote the set of old vari-
+old ∪ IX U
+old, having that X R
+k+L by X R
+ables inside X R
+old},
+old
+.
+old, IAU
+with appropriate Jacobian partition AR
+=
+.
+old
+old
+
+.
+= {¬IX U
+¬IAU
+old} we can partition the
+
+Next, noting that Xk = {X F
+
+k ∪ X R
+
+old, IAU
+
+(cid:2)
+
+(cid:3)
+
+prior information matrix 3k, respectively,
+
+3k =
+
+3F
+k
+( 3F,Rold
+k
+
+3F,Rold
+k
+)T 3Rold
+
+k
+
+.
+#
+
+"
+
+(107)
+
+.
+Similarly, due to Xk+L = {X F
+=
+old ∪ Xnew}, the posterior information matrix 3k+L can be
+
+{X R
+respectively partitioned into the next two forms:
+
+old ∪ Xnew} and X R
+
+k ∪ X R
+
+k+L
+
+3k+L = 
+
+3F
+k+L
+( 3F,Rold
+k+L )T
+( 3F,Xnew
+k+L
+
+3F,Rold
+k+L
+3Rold
+k+L
+)T ( 3Rold ,Xnew
+k+L
+
+
+
+k+L 3F,R
+3F
+( 3F,R
+k+L)T 3R
+(cid:20)
+
+k+L
+
+k+L(cid:21)
+
+3F,Xnew
+k+L
+3Rold ,Xnew
+k+L
+)T 3Xnew
+k+L
+
+
+
+
+
+
+=
+
+with
+
+We can see from the above partitions (107)–(109) that the
+k+L is simply the
+and can
+
+posterior information partition 3R
+augmentation of prior information partition 3Rold
+be calculated as
+
+k+L of X R
+
+k
+
+3R
+
+k+L = 3Aug,Rold
+
+k
+
++ AT
+
+RAR,
+
+(110)
+
+k
+
+where 3Aug,Rold
+can be constructed by ﬁrst taking the par-
+tition of the prior information matrix 3k related to X R
+old,
+3Rold
+, and augmenting it with n0 zero rows and columns (see
+k
+Figure 9), where n0 is just the number of newly introduced
+variables. The above equation has an augmented determi-
+nant form as deﬁned in Section 3.3.1, and so the augmented
+determinant lemma can be applied also here. Using (32) we
+have
+
+3R
+k+L
+3Rold
+k
+
+=
+
+S
+
+·
+
+new · S−1 · Anew
+AT
+
+,
+
+(111)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+old·( 3Rold
+S = Im + AR
+(cid:12)
+(cid:12)
+k
+(cid:12)
+(cid:12)
+Then by combining (99), (36), and the above equations,
+
+(cid:12)
+(cid:12)
+old)T .
+
+)−1 ·(AR
+
+(112)
+
+we can see that
+
+·
+
+=
+
+6M,F
+k+L
+6M,F
+k
+
+3R
+k+L
+3k+L
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+where C is deﬁned in (38).
+Apparently the IG of X F
+
+3k
+3Rold
+(cid:12)
+(cid:12)
+k
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+k ) −H( X F
+IG(a) = H( X F
+J F
+1
+2
+− ln
+
+( ln
+
+=
+
+C
+
+=
+
+·
+
+·
+
+S
+
+C
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+new · S−1 · Anew
+AT
+new · C−1 · Anew
+AT
+(cid:12)
+(cid:12)
+(113)
+(cid:12)
+(cid:12)
+
+,
+
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+(cid:12)
+
+k+L) =
+
+k+L can be calculated as
+1
+1
+2
+2
+new · C−1 · Anew
+AT
+
+6M,F
+k
+
++ ln
+
+−
+
+ln
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+ln
+
+6M,F
+k+L
+
+(cid:12)
+− ln
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+S
+
+k
+
+(cid:12)
+(cid:12)
+
+) ,
+
+(cid:12)
+(cid:12)
+(114)
+(cid:12)
+(cid:12)
+
+)−1 = 6Rold |F
+
+new · S−1 · Anew
+AT
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+Next, the S term can be further reduced. It is clear that
+(cid:12)
+(cid:12)
+( 3Rold
+, or namely the prior conditional covari-
+k
+ance matrix of X R
+k . Moreover, due to the
+old (its sub-block ¬IAU
+sparsity of AR
+old contains only zeros) we
+will actually need only entries of matrix 6Rold |F
+that belong
+to variables involved in new terms of (6) (see Figure 9) and
+can conclude that
+
+old conditioned on X F
+
+(cid:12)
+(cid:12)
+
+k
+
+old |F
+
+IX U
+k
+
+k
+
+·(AR
+
+old ·6
+
+old ·6Rold |F
+
+S = Im +AR
+
+old)T = Im + IAU
+
+old)T .
+(115)
+(cid:4)
+Note that the variables inside information matrices do not
+have to be ordered in any particular way, and that the proof
+provided above is correct for any ordering whatsoever.
+
+·( IAU
+
+A.6. Proof of Lemma 6
+
+(108)
+
+For A’s structure given in (34), the term S from (115) will
+be
+
+S = Im + AR
+
+old · 6Rold |F
+
+k
+
+·(AR
+
+old)T = Im +
+
+BR
+old
+0
+
+(cid:18)
+
+(cid:19)
+
+· 6Rold |F
+k
+
+(116)
+
+3R
+
+k+L =
+
+3Rold
+k+L
+( 3Rold ,Xnew
+"
+k+L
+
+3Rold ,Xnew
+k+L
+)T 3Xnew
+
+k+L #
+
+.
+
+(109)
+
+·
+
+( BR
+
+old)T 0
+
+=
+
+(cid:0)
+
+(cid:1)
+
+S1
+0
+0 Imnew(cid:19)
+
+(cid:18)
+
+,
+
+1128
+
+The International Journal of Robotics Research 36(10)
+
+S1 = Imconn + BR
+
+= Im + IBU
+
+old · 6
+
+old · 6Rold |F
+k
+IX U
+old |F
+k
+
+·( BR
+
+old)T
+old)T .
+
+·( IBU
+
+(119)
+
+HU
+
+Xnew
+
+old · 6Rold |F
+where S1 = Imconn + BR
+M( F conn(a)) and mnew = M( F new(a)).
+
+k
+
+·( BR
+
+old)T , mconn =
+
+Then we can conclude that
+
+and that
+
+S
+
+=
+
+S1
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+S−1 =
+
+S−1
+1
+0
+
+(cid:18)
+
+0
+Imnew (cid:19)
+
+,
+
+(117)
+
+(118)
+
+and similarly to (115) (see also Figure 9) we have that
+
+Next, the term AT
+
+new · S−1 · Anew from (114), similarly
+
+to (96), will be
+
+new · S−1 · Anew = BT
+AT
+
+new · S−1
+
+1
+
+· Bnew + DT
+
+new · Dnew, (120)
+
+with S1 deﬁned in (119).
+
+Then, by applying equations (104), (117), (120), and
+k+L ⊆ Xold from (114) can be
+
+, the IG of X F
+
+C1
+
+C
+
+=
+notion
+calculated as
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+J F
+IG(a) =
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+C1
+
+( ln
+
+1
+2
+− ln
+1
+2
+− ln
+
+(cid:12)
+S1
+(cid:12)
+(cid:12)
+( ln
+(cid:12)
+
+=
+
++ ln
+
+(cid:12)
+− ln
+(cid:12)
+
+1
+
+new · C−1
+BT
+new · S−1
+BT
+(cid:12)
+(cid:12)
+
+1
+
+· Bnew + DT
+
+new · Dnew
+
+· Bnew + DT
+
+new · Dnew
+
+(cid:12)
+(cid:12)
+
+C1
+
+(cid:12)
++ ln
+(cid:12)
+
+(cid:12)
+S1
+(cid:12)
+
+(cid:12)
+− ln
+(cid:12)
+
+1
+
+new · C−1
+BT
+new · S−1
+BT
+(cid:12)
+(cid:12)
+
+1
+
+· Bnew + 3a
+
+· Bnew + 3a
+
+(cid:12)
+) , (121)
+(cid:12)
+
+(cid:12)
+)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+where C1 is deﬁned in (41), and where 3a = DT
+the information matrix of an action’s factor graph G(a).
+
+new · Dnew is
+
+From (75) we can see that BU
+
+new has the following form:
+
+( xk+1)
+
+· · ·
+
+( xk+L−1)
+
+BU
+
+new = 9
+
+− 1
+2
+conn ·
+
+−I
+Hxk+1
+1
+...
+Hxk+1
+no
+
+
+
+
+
+
+
+0
+
+· · ·
+· · · Hxk+L−1
+. . .
+· · · Hxk+L−1
+
+...
+
+1
+
+no
+
+− 1
+2
+conn ·
+(cid:18)
+FU .
+=
+Hxk+1
+1
+...
+Hxk+1
+no
+
+FU
+HU
+
+,
+
+Xnew (cid:19)
+−I · · · 0
+· · · Hxk+L−1
+(cid:0)
+(cid:1)
+1
+...
+. . .
+· · · Hxk+L−1
+no
+
+= 9
+
+.
+= 
+
+
+
+
+,
+
+,
+
+
+
+
+
+
+
+
+
+
+
+
+(122)
+
+i
+
+.
+where Hxk+l
+= 5xk+l hi is the Jacobian of hi with respect
+to xk+l, and therefore is non-zero only if the factor’s obser-
+vation was taken from pose xk+l. Note that in the SLAM
+case the X U
+new (all new and unfocused variables) is
+{xk+1, . . . , xk+L−1}.
+
+Similarly to (79), the term ( BU
+
+new)T ·C−1
+
+1
+
+· BU
+
+new from (44)
+
+can be calculated as
+
+( BU
+
+new)T ·C−1
+
+1
+
+· BU
+
+new =
+
+1
+2
+
+conn · C−1
+2
+
+·9
+
+1
+(cid:0)
+2
+conn · 9
+
+· 9
+
+( FU )T ( HU
+Xnew )T
+FU
+HU
+
+− 1
+2
+conn ·
+
+(cid:18)
+
+(cid:1)
+Xnew (cid:19)
+FU
+HU
+
+Xnew (cid:19)
+
+=
+
+( FU )T ( HU
+
+Xnew )T
+
+· C−1
+2
+
+·
+
+(cid:0)
+=(
+
+new)T ·C−1
+BU
+
+2
+
+·
+
+(cid:1)
+BU
+new
+
+(cid:18)
+
+Note that the variables inside information matrices do not
+have to be ordered in any particular way, and that the proof
+provided above is correct for any ordering whatsoever.
+
+( xk+1)
+
+· · ·
+
+( xk+L−1)
+
+(cid:4)
+
+where
+
+e
+
+e
+
+A.7. SLAM solution: focus on the last pose
+
+X F
+
+k+L ≡ xk+L
+
+For X F
+k+L ≡ xk+L the focused entropy objective in
+the SLAM setting is given by (44). Here, we exploit the
+inner structure of Jacobian partitions in the SLAM scenario
+(see (71)–(75)) in order to provide a solution tailored specif-
+ically to the SLAM domain. It will provide an illustrated
+example of applying rAMDL to a real problem.
+
+BU
+
+new
+
+.
+=
+
+e
+
+−I
+Hxk+1
+1
+...
+Hxk+1
+no
+
+
+
+
+
+
+
+0
+
+· · ·
+· · · Hxk+L−1
+. . .
+· · · Hxk+L−1
+
+...
+
+1
+
+no
+
+=
+
+
+
+
+
+
+
+FU
+HU
+
+(cid:18)
+
+Xnew (cid:19)
+
+contains the Jacobian entries of BU
+factors’ noise 9conn.
+
+new not weighted by the
+
+− 1
+2
+conn
+
+· 9
+
+(123)
+
+(124)
+
+Kopitkov and Indelman
+
+1129
+
+In addition, from (71) we can derive the structure of DU
+
+new
+
+which is also used in (44):
+
+DU
+
+new = 9
+
+− 1
+2
+new ·
+
+( xk+1)
+
+( xk+2)
+
+( xk+3)
+
+( xk+4)
+
+· · ·
+
+( xk+L−2)
+
+( xk+L−1)
+
+Fk+1
+0
+
+0
+
+0
+.
+.
+.
+
+0
+
+0
+
+0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+−I
+Fk+2
+0
+
+0
+.
+.
+.
+
+0
+
+0
+
+0
+
+0
+
+−I
+Fk+3
+0
+.
+.
+.
+
+0
+
+0
+
+0
+
+0
+
+0
+
+−I
+Fk+4
+.
+.
+.
+
+0
+
+0
+
+0
+
+· · ·
+
+· · ·
+
+· · ·
+
+· · ·
+. . .
+· · ·
+
+· · ·
+
+· · ·
+
+0
+
+0
+
+0
+
+0
+.
+.
+.
+
+−I
+Fk+L−2
+0
+
+0
+
+0
+
+0
+
+0
+.
+.
+.
+
+0
+
+−I
+Fk+L−1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Using the above identity, the matrix S1 from (48) can also
+
+be reduced to the following form:
+
+S1 = Imconn + IBU
+Fk · 6M,xk
+k
+0
+
+·
+
+old |F
+
+IX U
+old · 6
+k
+· FT
+k 0
+0
+(cid:19)
+
+(cid:18)
+
+·( IBU
+
+old)T = Imconn + 9
+− 1
+2
+conn
+
+· 9
+
+− 1
+2
+conn
+
+= 9
+
+− 1
+2
+conn ·
+
+9conn +
+
+"
+
+Fk · 6M,xk
+k
+0
+
+(cid:18)
+
+· FT
+
+k 0
+0
+(cid:19) #
+
+− 1
+2
+conn
+
+·9
+
+.
+= 9
+
+− 1
+2
+conn · S2 · 9
+
+− 1
+2
+conn,
+
+S2
+
+.
+= 9conn +
+
+Fk · 6M,xk
+k
+0
+(cid:18)
+6ω,k + Fk · 6M,xk
+
+k
+
+· FT
+
+k 0
+0
+
+· FT
+k
+
+(cid:18)
+
+0
+
+(cid:19)
+0
+9obs(cid:19)
+
+(125)
+
+=
+
+(129)
+
+,
+
+(130)
+
+.
+= 9
+
+− 1
+2
+new ·
+
+DU
+
+new
+
+e
+
+that due to its sparsity will allow fast calculation of 3U|F
+
+a
+
+,
+
+3U|F
+
+a =( DU
+
+new)T ·DU
+
+new =(
+
+DU
+
+new)T ·9−1
+
+new ·
+
+DU
+
+new.
+
+(126)
+
+9conn =
+
+Finally, placing all derived notation into (44), we obtain
+e
+to the SLAM-speciﬁc solution for the entropy of the robot’s
+last pose:
+
+e
+
+J F
+H(a) =
+
++
+
+1
+2
+
+ln
+
+(
+
+new)T ·C−1
+BU
+
+2
+
+·
+
+BU
+
+new+(
+
+DU
+
+new)T
+
+ln
+
+new · C−1
+BT
+e
+2
+
+·
+
+Bnew
+
+e
+
+,
+
+e
+
+(127)
+
+(cid:12)
+Dnew
+(cid:12)e
+(cid:12)
+(cid:12)
+
+e
+
+where C2 is deﬁned in (77).
+
+(cid:4)
+e
+Note that the variables inside information matrices do not
+have to be ordered in any particular way, and that the proof
+provided above is correct for any ordering whatsoever.
+
+nF · γ
+2
+·9−1
+
+new ·
+
++
+
+DT
+
+DU
+
+(cid:12)
+−
+(cid:12)
+
+1
+e
+2
+new ·
+
+new
+new · 9−1
+(cid:12)
+(cid:12)
+e
+
+A.8. SLAM solution: focus on mapped landmarks
+
+X F
+
+k+L ≡ Lk
+The focused IG of X F
+k ≡ Lk in the SLAM setting is
+given by (47). Here, we will exploit the inner structure of
+Jacobian partitions in the SLAM scenario (see (71)–(75)) in
+order to provide a solution tailored speciﬁcally to the SLAM
+domain. It will provide an illustrated example of applying
+rAMDL to areal problem.
+
+First, note that all old involved and unfocused vari-
+ables IX U
+old contain only the current robot’s pose xk. Thus,
+from (74) we can see that the relevant partition of Jacobian
+B, the IBU
+old used in (48), has the following inner structure:
+
+IBU
+
+old = 9
+
+Fk
+0
+...
+0
+
+− 1
+conn · 
+2
+
+
+
+
+
+
+
+.
+
+
+
+
+
+
+(128)
+
+where 6ω,k is the noise matrix from the motion model
+(65), and matrix 9obs is block-diagonal, combining all noise
+matrices of F obs(a) factors:
+
+6ω,k
+0
+
+(cid:18)
+
+0
+9obs
+
+(cid:19)
+
+.
+
+(131)
+
+Further, let us deﬁne matrix S3:
+.
+= 6ω,k + Fk · 6M,xk
+Now we can see that S1’s determinant and inverse can be
+calculated through
+
+· FT
+k .
+
+(132)
+
+S3
+
+k
+
+=
+
+S1
+
+S2
+9conn
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+conn · S−1
+S−1
+1 = 9
+(cid:12)
+2
+
+1
+2
+
+=
+
+S3
+
+9obs
+
+·
+9conn
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+1
+1
+(cid:12)
+(cid:12)
+2
+2
+conn ·
+conn = 9
+(cid:12)
+(cid:12)
+
+(cid:12)
+(cid:12)
+
+(cid:12)
+· 9
+(cid:12)
+
+=
+
+,
+
+S3
+6ω,k
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+S−1
+0
+(cid:12)
+(cid:12)
+3
+(cid:12)
+(cid:12)
+0 9−1
+obs(cid:19)
+
+(cid:18)
+
+(133)
+
+1
+2
+conn.
+
+· 9
+
+(134)
+· Bnew from (47) can be
+
+new · S−1
+
+1
+
+Similarly to (79), the term BT
+calculated as
+new · S−1
+BT
+− 1
+2
+conn · 9
+1
+2
+conn · 9
+
+conn · S−1
+2
+− 1
+2
+conn ·
+
+· Bnew =
+1
+2
+
+(cid:0)
+F
+HXnew
+
+·9
+
+·9
+
+1
+
+(cid:18)
+FT ( HXnew )T
+
+(cid:19)
+·
+
+· S−1
+2
+
+=
+
+(cid:0)
+FT ( HXnew )T
+
+(cid:1)
+
+·
+
+=
+
+(cid:18)
+= FT · S−1
+3
+
+(cid:1)
+
+(cid:0)
+F
+HXnew
+
+(cid:18)
+
+(cid:19)
+
+FT ( HXnew )T
+
+(cid:1)
+
+(cid:19)
+
+·
+
+F
+HXnew
+
+(cid:18)
+
+S−1
+0
+3
+0 9−1
+
+obs(cid:19)
+
+· F+( HXnew )T ·9−1
+
+obs · HXnew ,
+
+(135)
+
+where F and HXnew are deﬁned in (75) as
+Hxk+1
+1
+...
+Hxk+1
+no
+
+, HXnew .
+
+= 
+
+F .
+=
+
+· · ·
+
+−I
+
+0
+
+(cid:1)
+
+(cid:0)
+
+
+
+
+1
+
+· · · Hxk+L
+. . .
+· · · Hxk+L
+
+...
+
+no
+
+.
+
+
+
+
+(136)
+
+
+1130
+
+The International Journal of Robotics Research 36(10)
+
+2
+
+·
+
+(cid:12)
+(cid:12)
+
+S3
+
+Bnew,
+
+new · C−1
+BT
+
+, and FT · S−1
+3
+
+where C2 is deﬁned in (77). Note that matrix S3 will
+be the same for all candidates. Therefore, the terms S3,
+· F can be calculated only one time
+ln
+and shared between the candidates thereafter. In addition,
+(cid:12)
+DT
+Dnew, and
+the terms C2,
+(cid:12)
+( HXnew )T ·9−1
+obs · HXnew can be calculated efﬁciently through
+sparse matrix operators since we know the exact inner struc-
+e
+e
+ture of all involved matrix operands. The overall complex-
+ity of the above SLAM solution is the same as in (47),
+(cid:4)
+O( M( F conn(a))3 +n03).
+Note that the variables inside information matrices do not
+have to be ordered in any particular way, and that the proof
+provided above is correct for any ordering whatsoever.
+
+new · 9−1
+
+new ·
+
+e
+
+e
+
+Thus, we can see that FT · S−1
+· F from (135) is an L · np ×
+3
+L · np matrix (np is the robot pose’s dimension and L is the
+horizon length) that has non-zero entries only at its np × np
+top left corner:
+
+FT · S−1
+3
+
+· F = 
+
+.
+
+(137)
+
+S−1
+3
+0
+...
+0
+
+0 · · ·
+0 · · ·
+...
+. . .
+0 · · ·
+
+
+
+
+
+
+0
+0
+
+...
+
+0
+
+
+
+
+Finally, placing all derived notation into (47), we arrive
+at the SLAM-speciﬁc solution for IG of already mapped
+landmarks Lk:
+
+1
+2
++
+
+J F
+IG(a) =
+
+=
+
+( ln
+
+C2
+
+− ln
+
+9conn
+
++ ln
+
+new · C−1
+BT
+
+2
+
+·
+
+Bnew
+
+DT
+
+new · 9−1
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)
+− ln
+new ·
+S3
+Dnew
+(cid:12)
+(cid:12)
+(cid:12)
+(cid:12)e
+(cid:12)
++ FT · S−1
+· F+( HXnew )T ·
+6ω,k
++ ln
+− ln
+(cid:12)
+(cid:12)
+(cid:12)
+3
+(cid:12)
+(cid:12)
+(cid:12)
+e
+e
+9−1
+obs · HXnew +
+new · 9−1
+DT
+new ·
+Dnew
+(cid:12)
+(cid:12)
+1
+new · C−1
+BT
+2
+
+(cid:12)
+Bnew +
+·
+(cid:12)
+e
+
++ ln
+e
+
+(cid:12)
+(cid:12)
+ln
+
+DT
+
+C2
+
+e
+
+(cid:12)
+(cid:12)
+
+)
+
+2
+
+new · 9−1
+new
+
+(cid:18)
+
+·
+
+− ln
+
+(cid:12)
+(cid:12)e
+FT · S−1
+3
+
+(cid:12)
+(cid:12)
+Dnew
+(cid:12)
+(cid:12)
+− ln
+S3
+(cid:12)
+(cid:12)
+e
+(cid:12)
+(cid:12)
+(cid:12)
+HXnew +
+new · 9−1
+DT
+(cid:12)
+(cid:12)
+(cid:12)
+
+new ·
+
+e
+
+e
+
+e
+
+· F+( HXnew )T ·9−1
+obs ·
+
+Dnew
+
+− ln
+
+9obs
+
+,
+
+(138)
+
+(cid:12)
+(cid:12)
+
+e
+
+(cid:12)
+(cid:12)
+
+(cid:19)
+(cid:12)
+(cid:12)
+
+

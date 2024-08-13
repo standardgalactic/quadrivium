@@ -1,0 +1,1121 @@
+Transformers as Soft Reasoners over Language
+
+Peter Clark , Oyvind Tafjord and Kyle Richardson
+Allen Institute for AI, Seattle, WA
+fpeterc,oyvindt,kylerg@allenai.org
+
+Abstract
+
+Beginning with McCarthy’s Advice Taker (1959),
+AI has pursued the goal of providing a system with
+explicit, general knowledge and having the system
+reason over that knowledge. However, expressing
+the knowledge in a formal (logical or probabilistic)
+representation has been a major obstacle to this re-
+search. This paper investigates a modern approach
+to this problem where the facts and rules are pro-
+vided as natural language sentences, thus bypassing
+a formal representation. We train transformers to
+reason (or emulate reasoning) over these sentences
+using synthetically generated data. Our models,
+that we call RuleTakers, provide the ﬁrst empiri-
+cal demonstration that this kind of soft reasoning
+over language is learnable, can achieve high (99%)
+accuracy, and generalizes to test data requiring sub-
+stantially deeper chaining than seen during training
+(95%+ scores). We also demonstrate that the mod-
+els transfer well to two hand-authored rulebases,
+and to rulebases paraphrased into more natural lan-
+guage. These ﬁndings are signiﬁcant as it suggests
+a new role for transformers, namely as limited “soft
+theorem provers” operating over explicit theories in
+language. This in turn suggests new possibilities
+for explainability, correctability, and counterfactual
+reasoning in question-answering.1
+
+Introduction
+
+1
+AI has long pursued the goal of giving a system explicit
+knowledge, and having it reason over that knowledge to reach
+conclusions, dating back to the earliest years of the ﬁeld, e.g.,
+McCarthy’s Advice Taker (1959), and Newell and Simon’s
+Logic Theorist (1956). While this has resulted in impres-
+sive applications (e.g., [Metaxiotis et al., 2002]), building
+and reasoning over the required formal representations has
+also proved challenging [Musen and Van der Lei, 1988]. In
+this work, we explore a modern approach to this goal, and ask
+whether transformers can be trained to reason (or emulate rea-
+soning) using rules expressed in language, thus bypassing a
+
+1 A live demo and all our datasets are available at
+
+https://allenai.org/data/ruletaker
+
+(Input Facts:) Alan is blue. Alan is rough. Alan is young.
+Bob is big. Bob is round.
+Charlie is big. Charlie is blue. Charlie is green.
+Dave is green. Dave is rough.
+
+(Input Rules:) Big people are rough.
+If someone is young and round then they are kind.
+If someone is round and big then they are blue.
+All rough people are green.
+
+Q1: Bob is green. True/false? [Answer: T]
+Q2: Bob is kind. True/false? [F]
+Q3: Dave is blue. True/false? [F]
+
+Figure 1: Questions in our datasets involve reasoning with rules.
+The inputs to the model are the context (facts + rules) and a ques-
+tion. The output is the T/F answer to the question. Here the under-
+lying reasoning for the true fact (Q1) is: Bob is big, therefore rough
+(rule1) therefore green (rule4). Note that the facts + rules themselves
+change for different questions in the datasets.
+
+formal representation. If so, new opportunities for question-
+answering, explainability, correctability, and counterfactual
+reasoning may become possible.
+
+This goal is quite distinct from question-answering as
+selecting an answer span in a passage, today’s prevailing
+paradigm, e.g., [Rajpurkar et al., 2016]. Rather, we want the
+system to reason over the provided rules to ﬁnd conclusions
+that follow. Our goal is also distinct from that of inducing
+rules from examples, e.g., given instances of family relation-
+ships, inducing that a parent’s parent is a grandparent [Sinha
+et al., 2019], something that transformers are already known
+to do well. Rather, here we provide rules explicitly, and wish
+transformers to draw appropriate conclusions, as illustrated
+in Figure 1. Here, rather than inducing rules from examples,
+our task involves learning to emulate a reasoning algorithm.
+We provide the ﬁrst demonstration that this is possible,
+i.e., that transformers can reason with rules expressed in lan-
+guage. Our approach uses a broadly applicable training regi-
+men: Characterize the desired behavior in a formal way, syn-
+thesize formal examples, generate linguistic equivalents, and
+train a model. The result suggests a new role for transform-
+ers, namely as a kind of limited “soft theorem prover” over
+language (Figure 2). This in turn may allow inspection and
+control of the knowledge that the model is manipulating, with
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3882tion 4.5 and Figure 8).
+
+5. Can other neural architectures learn to reason? Our
+experiments show a particular transformer (RoBERTa)
+is sufﬁcient for our tasks, but is it necessary? We show
+that two other systems, BERT and ESIM (an LSTM-
+based model) [Chen et al., 2017], are also able to learn
+these tasks, albeit with lower scores (95% and 80% re-
+spectively, vs. 98%). This suggests that our results
+are not speciﬁc to RoBERTa or transformers, although
+transformers learn the tasks more easily (Table 6).
+
+2 Related Work
+
+While our work is, to the best of our knowledge, the ﬁrst sys-
+tematic study of transformers directly reasoning with rules in
+language, there are several datasets that make a ﬁrst step to-
+wards this by testing whether neural systems can apply a sin-
+gle rule in a particular situation. Task 15 in the bAbI dataset
+[Weston et al., 2016] tests whether a rule of the form “Xs
+are afraid of Ys” can be correctly applied, e.g., “Sheep are
+afraid of wolves. Gertrude is a sheep. What is Gertrude afraid
+of? A:wolves”. Similarly, the synthetic, conditional probes in
+[Richardson et al., 2020] test single rule application. In addi-
+tion, the datasets QuaRTz [Tafjord et al., 2019] and ROPES
+[Lin et al., 2019] involve applying general statements to a sit-
+uation, but also require many other reading comprehension
+skills, rather than speciﬁcally testing reasoning.
+
+Although our core datasets may seem similar to the bAbI
+dataset [Weston et al., 2016] in using synthetic data, our
+probes are qualitatively different. Speciﬁcally, apart from
+bAbI Task 15 (above), the underlying rules needed to infer
+an answer in the bAbI tasks are implicit, while our concern
+here is reasoning with explicit rule sets, potentially different
+for each example (Figure 1).
+
+Our approach contrasts with prior efforts that attempt to
+semantically parse language into a formal form, so that a for-
+mal reasoner can then be applied [Kamath and Das, 2019].
+Despite substantial research, semantic parsing remains chal-
+lenging, with few examples of systems that can reliably con-
+vert multi-sentence text into formal theories. Instead, we ex-
+plore reasoning with language directly, bypassing the seman-
+tic parsing task.
+
+Our work can be seen as evaluating transformers for (a sub-
+set of) Natural Logic [MacCartney and Manning, 2014], i.e.,
+formal inference over statements expressed in language. It
+is also related to textual entailment and Natural Language
+Inference (NLI) [Manning and MacCartney, 2009], but with
+the important difference that NLI also allows unsupported in-
+ferences that “a person would typically infer” [Dagan et al.,
+2013]. We discuss bridging the gap between our work and
+NLI in Section 5.3.
+
+Several researchers have developed methods for Neural
+Theorem Proving (NTP), combining symbolic and neural
+methods to reason step-wise over language-derived struc-
+tures, e.g., [Weber et al., 2019]. Similarly, there has been
+work on SAT solving [Selsam et al., 2019], approximate
+(DNF) model counting [Abboud et al., 2020], and formula
+embedding [Abdelaziz et al., 2020] to help solve formal rea-
+soning problems. While our goals are similar, we do not im-
+
+Figure 2: (a) Traditional formal reasoning applies a theorem prover
+to axioms in order to answer a question. (b) Our work here strives
+for a linguistic analog, where a transformer serves as a “soft theorem
+prover” over knowledge expressed linguistically.
+
+potential beneﬁts for explanation, correctability, and counter-
+factual reasoning.
+
+Our investigations here are in a limited setting: Rules are
+linguistic expressions of conjunctive implications condition
+[^ condition]* ! conclusion, with the semantics of logic
+programs with negation [Apt et al., 1988]; and reasoning is
+the deduction of a statement’s truth according to these seman-
+tics. However, although there is still a potentially large gap
+to natural language inference (NLI),2 our approach also sug-
+gests a path to teaching machines to reason over broader lan-
+guage, with similar potential beneﬁts.
+
+We leave open the question of whether the transformer is
+actually “reasoning”, and even what that might mean in a neu-
+ral setting. Rather, we show that transformers can reliably
+emulate the i/o behavior of a formal reasoner, including ap-
+plied to test data requiring more reasoning than at training
+time, two hand-authored rulebases, and rulebases rephrased
+into more natural (crowdsourced) language.
+
+The paper is organized to address the following questions,
+
+and contributes the following results:
+
+1. Can transformers learn to reason with rules? We
+train and test on rules expressed in (synthetic) language,
+and ﬁnd high (99%) accuracy, including on test ques-
+tions requiring a greater depth of reasoning than seen
+during training (scoring up to 95%, Table 1).
+
+2. Can the trained model solve hand-authored reason-
+ing problems? We ﬁnd the trained models are able to
+solve ﬁve of six variants of two independently authored
+rule-based problems, zero shot (90%+ scores, Table 4).
+3. Do the results transfer to theories expressed in more
+natural language? Models also perform well when
+trained and tested on theories paraphrased into more nat-
+ural (crowdsourced) language (98% score). The best
+earlier model can even partially solve these problems
+zero-shot (66% accuracy, Table 5).
+
+4. Can the model identify which facts an answer de-
+pends on? We show that the model is largely able to do
+this (94% F1), including perfect identiﬁcation for over
+70% of the questions. This is a ﬁrst step towards having
+a model create an explanation for its conclusions. (Sec-
+
+2 NLI is informally deﬁned as making inferences from language
+that “a person would typically infer” [Dagan et al., 2013], and in-
+cludes use of many linguistic forms, unstated background knowl-
+edge, and sometimes unsound inference steps.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3883pose any structure on the neural reasoning process, instead
+wanting to know if the (i/o of the) reasoning process itself is
+learnable, using knowledge expressed in language.
+
+Our task can perhaps best be viewed as one of algorithm
+emulation, here for systematic reasoning with rules. There
+have been numerous other demonstrations that transformers
+either already know [Talmor et al., 2019; Richardson and
+Sabharwal, 2019] or can learn to emulate other algorithms,
+including for semantic parsing [He and Choi, 2019], ma-
+chine translation [Wang et al., 2019], integration [Lample and
+Charton, 2019], and math [Saxton et al., 2019]. Here we in-
+vestigate a transformer’s ability to learn rule-based reasoning.
+
+3 Dataset Generation
+To investigate a transformer’s ability to emulate rule-based
+reasoning, we generate ﬁve datasets requiring various depths
+of inference to answer the questions. Each example in a
+dataset is a triple (context,statement,answer), where context
+has the form (fact*,rule*), statement is the question, namely
+a declarative sentence to prove, and answer is either T (true) if
+statement deductively follows from the context, or F if it does
+not (false under a closed-world assumption, CWA). Facts,
+rules, and the question statements are expressed in (synthetic)
+English. Each example is essentially a (linguistic) standalone
+logical theory with an “Is it true?” question posed against it.
+
+3.1 Overview
+To generate each example, we ﬁrst generate a small theory
+(facts + rules) in logic, perform forward inference to de-
+rive all its implications, then select question statements from
+those implications (answer=true), and from unproven (posi-
+tive) facts (answer=false, under the CWA). We generate ﬁve
+datasets, each constrained by the maximum depth of infer-
+ence required to prove the facts used in its questions (up to
+depths D=0, D(cid:20)1, D(cid:20)2, D(cid:20)3 and D(cid:20)5 respectively). Depth
+D=0 means the true facts can be “proved” by simple lookup
+in the context (no inference). The ﬁfth dataset, called DMax,
+contains questions up to depth 5, and is used to test general-
+ization to depths unseen in training on the other four datasets.
+
+3.2 Theory Generation
+Theories contain two types of facts:
+
+(cid:15) attributes is(ei; aj) e.g., is(Alan,Big).
+(cid:15) relations rk(ei; ek) e.g., eats(Dog,Rabbit).
+
+The is() predicate assigns attributes to entities, while the rk()
+predicates relate two entities. Like people names, the symbols
+Dog, Rabbit, etc. also denote speciﬁc entities, i.e., denote
+“the dog”, “the rabbit”, etc. Rules are of the form:
+condition [^ condition]* ! conclusion.
+
+The ﬁrst condition is a predicate whose ﬁrst argument is a
+variable,3 and second argument is an attribute or entity. For
+each subsequent condition and the conclusion, they are also
+predicates whose ﬁrst argument is either the same variable or
+a previously mentioned entity, and the second argument is a
+
+3 Or with 20% probability, an entity, in order to include some
+
+fully grounded rules in the datasets.
+
+The bald eagle does not eat the dog. The cat chases the dog.
+The cat eats the bald eagle. The cat is nice. The cat likes the dog.
+The cat likes the rabbit. The dog is furry.
+The rabbit chases the bald eagle. The rabbit eats the bald eagle.
+
+If someone does not eat the cat then they do not eat the dog.
+If someone likes the bald eagle then they do not like the rabbit.
+If someone eats the bald eagle and they do not eat the rabbit
+
+then they are furry.
+
+If someone is furry then they like the cat.
+
+Q1. The bald eagle likes the cat. True/false? [F]
+Q2. The rabbit likes the cat. True/false? [T]
+Q3. The bald eagle is furry. True/false? [F]
+
+Figure 3: An example of a rulebase and 3 questions using relations
+with negation. The reasoning for the [T] answer is: The rabbit eats
+the bald eagle (given), therefore the rabbit is furry (rule3), therefore
+the rabbit likes the cat (rule4).
+
+new attribute or entity. (In this way, rules are constrained to
+have at most one variable. Rules are implicitly universally
+quantiﬁed over that variable). For example, the formal form
+of the ﬁrst rule in Figure 1 looks:
+
+// If someone is young and round then they are kind.
+is(?X,Young) ^ is(?X,Round) ! is(?X,Kind).
+
+Each theory contains 1-16 facts and 1-9 rules generated at
+
+random. We generate two types of theory:
+
+1. Type 1 uses only the is() predicate, with 4 entities
+fAlan,Bob,...g and 7 (non-mutually-exclusive) attributes
+fBlue,Rough,Young,...g, drawn randomly from pools of
+10 names and 14 attributes respectively.
+
+2. Type 2 uses is() and 3 other predicates flikes(),
+chases(); :::g, 4 entities fCat,Dog,BaldEagle,...g, and 5
+attributes fBig,Furry,...g, drawn randomly from pools of
+size 6, 10, and 10 respectively.
+
+We also generate a version of each that adds negation (not) in
+the facts and rule conditions/conclusions (negation-as-failure
+for conditions, strong negation for conclusions). Figure 1 is
+an example of Type 1, without negation. Figure 3 is an ex-
+ample of Type 2, with negation. Each dataset contains 100k
+examples (25k of each Type (cid:2) without/with negation). Data
+is randomly split 70/10/20 into train/dev/test partitions, en-
+suring no overlap of theories between each partition.
+
+3.3 Forward Inference
+Given a randomly generated theory (facts+rules), we perform
+exhaustive forward inference to ﬁnd all its implications, not-
+ing their proof(s). (As the domains are ﬁnite, the number of
+implications are ﬁnite too). For semantics, we treat the rule-
+base as a logic program, and infer the minimal, supported
+answer set implied by the program [Apt et al., 1988]. Nega-
+tions in the rules’ conditions are treated as negation as failure
+(NAF), and we ensure that the rulebase is stratiﬁed to avoid
+ambiguity and cycles [Bidoit and Froidevaux, 1991]. Infer-
+ence is performed layerwise to ﬁnd the minimal supported
+model, and inconsistent and unstratiﬁed rulebases are dis-
+carded. We also check that inference proceeds to the depth
+required, e.g., for the D(cid:20)3 dataset, at last one fact must re-
+quire depth 3 inference to infer it for all its theories.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)38843.4 Question Generation and English Synthesis
+For each theory, we generate several questions with answer
+‘true’ by selecting from the inferred facts, one at each depth
+of inference from 0 to the dataset’s target depth (e.g., for the
+D(cid:20)2 dataset, we generate 3 ‘true’ questions at depths d = 0, 1,
+and 2 for each theory). For each ‘true’ question we also gen-
+erate a ‘false’ question by negating a conclusion proven at the
+same depth. We then generate the same number of questions
+using facts that are unproven (false under a closed-world as-
+sumption), drawing equally from unproven, instantiated pos-
+itive rule conclusions or other unproven positive facts. Half
+are used as questions labeled as false (via the CWA), and for
+diversity, half are ﬂipped by negating the fact and changing
+the label to true (i.e., “f ? False” becomes “Not f ? True”).
+Thus a theory for depth d has (up to) 4(d+1) questions, with
+an equal balance of true and false answers. Each question is
+also annotated with the inference depth needed to answer it.
+Finally the theories and questions are converted into (syn-
+thetic) English, using simple natural language templates plus
+rules to improve ﬂuency (e.g., using pronouns). We use three
+templates (randomly selected per rule): “If condition [and
+condition]* then conclusion.”, “All attribute* peoplejthings
+are attribute.”, and “attribute* peoplejthings are attribute.”,
+the last two only applicable to rules involving just attributes.
+Examples are shown in Figures 1 and 3.
+
+4 Experiments
+
+4.1 Models
+We conduct all our experiments (bar Section 4.6) using
+RoBERTa-large, additionally ﬁne-tuned on the RACE dataset
+[Lai et al., 2017]. We use ﬁxed hyperparameters (learning
+rate etc), inheriting the settings from RoBERTa on RACE
+[Liu et al., 2019].
+
+We train RoBERTa to predict true/false (i.e., binary clas-
+siﬁcation) for each question statement. Questions are sup-
+plied to RoBERTa as: [CLS] context [SEP] statement [SEP],
+where context is the theory (facts+rules, expressed in lan-
+guage) and statement is the fact to try and prove. The [CLS]
+output token is projected to a single logit. A logit score of
+>0 is treated as predicting true, otherwise the answer is false.
+Training is performed using cross-entropy loss. For evalua-
+tion, we measure accuracy. (The test data has an equally bal-
+ance of TRUE/FALSE answers, hence the baseline of random
+guessing is 50%).
+
+4.2 Can RoBERTa Answer Reasoning Questions?
+We train and test RoBERTa models on each of our datasets
+D=0, D(cid:20)1, D(cid:20)2, D(cid:20)3, and DMax, containing problems re-
+quiring reasoning up to depths 0, 1, 2, 3, and 5 respectively.
+We then test the models on the DMax dataset, that includes
+problems at depths greater than the other datasets. The re-
+sults are shown in Table 1. The results suggest the following
+ﬁndings:
+
+1. RoBERTa is able to master the test data almost per-
+fectly (99% accuracy, row 1) even though the speciﬁc
+reasoning problems (facts+rules) in each test question
+are distinct from those in the training set.
+
+Table 1: Accuracy of models (Mod0,...) trained and tested on the ﬁve
+datasets (“Test (own)” row), and tested on all, and different slices, of
+the DMax test set. The boxed area indicates test problems at depths
+unseen during training.
+
+2. The Depth=0 model, Mod0, only trained on lookup
+questions, is (unsurprisingly) unable to answer ques-
+tions requiring reasoning (column Mod0).4
+
+3. As we train with increasingly deep inference, the mod-
+els’ ability to generalize improves. The D(cid:20)2 model
+(questions involving problems up to depth 2) achieves
+71.1% on Depth=3 problems, while the D(cid:20)3 model
+generalizes well right up to the maximum depth tested
+(e..g, 97.6% for Depth=5 problems).
+
+We additionally test the robustness of the models’ answers
+by perturbing the original theories. Speciﬁcally, for each test
+fact f that is true, we test whether removing a sentence that
+is part of the proof of f causes the prediction to (desirably)
+ﬂip from true to false. We call these sentences in the proof
+tree critical sentences, as the truth of f depends on them.
+Conversely, removing an irrelevant sentence should cause no
+change to the model’s prediction. As we know the original
+proof trees for each fact f in the dataset, we can identify the
+critical and irrelevant sentences by simple inspection of those
+trees.5 Typically, 1-6 sentences of the (cid:25)15-20 sentences are
+critical for proving each provable fact.
+
+We test this using the no-negation6 half of the DMax test
+set ((cid:25)10k questions). In this partition, 5904 questions have
+proofs (are true). (The remaining questions are false under
+the CWA). For each of these questions, we remove each of
+the theory sentences si in turn, and measure the prediction ac-
+curacy on each result. As there are about 19 sentences/theory
+on average, this results in 113978 “sentence removed” probes
+(of which 20746 have a critical sentence removed, and 93232
+have an irrelevant sentence removed).
+Ideally, removing a
+sentence critical to a question f should ﬂip the model’s pre-
+
+4 In fact, we see an interesting learning artifact, namely Mod0
+scores worse than random (50%) at depths higher than 2. This arises
+because most questions at these depths are provably true facts, but
+Mod0 learns to predict all facts are false except those explicitly given
+(as that is all it has seen at training time), hence systematically gets
+these wrong.
+
+5 If there are multiple, alternative proofs for f , we deﬁne a criti-
+cal sentence as one that is used in all the proofs. To support this, we
+generate and record all possible proofs for each provable fact f
+
+6 With negation, the deﬁnition of critical sentence becomes more
+complex because the the theory is non-monotonic (i.e., removing a
+sentence may cause a fact to become true). Hence, we omit theories
+with negation for this analysis.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3885Original
+
+Accuracy (test)
+
+99.4
+
+Remove
+Irrelevant
+99.6
+
+Remove Remove
+Critical
+81.2
+
+Any
+96.3
+
+Table 2: Accuracy on the DMax (no negation) subset, and all its
+(113k) perturbed (one context sentence removed) variants. The over-
+all accuracy (Remove Any, last column) is largely unchanged, but
+with a drop for the subset where a critical sentence was removed.
+
+Original predictions for true (positive) facts:
+
+T
+
+F
+
+New T 3895 (should have ﬂipped) 10 (incorrectly ﬂips)
+Pred. F 16654 (correct ﬂips)
+
+187 (becomes correct)
+
+Table 3: On the true questions that were originally answered cor-
+rectly (column 1), the predicted T answer should ﬂip to predicted
+F when a critical sentence is removed. In practice, we observe this
+happens 81% of the time (16654/(16654+3895)).
+
+diction from T to F, while removing a noncritical sentence
+should leave the prediction unchanged as T. We also measure
+overall performance on the entire dataset of questions with
+perturbed theories.
+
+The results are shown in Tables 2 and 3. We observe:
+1. The overall accuracy is largely unchanged on the full
+collection of questions with perturbed theories, suggest-
+ing robustness to these variants (last column, Table 2).
+2. For the (20k) questions where the prediction is expected
+to ﬂip from true to false, we see this ﬂip occurs 81% of
+the time, Table 3. This suggests moderate robustness to
+this speciﬁc type of perturbation, although notably less
+than for a formal theorem prover (that would make this
+ﬂip 100% of the time). For the remaining (93k) ques-
+tions, the prediction (correctly) stays true over 99% of
+the time (no Table).
+
+4.3 Performance on Hand-Authored Problems
+To further test robustness and out-of-distribution perfor-
+mance, we test the trained models on two hand-authored
+reasoning problems, both including reasoning with negation,
+written independently of our datasets. Note that these new
+datasets are used purely as test sets (no training on them,
+i.e., zero-shot performance); their vocabulary of entities, at-
+tributes, and predicates (except for is()) are all new to the
+models at test time. The two test datasets are as follows:
+
+Birds. The “birds” rulebase is a well-known logic problem
+illustrating the use of “abnormality” predicates [McCarthy,
+1984]. We entered Sergot’s formulation of it7 verbatim (bar
+syntax), and generated a series of test questions using the
+same procedure as earlier. Figure 4 illustrates the problem (in
+restricted English, exactly as presented to our model) and four
+example questions. We created two linguistic expressions of
+the formal theory, Birds1 and Birds2. Birds2 is shown in Fig-
+ure 4, while Birds1 is identical except “can/cannot ﬂy” is re-
+placed with “is/is not ﬂying” to make the negation (“not”)
+more explicit (this turns out not to matter). Questions require
+reasoning up to depth 1.
+
+If someone is a bird and not abnormal then they can ﬂy.
+If someone is an ostrich then they are a bird.
+If someone is an ostrich then they are abnormal.
+If someone is an ostrich then they cannot ﬂy.
+If someone is a bird and wounded then they are abnormal.
+If someone is wounded then they cannot ﬂy.
+
+Arthur is a bird. Arthur is not wounded. Bill is an ostrich.
+Colin is a bird. Colin is wounded.
+Dave is not an ostrich. Dave is wounded.
+
+Q1.Arthur can ﬂy. True/false?[T] Q2.Bill can ﬂy. True/false?[F]
+Q3.Colin can ﬂy. True/false?[F] Q4.Dave can ﬂy. True/false?[F]
+
+Figure 4: Sergot’s “birds” puzzle includes reasoning about abnor-
+mality predicates. The dataset contains these and other questions
+about the single theory.
+
+The circuit has a switch.
+The switch is on.
+The circuit has a light bulb.
+
+If a circuit has a switch and the switch is on
+then the circuit is complete.
+
+If a circuit does not have a switch then the circuit is complete.
+If a circuit is complete then a current runs through the circuit.
+If a current runs through a circuit and the circuit has a light bulb
+
+then the light bulb is glowing.
+
+If a current runs through a circuit and the circuit has a bell
+
+then the bell is ringing.
+
+If a current runs through a circuit and the circuit has a radio
+
+then the radio is playing.
+
+Q1. The circuit is not complete. True/false? [F]
+Q2. The light bulb is glowing. True/false? [T]
+Q3. The radio is playing. True/false? [F]
+
+Figure 5: The simple Electricity2 rulebase, an example circuit, and 3
+questions about the circuit. (Circuit diagram is for illustration only).
+
+Electricity. We also created a small rulebase about an elec-
+trical circuit, describing the conditions for an appliance to
+function. We created 4 variants of increasing complexity,
+containing 5, 6, 11, and 12 rules respectively. For each rule-
+base, we generate different scenarios (the facts) by randomly
+selecting from possible ground facts. Questions are then gen-
+erated against each scenario using the same procedure as ear-
+lier, resulting in 4 test sets. Figure 5 shows the Electric-
+ity2 rulebase with an example scenario plus three questions.
+Questions against the four rulebases require inference up to
+depth 2, 3, 3, and 4 respectively.
+
+Results
+The results are in Table 4, tested using the earlier trained mod-
+els. Note that these new problems and vocabularies were un-
+seen during training (i.e., are zero-shot). We observe:
+
+1. The “birds” problems are solved (almost) perfectly by
+all but the non-reasoning (Mod0) model (MMax gets one
+question wrong on Birds1).
+
+2. The MMax model (trained on DMax) solves all but one
+
+7https://www.doc.ic.ac.uk/(cid:24)mjs/teaching/KnowledgeRep491/
+
+of these datasets with 90%+ scores.
+
+ExtendedLP 491-2x1.pdf, p5
+
+These are two point demonstrations that the trained models
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3886Alan, who is round, red, kind, and also green, tends to be rather
+blue. In the snow sits Bob, crying from being cold. Charlie has
+green teeth and rough skin. People also notice his blue eyes.
+
+A quite nice person who is red and green is also big.
+Any big, kind person that turns red is cold to the touch.
+Young, kind people have a habit of being nice.
+A kind person will certainly be young.
+
+Q1. Dave is nice. True/false? [F]
+Q2. Charlie is big. True/false? [F]
+Q3. Alan is nice. True/false? [T]
+
+Figure 6: A paraphrased theory in the ParaRules dataset. The rea-
+soning for the true answer here is: Alan is kind (given), therefore
+young (rule4), therefore nice (rule3).
+
+Table 5: Accuracy with rules paraphrased into more natural lan-
+guage (ParaRules), without ﬁne-tuning (zero shot) and with (last
+column only). The strongest zero-shot model (MMax) partially
+solves (66.6%) this problem zero-shot, with strongest performance
+for depth 0 and 1 inferences.
+
+We use these to assemble the new ParaRules dataset of 40k
+questions against (cid:25)2k theories expressed in the paraphrased
+language. To build each theory, facts were collected by ran-
+domly sampling and instantiating fact-group templates with
+people’s names, and rules were randomly sampled. An ex-
+ample is shown in Figure 6. The train, dev, and test sets were
+generated using different partitions of the templates, to ensure
+that no templates were shared between partitions.
+
+As we kept track of the corresponding logic underlying
+each fact group and rule, we can then generate questions as
+before: Exhaustively forward-chain on the (logic version of)
+the theory, discard if a contradiction is hit or reasoning is of
+insufﬁcient depth (we require at least depth 3 reasoning), and
+then for each depth select inferred and non-inferred facts as
+true/false questions as before.
+
+Results
+We ran the earlier trained models on the ParaRules test par-
+tition (no ﬁne-tuning, i.e., zero shot). The results are shown
+in Table 5. The strongest model, MMax, partially solves this
+dataset with a score of 66.6%, higher for questions requiring
+less inference, and lower for questions requiring more infer-
+ence. (The below-random scores for D=0 reﬂect the same ar-
+tifact as earlier, namely predicting everything as false except
+for facts explicitly given. See Footnote 4).
+
+Note that these results are for zero-shot, with no model ex-
+posure to the paraphrased data during training. In contrast,
+we also trained a model using both of the D(cid:20)3 and ParaRules
+training partitions. The resulting model (last column Table 5)
+has an accuracy of 98.8% on ParaRules test (even though the
+
+Table 4: Accuracy of the earlier models tested on hand-crafted rule-
+bases (zero shot, no ﬁne-tuning). Note that the models were only
+trained on the earlier datasets (e.g., Figures 1 and 3), and thus the
+new rulebases’ entities, attributes, and predicates (bar is()) are com-
+pletely unseen until test time.
+
+can be used to solve novel reasoning problems with high reli-
+ability (90%+ in all but one case).
+
+We see one surprising anomaly also: the models trained
+with deeper reasoning depths do slightly worse on Electric-
+ity4 than the depth 1 model, Mod1. From investigation, we
+ﬁnd almost all failing questions at higher depths are those
+where the queried fact f is an unsatisﬁed rule conclusion
+(hence should be false), in particular when the ﬁrst argument
+of f is not the ﬁrst argument of one of the rule’s conditions.
+Because of the way the original dataset was generated, exam-
+ples similar to this are very rare in the training data, possibly
+causing this anomaly. More generally this illustrates that even
+when trained on a diversity of problems, the trained model
+can have unanticipated blind spots.
+
+4.4 Reasoning with Paraphrased Rules
+
+Our experiments so far have been with synthetic language,
+but our ultimate goal is to reason over full natural language.
+To test transfer to more natural linguistic forms, we generated
+a new dataset of 40k examples, using crowdworkers to para-
+phrase our theories. Of course, this only tests robustness to
+paraphrasing, not to abitrary natural language. Nevertheless,
+it is a small ﬁrst step in this direction.
+
+To generate our data, we follow a similar approach to
+[Sinha et al., 2019]. For this experiment, we used Type 1
+theories without negation, i.e., the same form as in Figure 1.
+
+Dataset Generation
+To generate the new dataset, called ParaRules, we ﬁrst gener-
+ated a novel collection of 10k theories (facts+rules) expressed
+in synthetic language, as before, then extracted the “fact
+groups” and rules from each. A “fact group” is all the facts in
+a theory about a particular person, e.g., (from Figure 1) “Alan
+is blue. Alan is rough. Alan is young.”, while a rule is just the
+original “If...then...” sentence. We then asked crowdworkers
+to creatively re-express the fact-groups and rules, shown to
+them in English, in their own words. For example, the earlier
+fact-group might be rewritten as: “Alan is on the young side,
+but rough. He often feels rather blue.”. Rewritten fact-groups
+were then turned into templates by variabilizing the person
+name. Turkers also rephrased each rule (no variabilization
+needed). Rephrasings were automatically checked to make
+sure that all the key attributes were mentioned (and no others
+included), and rejected otherwise.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3887Figure 7: In this (abbreviated) example, the model has correctly
+identiﬁed the sentences critical to the answer (shown in green). Per-
+fect identiﬁcation occurs for over 70% of the provable answers (See
+Figure 8 for a full histogram).
+
+Figure 8: Counts of the F1 scores for predicting which sentences are
+critical to the proofs of questions in DMax (test, no negation subset).
+For over 70% of the questions, the model predicts critical sentences
+perfectly (F1=1.0), with high F1 in the remaining case.
+
+ParaRules test rewordings are distinct from train and dev),
+showing near-perfect performance is learnable. Although a
+limited study, this suggests that our ﬁndings may extend to
+rulebases expressed in more natural language.
+
+4.5 Generating Explanations
+In Section 4.2, we tested (for the no-negation theories)
+whether removing a theory sentence si caused the prediction
+for a true fact f to ﬂip to false, and found that sentences caus-
+ing a ﬂip were very often (98%) part of the original proof of
+f (i.e., critical sentences), while sentences that did not were
+not (97%). Using that data about which removed sentences
+caused a ﬂip, we can build a map of the theory paragraph
+showing which sentences the model considers critical to a
+conclusion, a potentially ﬁrst step to providing an explana-
+tion for the model’s answers (see Figure 7).
+
+We can quantify this “explanatory” performance by mea-
+suring the per-proof scores of predicted vs. actual critical
+sentences for each question, measuring the precision, recall,
+and F1 scores for each question in turn. The (macro)average
+P/R/F1 scores are P=98.7, R=86.9, and F1=92.4, suggesting
+a high degree of reliability in predicting sentences critical to
+a proof. (This is essentially an alternative view on the earlier
+robustness data, viewed from a per-proof perspective). A his-
+togram of the F1 scores is shown in Figure 8, indicating per-
+fect critical sentence identiﬁcation for over 70% of the ques-
+tions, and high F1 for the remaining questions. This suggests
+the model has some knowledge of the dependencies between
+the context sentences and a particular conclusion.
+
+4.6 Other Architectures
+To what extent are our results speciﬁc to RoBERTa? To ex-
+plore this, we also trained BERT and ESIM (an LSTM-based
+model for natural language inference) [Chen et al., 2017] on
+our datasets. As a sanity check we also ran the decomposable
+attention model (DECOMP) on our data [Parikh et al., 2016].
+The results are shown in Table 6.
+
+We observe that the strongest BERT model trained up to
+depth 3 (Mod3) masters the dataset that includes higher in-
+ference depths (DMax) with 95%+ accuracy, while ESIM’s
+
+Table 6: Transformers (RoBERTa,BERT) are sufﬁcient but not
+strictly necessary for this task, although other architectures (ESIM)
+do not score as well.
+
+scores are lower ((cid:25)80%). Note that unlike RoBERTa and
+BERT, ESIM was not pre-trained on large amounts of text,
+perhaps contributing to its lower scores. This suggests that
+our results are not speciﬁc to RoBERTa or transformers, al-
+though transformers seem to learn the tasks more easily. As
+expected, DECOMP does not do well (random score is 50%),
+suggesting the datasets are not trivially solvable.
+
+Finally, to explore the role of pretraining, we generated a
+version of the D(cid:20)3 dataset in which every word was (sys-
+tematically) replaced by a random word, so that there was
+no grammaticality in the theories. After training, RoBERTa
+scores 83.3% on the test partition, substantially below the
+original 99.3%, suggests that pretrained knowledge is play-
+ing an important role.
+
+5 Discussion and Future Work
+Although our demonstrations have been in a limited setting,
+the implications of being able to predictably reason with lan-
+guage are signiﬁcant. With further advances, we may poten-
+tially be able to:
+
+(cid:15) author theories in English (e.g., Figure 5), thus sidestep-
+ping the intricacies of formal languages and offering
+new opportunities for easy creation and maintenance of
+knowledge.
+
+(cid:15) have the machine apply general knowledge, e.g., from
+
+Wikipedia, to explainably solve novel problems
+
+(cid:15) teach our AI when it makes a mistake, by providing
+the missing facts and/or correcting the erroneous ones
+it used (“instructable systems”).
+
+(cid:15) reason about counterfactual situations. For example, we
+might describe a world in which plastic is a type of
+metal, and see how the conductivity of objects change.
+This useful capability has previously been out of scope
+for transformers.
+
+Our RuleTaker models demonstrate these capabilities in a
+narrow setting. We now discuss additional steps needed to
+achieve these goals more broadly.
+
+5.1 Extending The Theory Language
+While we have shown that transformers can emulate a form
+of deductive reasoning, our demonstrations have been with
+
+0.00.20.40.60.81.001000200030004000ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3888small theory sizes (< 20 facts, < 10 rules), small domains (<
+100 possible ground facts), and with a limited rule language
+(at most one variable that is universally quantiﬁed over). Ex-
+panding the expressiveness of the rule language would en-
+hance the model’s utility. For example, we have not yet ex-
+plored using multi-variable rules such as “If a person’s father
+is a second person, and the second person’s father is a third
+person, then the ﬁrst person’s grandfather is the third person,”
+limiting what can be stated (e.g., rules of transitivity). Sim-
+ilarly there are other forms of reasoning we would like to
+train the model to handle, e.g., taxonomic inheritance, rea-
+soning with disjunctive conclusions, and handling functional
+relations (“A country has exactly one capital”). This again
+requires characterizing the semantics of such statements, and
+generating training data showing the valid conclusions.
+
+More generally, there are many natural language state-
+ments whose formal meaning is less clear (e.g., “Most birds
+ﬂy”, “It often rains in Seattle in winter.”). To apply our
+methodology to statements with more complex semantics
+would require new training data, either synthesized from a
+richer formal representation and model of inference,8 or col-
+lected from people.
+
+5.2 Generating Training Data
+We assume that our synthetic training data is sufﬁciently rep-
+resentative of the real problems that the model will eventually
+be used for. However, it is possible that the generation pro-
+cedure under-represents or misses some important types of
+theory, potentially giving the model a “blind spot” on novel
+problems if it is unable to fully generalize. (A minor example
+of this was the MMax results on Electricity4, last paragraph
+of Section 4.3). It would be valuable to ﬁnd ways to charac-
+terize the different types of inference problems in the space,
+and design training curricula to ensure they are systematically
+covered and/or the model is able to generalize to them. Ad-
+versarial approaches to generation, where the generator learns
+to create theories that are hard for a partially trained model,
+may be useful in this context, e.g., [Kalyan et al., 2019].
+
+5.3 Natural Language Inference (NLI)
+We have shown that transformers can perform deductive in-
+ference over English statements. However, human reasoning
+over language - natural language inference (NLI) - is not al-
+ways deductive. In particular, NLI allows for unsupported in-
+ferences that “a person would typically infer” [Dagan et al.,
+2013], while we have used a precise model of inference in
+which all of a rule’s conditions need to be proven true in or-
+der for the conclusion to follow. Our model may still be quite
+far from that required for fully natural reasoning over lan-
+guage. For example, we would like our model to still proceed
+if there are gaps in the explicitly provided knowledge, pro-
+viding the missing knowledge is “obvious” (and not contra-
+dicted by the explicitly provided facts), perhaps by leveraging
+its pretrained knowledge. Similarly, our model’s treatment of
+negation as failure (NAF) sometimes clashes with intuitions
+about NLI, for example given (just) “If my car does not have
+
+8 If one even exists - formal reasoning is still far from modeling
+
+all of natural language inference.
+
+gas then it is not working.” our model will conclude (given
+nothing else) that “My car is not working.” as it cannot prove
+that “My car has gas.”.
+
+This raises a fundamental tension about the nature of the
+reasoning we ultimately desire: We want reasoning to be
+rigorous (conclusions justiﬁed by the information provided),
+but also “soft” (tolerant of phrasing differences and common-
+sense knowledge gaps), and strictly speaking these two goals
+are in conﬂict. Our experiments with Turk-authored language
+illustrates tolerance of phrasing differences, which we view
+as desirable, although in a strict deductive sense it is unjusti-
+ﬁed to conclude (say) “A person is green” from “Charlie has
+green teeth” (Figure 6). Similarly we would like the model to
+tolerate minor, unstated taxonomic gaps, for example given
+“Buildings have roofs” conclude “My house has a roof”, even
+if “Houses are buildings” is not explicitly stated (but not con-
+clude that result if it is explicitly stated that “Houses are not
+buildings”). Characterizing which inferences should be de-
+ductive vs. which can be assumed in NLI, and training a
+model to combine explicitly stated knowledge with implicit
+(pretrained) knowledge, remain signiﬁcant open challenges.
+
+6 Conclusion
+
+Just as McCarthy advocated 60 years ago for machines rea-
+soning (“taking advice”) in logic, we have shown (in a re-
+stricted setting) that machines can by trained to reason over
+language. While we have assumed a particular semantics of
+inference, the methodology we have used is general: Charac-
+terize the desired behavior in a formal way, synthesize exam-
+ples, generate linguistic equivalents, and train a model. The
+result, at least within our experiments, appears to be both nat-
+ural and robust, in a way distinct from working with the orig-
+inal formalization.
+
+if the answer is wrong,
+
+The ability to reason (or emulate reasoning) over rules
+expressed in language has potentially far-reaching implica-
+tions. For example, rules might be easily authored by a per-
+son, sidestepping some of the intricacies of a formal lan-
+guage (a simple kind of “programming in English”); or they
+could be retrieved from natural sources (e.g., science texts,
+Wikipedia). Similarly,
+the user
+may be able to directly teach the system by providing gen-
+eral missing knowledge (or correcting erroneous knowledge)
+that can then also be used for new problems - a step to-
+wards instructable algorithms. Finally, the mechanism opens
+the door to neural counterfactual reasoning. For example,
+we can modify the earlier “birds” rulebase to describe a
+world in which birds typically don’t ﬂy, but where ostriches
+can ﬂy, and see the consequences. To encourage further
+progress, an interactive demo and all our datasets are avail-
+able at https://allenai.org/data/ruletaker
+
+Acknowledgements
+
+Thanks to Chitta Baral, Jonathan Berant, Oren Etzioni, Matt
+Gardner, Ashish Sabharwal, and Alon Talmor for comments
+on earlier drafts.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3889References
+[Abboud et al., 2020] R. Abboud, I. Ceylan, and T. Luk-
+asiewicz. Learning to reason: Leveraging neural networks
+for approximate dnf counting. In AAAI, 2020.
+
+[Abdelaziz et al., 2020] Ibrahim Abdelaziz, Veronika Thost,
+Maxwell Crouse, and Achille Fokoue. An experimental
+study of formula embeddings for automated theorem prov-
+ing in ﬁrst-order logic. arXiv, 2002.00423, 2020.
+
+[Apt et al., 1988] K. Apt, H. Blair, and A. Walker. Towards
+a theory of declarative knowledge. In Foundations of De-
+ductive Databases and Logic Programming., 1988.
+
+[Bidoit and Froidevaux, 1991] N. Bidoit and C. Froidevaux.
+General logical databases and programs: Default logic se-
+mantics and stratiﬁcation. Inf. Comput., 91:15–54, 1991.
+[Chen et al., 2017] Qian Chen, Xiao-Dan Zhu, Zhen-Hua
+Ling, Si Wei, Hui Jiang, and Diana Inkpen. Enhanced lstm
+for natural language inference. In ACL, 2017.
+
+[Dagan et al., 2013] Ido Dagan, Dan Roth, Mark Sammons,
+and Fabio Zanzotto. Recognizing Textual Entailment:
+Models and Applications. Morgan and Claypool, 2013.
+[He and Choi, 2019] Han He and Jinho D. Choi. Establish-
+ing strong baselines for the new decade: Sequence tag-
+ging, syntactic and semantic parsing with bert. ArXiv,
+abs/1908.04943, 2019.
+
+[Kalyan et al., 2019] Ashwin Kalyan, Oleksandr Polozov,
+and Adam Kalai.
+Adaptive generation of program-
+ming puzzles. Technical report, Georgia Tech, 2019.
+(https://openreview.net/forum?id=HJeRveHKDH).
+
+[Kamath and Das, 2019] Aishwarya Kamath and Rajarshi
+Das. A survey on semantic parsing. In AKBC’19, 2019.
+[Lai et al., 2017] G. Lai, Q. Xie, H. Liu, Y. Yang, and
+E. Hovy. RACE: Large-scale reading comprehension
+dataset from examinations. In EMNLP, 2017.
+
+[Lample and Charton, 2019] G. Lample and F. Charton.
+Deep learning for symbolic mathematics. In ICLR, 2019.
+[Lin et al., 2019] Kevin Lin, Oyvind Tafjord, Peter Clark,
+and Matt Gardner. Reasoning over paragraph effects in
+situations. In Proc. MRQA Workshop (EMNLP’19), 2019.
+also arXiv:1908.05852.
+
+[Liu et al., 2019] Yinhan Liu, Myle Ott, Naman Goyal,
+Jingfei Du, Mandar Joshi, Danqi Chen, Omer Levy,
+Mike Lewis, Luke Zettlemoyer, and Veselin Stoyanov.
+RoBERTa: a robustly optimized BERT pretraining ap-
+proach. arXiv preprint arXiv:1907.11692, 2019.
+[MacCartney and Manning, 2014] Bill MacCartney
+
+Chris Manning. Natural
+inference. Computing Meaning, 47:129–147, 2014.
+
+logic and natural
+
+and
+language
+
+[Manning and MacCartney, 2009] Christopher D. Manning
+and Bill MacCartney. Natural language inference. Stan-
+ford University, 2009.
+
+[McCarthy, 1959] John W. McCarthy. Programs with com-
+mon sense. In Proc. Tedding Conf. on the Mechanization
+of Thought Processes, pages 75–91, 1959.
+
+[McCarthy, 1984] J. McCarthy. Applications of circumscrip-
+
+tion to formalizing commonsense. In NMR, 1984.
+
+[Metaxiotis et al., 2002] Kostas S Metaxiotis, Dimitris Ask-
+ounis, and John Psarras. Expert systems in production
+planning and scheduling: A state-of-the-art survey. Jour-
+nal of Intelligent Manufacturing, 13(4):253–260, 2002.
+[Musen and Van der Lei, 1988] Mark A Musen and Johan
+Van der Lei. Of brittleness and bottlenecks: Challenges
+in the creation of pattern-recognition and expert-system
+models. In Machine Intelligence and Pattern Recognition,
+volume 7, pages 335–352. Elsevier, 1988.
+
+[Newell and Simon, 1956] A. Newell and H. Simon. The
+logic theory machine-a complex information processing
+system. IRE Trans. Information Theory, 2:61–79, 1956.
+[Parikh et al., 2016] Ankur Parikh, Oscar T¨ackstr¨om, Dipan-
+jan Das, and Jakob Uszkoreit. A decomposable attention
+model for natural language inference. In EMNLP, 2016.
+[Rajpurkar et al., 2016] P. Rajpurkar, J. Zhang, K. Lopyrev,
+and P. Liang. SQuAD: 100,000+ questions for machine
+comprehension of text. In EMNLP, 2016.
+
+[Richardson and Sabharwal, 2019] Kyle Richardson
+
+and
+Ashish Sabharwal. What does my qa model know? de-
+vising controlled probes using expert knowledge. ArXiv,
+abs/1912.13337, 2019.
+[Richardson et al., 2020] Kyle
+
+Hai Hu,
+Probing
+language inference models through semantic
+
+Lawrence S Moss, and Ashish Sabharwal.
+natural
+fragments. In AAAI’20, 2020.
+
+Richardson,
+
+[Saxton et al., 2019] David Saxton, Edward Grefenstette,
+Felix Hill, and Pushmeet Kohli. Analysing mathematical
+reasoning abilities of neural models. In ICLR, 2019.
+
+[Selsam et al., 2019] Daniel Selsam, Matthew Lamm,
+Benedikt B¨unz, Percy Liang, Leonardo de Moura, and
+David L. Dill. Learning a SAT solver from single-bit
+supervision. In ICLR, 2019.
+
+[Sinha et al., 2019] K. Sinha, S. Sodhani, J. Dong, J. Pineau,
+and W. Hamilton. CLUTRR: a diagnostic benchmark for
+inductive reasoning from text. In EMNLP, 2019.
+
+[Tafjord et al., 2019] Oyvind Tafjord, Matt Gardner, Kevin
+Lin, and Peter Clark. Quartz: An open-domain dataset of
+qualitative relationship questions. In EMNLP, 2019.
+
+[Talmor et al., 2019] A. Talmor, Y. Elazar, Y. Goldberg, and
+J. Berant. oLMpics - on what language model pre-training
+captures. ArXiv, abs/1912.13283, 2019.
+
+[Wang et al., 2019] Q. Wang, B. Li, T. Xiao, J. Zhu, C. Li,
+D. Wong, and L. Chao. Learning deep transformer models
+for machine translation. In ACL, 2019.
+
+[Weber et al., 2019] Leon Weber,
+
+Pasquale Minervini,
+Jannes M¨unchmeyer, Ulf Leser, and Tim Rockt¨aschel.
+Nlprolog: Reasoning with weak uniﬁcation for question
+answering in natural language. In ACL, 2019.
+
+[Weston et al., 2016] J. Weston, A. Bordes, S. Chopra, and
+T. Mikolov. Towards AI-Complete question answering: A
+set of prerequisite toy tasks. In ICLR, 2016.
+
+ProceedingsoftheTwenty-NinthInternationalJointConferenceonArtiﬁcialIntelligence(IJCAI-20)3890
