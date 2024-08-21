@@ -1,0 +1,616 @@
+Okay, so thank you very much. So I'm very happy to be here because I think the first
+time and the only previous time I was here was five years ago in a seminar you organized,
+I think, Michael, about AI and mathematics. And at the time you presented a slide saying
+what could be mathematics in 2030 thanks to AI. And you know, the projects were very, very
+different from what we do now. So it's nice to see how much things have changed.
+So I work in meta, I do AI format, I've been doing that for about five years. And I'm going
+to talk about what I'm doing, but especially from the point of view of generated data.
+So the kind of research I'm doing, I'm basically considering solving problems of mathematics
+as a translation task, just like you would translate from French into English or from
+one language to another. So I want to train models to translate problems that I encode
+as sequences because transformers process sequences in some mathematical language into
+their solution of the sequence in other mathematical language. So I'd like a model, for instance,
+to be given the sentence seven plus nine, three words, and translate it into 16, one
+or two words depending on whether you consider words are numbers or digits. Or provide a
+polynomial x square minus x minus one and translate it either into its roots or maybe
+into its derivative or something like that. To give an example that we're going to see
+again, suppose I want to train a model to learn a GCD. So I got pairs of integers and
+I want to compute the GCD. So I can build a huge training set of examples of that to
+train my model. I can represent my integers as sequences of digits in some base. So in
+base 10, 10 is plus one zero plus one 32 plus two. And I want the model to translate plus
+one zero plus three two 10 32 into plus two, just from generated examples and without doing
+any mathematics for at this point, the model doesn't know what a one zero or a plus is.
+I could replace all those tokens by different names. It could be blue, red, yellow, blue,
+something, something, you know, I could change all the names. Plus could be bananas or whatever.
+It would work still. So that's the main idea. The funny thing is that it works. I've been
+doing that for a couple of years. So things we've done over the time. We've, I'll show
+that we've been using that to, to do symbolic integration at pretty much the level of
+Mathematica. We've been doing dynamical systems. So I'm going to show that a while ago. We've been
+doing symbolic regression. We've been doing cryptography, cryptanalysis of cryptography.
+I've been using it for theoretical physics and quantum computing, et cetera. So what does it
+mean, Mathematica, as a translation test? Basically, there are always three steps. You
+need to generate data sets, large data sets of problems and solutions to train your model.
+And I'm going to talk a lot about that. You need to represent your problems and solutions
+as sequences. I didn't intend to talk about that, but I'm already said I would, so I will.
+And then I need to train my transformer to translate the problem into solutions.
+Okay. So more specifically, I want to talk about the training data. I'm training from
+generated data. This allows me to have the largest possible data sets. I can generate as much as
+I want. But there's an impact. What is the impact of synthetic data on learning? And it's an
+important question, you know, for LLM in math, in physics, et cetera. And it sort of loops on
+what Julia discussed this morning. So I'm going to show first a first example, which was original
+paper with Guillaume Lant five years ago. We train transformer to do undergrad math to compute
+symbolic integrals and also solving ODE. So, yeah, I think you know what an integral is. So you
+have a function and you want to find the antiderivative of it. It's undergrad math, but don't
+underestimate it. It's not trivial for mathematician. I don't think many people here could do that in
+their head. And it's also very hard for machine. There's an algorithm, which is known as rich
+algorithm, but it's extremely hard, supposed to be complete, but it's never completely implemented
+because it's extremely hard to actually implement technically. So you see what we want to do.
+We're going to encode problem in a sequence of symbols. And I'm going to discuss this now. Then
+generate data. So generate pairs of functions and integrals to train the model and then train the
+model. So how do you encode everything as sequences? So how do you treat math as a natural
+language? So the good news is that most mathematical objects are basically symbols and sequence. Math
+is full of words, you know, constants like pi. Well, that's a word. Vectors, matrices, they're
+already sentences. If you look, they're already in sequence in sequential form. Graphs are sequences
+of edges, which are themselves sequences of node, et cetera, et cetera, et cetera. There are basically
+two issues. How do you represent numbers? And how do you represent expression, functions,
+equation, that kind of thing? So for numbers, integers are easy to represent. We can represent
+them as sequence just as we write them, you know, sequences of digits in some base. So,
+you know, 1024 could be plus 1024 in base 100 if you want to save space.
+Then once you can do integers, you can do rationals because they're just pairs of integers.
+And you can do reels that are symbols, you know, they're just expression. And as for real number,
+the way we encode them typically is just like you do them in computer science. So you need to
+put them into finite precision. You're in a computer, you have no choice. But you can encode
+them at triplet of sine, mantissa, and exponent. And then if you can do reels, you can do complex,
+et cetera, et cetera, et cetera. How do you represent expression? Well, there's a magic here.
+It's very easy to represent an expression as a tree. You know, computer scientists do that
+all the time. They call it abstract syntax tree. Logicians have been doing that since, you know,
+the beginning or maybe the middle of the 20th century. Curry calls those ob systems, if I
+remember correctly. So basically, you have a tree here. And the operators are the internal nodes
+and the numbers are the leaves. So two plus three times five plus two can be represented as a left
+tree, you see. And the good thing is that you don't need a parenthesis and all that. But if you get
+a little more creative and decide that you just don't want just numbers, but you want to add x,
+well, or add new functions like the power or the cosine, it's still the same tree. And you can get
+even more creative and having Greek letters to represent, in that case, to represent constant
+functions. And you could have differential operators and represent here, you know, a differential
+equation. I don't write the equal zero that would be at the top. There's no real need. But you see,
+you can represent a lot of mathematical expression as trees. And this is good news, because once
+you have a tree, it's very easy to enumerate it into a sequence. So we use Polish notation. Basically,
+you start from the root, parent is enumerated before the child and children from left to right.
+So here start from the roots, it's plus, then two left child, right child start from the root
+two, three, plus five, two. And having done that, you can, you know, transform a sequence, any function
+you had. So we're in this case totally ready for the transformer. So yeah.
+So we use position in everything I use absolute positional encoding, because I don't really care
+about the length of a sequence. I don't have a problem of generalization to other lengths, or
+to say it more precisely, when I have a problem of length of sequence, I usually have a problem of
+mathematical scaling of my problem, which is much more complicated. So I don't bother with
+anything else than absolute. So how do you generate data? So they are basically, in this
+case, two main methods for generating data. You remember, I'm trying to compute. I want to train
+model to do integration. The four one method is the, well, the natural way you generate a random
+function, small f, how do you generate a random function? You know, a function is a tree. So
+generate a random tree and just randomly choose operators and variables. And you compute the
+integral big f, and you have a pair, small f big f, rinse, repeat that 10 millions times,
+and you get your training set. Of course, the problem of that is it only works if you
+can solve the problem. So it won't work for an open problem. And it's usually, it tends to be
+slow. And in this case, you know, the solver we have are not perfect. So it only generates
+the function that the solver can solve. The other approach, which we talked about this time
+earlier is backward, the backward approach. So instead of finding the solution to a problem,
+we try to find the problem to a solution. So we generate a random function big f,
+and we compute the small f, the problem, which in this case is very easy to calculate because
+it's a derivative, which is, you know, very easy to do. So there are two ways and we can try. So
+just to give examples of backward generation, I added this this morning because I'm,
+there was a question about that. In this case, backward generation is very easy.
+But sometime it's a little more complicated. So in this paper, we wanted to do first order ODE.
+So you want to generate an ODE and its solution. You would like to generate an ODE from its solution.
+That's a stupid method, you know, if you write y prime equals the derivative of the solution,
+you have an ODE that is verified, but you're not training the model to solve ODE. You're training
+the model to do integration and is your problem. So the method we use here to give you an idea of
+the way we do that, we can say that the solution of first order ODE are always defined up to an
+integration constant c. So we can always represent the solution y as a function of x and c. Okay,
+so let us generate a random function f of x and c of two variables. Suppose we can invert this
+by solving in c. So write it in the form big f of x x x y equals c.
+And I differentiate, I'm going to have a differential equation solved by small c.
+Okay, let me show you on an example how it works. I want to find a generator random function on the
+left x log c on x, which is the solution. And I would like to find a differential equation verifying
+this. I'm going to solve in c. So c equal x times exponential of y on x. I'm going to differentiate
+and simplify. And that's the function. And you can see here, I'm making things very difficult for
+the machine because it's difficult to find a solution from the shape of the of the function. The
+function simplifies very nicely. And there's no way the model is going to reverse this process.
+Okay, so let me be back at the, that was just an example of backward generation.
+So let me be back at the integration thing. So we train models which are
+transformers, six layers to, well, a relatively simple transformer with a few tens of millions
+of parameters. We train on generated data between 20 and 40 million examples. And we test on held
+our data. So on data set that were not seen at training. And then you always verify, you need
+a verifier in that case, in pi. Basically, you check that the derivative is correct. Or in case
+of a differential equation, you check that the solution is, well, when you put it into the
+value, it simplifies to zero. So the good news of that, but that's not what I want to talk about
+was that it worked. So you see on the two forward and backward data sets, we reached 93 to 98
+accuracy, which meant that almost all the function in a test set that were not seen at training
+could be integrated by this model. And just to compare, these are the performance of
+Mathematica, MATLAB and MAPL. So they are playing on our field. Basically, we generate the data
+to test them. So we made things harder for them and easier for us probably. But still we're doing
+at least better, at least as well as them and probably better. Okay.
+I don't know. I don't know if they use it. I think there are better ways to do it than this. But
+still it showed that this approach, and it was surprising at the time because, you know,
+no one thought that this could be possible. But what I'm interested in is something else.
+In this evaluation, I'm integrating, so I have two training sets, the forward and the backward
+training set. I train on my forward training set and I'm keeping 10,000 examples to serve as a test
+set. And same for the backwards. So my model is tested on the same data set or data distribution
+as the one it was trained on, which means that everything is done in domain. I'm not changing
+the distribution. If you were to use that in real life, there's absolutely no reason that the test
+examples would come from the same distribution. So can we test that? So the way to test it is to say,
+okay, suppose I train on forward and test on backward or the other way around. So here the lines
+are the training data and the columns are the test data. So you can see if you train on forward
+and test on forward, you start with 95% accuracy. But if you test on backward, it goes boom, you go
+down to 11% accuracy, which is still non-trivial at all, but it's quite disappointing. And even
+if you use beam search, so you have the model generate many solutions and you verify and you
+take the best, you're still only at 17%. It's not very good. Note that if you train on backward
+and test on forward, it's not symmetrical. It's much better, but it's still quite disappointing.
+So what's happening here? So I believe this is totally due to the way you generate the data
+we generate. So these are examples of functions and primitives generated with the forward approach.
+And this is what you get with the backward approach. You see the forward approach
+generates small problem with long solutions. Whereas the backward approach does the opposite,
+it generates long problem with small solutions. And this is due to the way things simplified,
+or rather tend not to simplify, a random function usually doesn't simplify well.
+So the problem is that you have the explanation here. The thing is that when you train the model
+on the forward distribution, sorry, you're going to show the model, what I mean?
+Yeah. So when you train the forward on the forward distribution, you're going to show the model like
+40 million of examples. And the model only has this to learn. So the model is going very quickly
+to learn the cardinal law of integration according to this data set, which is it's an
+expansion. You have a small problem and the wrong solution. And the model will be certain about it
+because it will have seen it in every single example it trained on. So of course, if you come
+at test time with this example, what happens? Everything breaks. To give a trivial example,
+if you train a model to recognize dogs and cats, and all the training picture of dogs are big dogs,
+and at test time, you arrive with a Yorkshire, a very small dog. I'm ready to bet the dog is going
+to be classified as a cat just because the distribution has changed. So
+fortunately, in this case, we can generate another training set by using by leveraging
+integration by part. The idea is that suppose you generate two random functions like backward,
+big F, big G, you compute the derivative, and then you already have generated lots of data.
+So you look up inside your training set, whether you already know small F times big G.
+If so, you know big F small G for free, thanks to the integration by part rule.
+It looks like a strange idea, but when you generate tens of millions of examples,
+this happens a lot. So it was very slow to generate, but we could generate from the
+backward model an integration by part model, which has one big virtue, which is, you know,
+it's much more balanced. So this problem is still a little shorter than the solutions,
+but they're more balanced than before. And so let's see what happens if now we do
+the out of distribution table, but adding in test set the integration by part data. So you see
+for the forward data, you train on forward, test on forward, 94% on backward, 11%. But on
+integration by part, which is completely different from forward, you're back at 86%,
+which is not 93% granted, but it's a very good thing, good, good level. So what you see here
+is that there's this problem of out of distribution generalization, which means a model trained on
+some data set tend to generalize to data set that are close to the training distribution
+it was trained on, that if you try to test it on a distribution that is far away from the
+training distribution, like the backward, the backward distribution in that case, things break,
+but out of distribution generalization still is possible when the test distribution are sort of
+in the middle or not too far. So we here have a first intuition about the role of training data,
+which is training data, you know, OOD is the real problem in those in those kind of problem,
+mathematical problems, but it's not a hopeless cause, it's something that must be controlled and
+understood precisely. Okay, so I'm going to show a second paper where, yeah.
+Since you're switching them, so instead of integration by parts, why did you not just train
+on forward plus, I mean the mixture? Oh, so the mixture always works. The mixture always works
+because it has seen everything. The problem is how do you generate a test set that is different
+from both values. So integration by part was a way to balance the thing, because if you mix,
+yeah, the ID many people have is, oh, diversity is king. So you have 10 different generator and you
+mix them, but you know, you're only good on the sum of the 10 generators. If you have an 11th generator
+as your test sets, then you have the same problem. So here it's about OOD, it's about really, you
+know, testing on a different distribution than a training distribution. You're still missing forward
+plus backward, tested on IPV. Oh, that would be, that would be larger than that or around 90%.
+I think it's in the paper, yeah. What about simpler distribution, like just adding
+functions to get more complicated functions than in the training data?
+So you can do that. That's basically what we did in the forward case. What you don't want to do is to
+have much longer expression than those seen at training, because then you get a problem with
+the positional encoding. And you get a problem that, you know, models that have learned on short
+functions, no short functions and not long functions. So you have different kind of problems.
+That's all in a different way. Yeah. So you like collect 100 to 200, like high quality
+integration test examples that are kind of close to what users actually want to use, like, does
+that exist? So this is what I would do if I was writing this paper now. But this priming thing
+is an idea we got, you know, between last year and this year. So yes, this is probably a good
+element on the, a good aspect on the solution. Another kind of long question, but you could
+also imagine a system that doesn't just go straight from input to output, but given the input,
+produces a sequence of transformations drawn from a set which are guaranteed to work.
+So that would be more like theorem proof. Yeah, it could be possible to do that.
+It's not absolutely sure that it would be an easier problem.
+Probably not easier. Yeah, it would be interesting to try. Yeah, we had a bad
+experience with a bad experience with that on the same kind of dynamic system with Amore a while
+ago, where basically we were doing the controllability of dynamical system. And when you
+calculate the controllability, you need a Jacobian to say anything. So we said it might be a good
+idea if instead of having just the system to predict the solution, we said system plus Jacobian
+predict the solution. And actually the performance were worse. The way we understood it is that the
+problem is that you have a trade-off. If you add a Jacobian, you have a much longer sequence
+of input to process, which has more information in it, but the transformer needs to understand
+how to use the information. And so sometimes if you need to give more information to help find the
+solution, you have a balance between, you know, the complexity, the increased complexity of the
+problem you're solving versus the gain you get at the solution. Just as another baseline,
+if you're trying to learn a differentiation, is it perfect? So this, I think we tried it and it
+worked at about the same level. What we couldn't prove was whether one was easier than the other
+from the transformer perspective. But if I were to redo that, that would be experience.
+So the second insight on those data generation problem is a later paper called Linear Algebra
+with Transformers. So the idea was say, okay, can you learn basically linear algebra? You know,
+you have a 55 matrix. You can tokenize all the entries with random entries. You can tokenize
+all the entries, you know, as sine mantissa exponent, you know, round them to 3D symbols or
+something like that. And you provide the model with matrices and solution. You want to know
+whether they learn. So the good news is that it's very easy to learn to transpose a matrix,
+to add a matrix, to multiply two matrices or multiply a matrix by a vector. And what's even
+more amusing is that you can learn to calculate eigenvalues with pretty good precision. You can
+also do eigen decomposition. So calculate eigenvalues and eigenvectors. You can do SVDD composition,
+but for smaller matrices. And you can do matrix inversion up to the conditioning factor of the
+matrix. It's badly conditioned. It doesn't work, but it doesn't work for loom pie either.
+But what I was interested here is, so yeah, this is possible.
+So typically, in order to evaluate, so I'm evaluating on a matrix, so I'm comparing
+the solution, the unique solution or, you know, reconstituted solution for inversion,
+you multiply the two, you compare with identity. And the way we calculate it is that we use L1
+distance on the entries of the matrix. Why L1 and not L2? Because of the eigenvalues. Because,
+you know, the high eigenvalues are much easier to learn than the easy one. And if you use L2,
+your metric is going to tell you that the model succeed, whereas it has mostly only learned.
+And so you want the L2 matrix, the L1 error, relative L1 error, to be below
+two percent or five percent or one person. So here most of the result is five percent precision.
+So close enough to the values. And when it's wrong, is it really wrong or it's just a little off?
+So I don't present it here, but that's another paper. I studied this very precisely for the
+eigen decomposition case. So in the eigen decomposition case, what you have, because,
+you know, you think LLM hallucinates, so when it's wrong, it's totally wrong. So I wanted to look.
+So eigen decomposition, I use a large test set, and I had like 8,000 errors. And in eigen decomposition,
+you know, you try to predict a diagonal matrix, which is the eigenvalues, and an orthogonal
+matrix. In that case, the input matrix was symmetric. So an orthogonal matrix
+that should have, you know, columns and rows that are one norm, unit normed, and two by two
+orthogonal. And so what I noticed is that in almost all errors, the eigenvalues are correct.
+So the model would never, when it failed, the eigenvalues were still right.
+And that the orthogonal matrix that was learned would have one unit norm vectors and
+columns and rows. But, orthogonality was not always respected. So to answer this question,
+in this specific case, when the model fails, it fails for a relatively good mathematical reason.
+And it doesn't fail too far from the correct solution. For inverse matrices, it was typical,
+you know, the 10% you have here, you can predict them perfectly by looking at the condition factor
+of the initial matrix. If it's over a certain value, it fails always. If it's below a certain
+value, it succeeds always. So the errors in this specific case tend to be predictable.
+So yeah, so MLP, I couldn't make anything work with MLP. The funny thing is that this
+works with LSTM and GRU. So you need sequential model. You don't necessarily need transformers to
+do that. So what I was interested here was the importance of training distribution. And eigenvalue
+is a good example because we have a lot of theory. So the 5, 5 symmetric matrices I'm using are
+generated as matrices with independent coefficient. And those are known as Vigno matrices. And because
+the coefficients are independent and identically distributed, I know in advance that the eigenvalues
+will be distributed according to a semicircular law, which is bounded, symmetrical around zero,
+and that the variance, the size of those will depend on the variance of the coefficient and
+dimension of the matrix. So the question on in-domain versus out-of-domain is,
+when I'm training my model on Vigno matrices and it has 100% accuracy, does it learn to the eigenvalues
+of symmetric matrices or just the eigenvalue of Vigno matrices? And the good thing here is that
+we can easily test it by changing the training distribution, either of the training and test
+sets. Basically, you know, you can always represent a Vigno matrices as a product of an
+orthogonal matrix, a diagonal component, an orthogonal matrix with the diagonal with entries
+at the semicircle and H orthogonal. So if I'm generating random orthogonal matrices,
+either by generating, you know, Gaussian Vigno matrices or something like that,
+and change the diagonal to any distribution I want, I can generate sets as large as I want
+of as many matrices with any kind of distribution of the eigenvalues. In other words, I can control
+my distribution to almost perfection. So I did that to generate seven different distribution.
+So four distribution with positive and negative eigenvalues like my Vigno matrices. So I have
+my semicircle group which has the original Vigno matrices, you know, eigenvalues as a semicircle,
+and uniform eigenvalues that would be distributed uniformly or Laplace or Gaussian with the same
+variance as the one you would get inside the Vigno matrices. And then I tried with three
+distribution with only positive eigenvalues. That would be, you know, the absolute values of
+semicircle or Laplace and the Marchenne-Cobasture distribution, which is basically the distribution
+of covariance matrix, 55 covariance matrices, which is close to a statistical distribution,
+if you like, or a real-world distribution. And the thing is that we can then train seven
+models on those and test them on all the distribution, which is what you get in this table. So as
+before, the lines are the training models and the columns are the test sets. So you see the first
+line. If you train on Vigno and test on Vigno, first line, first column, you're at 100 person,
+told you. But as soon as you change the test distribution, things start to blow. Uniform
+Gaussian Laplace, you're down at 30 to 30 percent accuracy, which is again non-trivial,
+but disappointing. And if you want to predict positive matrices, positive definite matrices,
+then you're very close to zero. The model has seen none. It cannot learn.
+If you look at the freelance line, if you train on positive definite matrices, the model is going
+to predict the eigenvalues of positive definite matrices, but it has never seen a negative
+eigenvalue. So it will not predict one for you, no matter how your matrix is configured.
+But the funny thing is the line three and four, you see the Gaussian and Laplace distribution.
+These are weird distribution. These are distribution of matrices with a distribution of
+eigenvalues, which is fatter than the semicircle, or has longer tails than the semicircle,
+and which correspond to matrices with non-independent coefficients. I don't know what they are,
+really, but the funny thing is that if you train on those, not only do they achieve 100%
+on their distribution, they also achieve 100% on the semicircle distribution, and they also
+achieve 100% on positive definite matrices, even though pretty much none of them, the probability
+of them having all positive eigenvalues, is very, very small. This is 2 to the minus 5.
+So you can see here that whereas out-of-distribution generalization is a problem on my
+Vigno matrices, you see it doesn't generalize out-of-distribution, there seem to be special
+distribution where generalization out-of-distribution happens, and not happens, but happens very far
+from the distribution, from random matrices to definite positive matrices, which is quite a surprise.
+A funny thing is that those robust distribution have even better properties in the sense that models
+trained on them learn faster. So here, I need two things. I constrain the number of training data.
+I trained on only 36 million examples, which is relatively small, and I tried to do larger
+eigenvalues, 8, 8, 10, 10 matrices. So you see, if you train on a semicircle data, the model achieves
+zeros on 8, 8, and 10, 10 matrices because you don't have enough examples. You would leave with 100
+million, you'd get 8, 8, but never 10, 10. But if you train on Gaussian and Laplace, not only do you
+get 100 percent on Gaussian and Laplace, but you also get 100 percent on Vigno. In other words,
+if you want to predict quickly the eigenvalues of Vigno matrices, the best training distribution is
+not an ensemble of Vigno matrices, but it seems to be an ensemble of Gaussian or Laplace matrices,
+which is extremely counterintuitive, if you like, because receive wisdom is that you need to train
+on the distribution you test on, if you can. In this case, you can see the row. Sometimes you can
+be training on distributions that are different from the distribution you want to test on, and it works.
+And you could also, this way, achieve 10 to 10 by 10 matrices, which is the kind of thing you
+couldn't do with Vigno train matrices. So the takeaway here is that out-of-distribution
+generalization is possible, and it seems to happen for special robust distribution
+that also allow for faster learning. So next point is, you know, how do you characterize those
+strange distributions? So on this, it's too difficult. The problem is that the calculation of
+eigenvalues is a complex algorithm. Transformers are difficult. The only thing I could get on
+interpretability here is that thing related to the L1 and L2 norm. It's very clear that the
+model is learning the large eigenvalue before the small ones. But in this case, for the Gaussian
+and Laplace, no. The problem is that I don't also have, well, I don't know.
+Yeah, you could do that, yes. Yeah, this definitely would be possible, I think.
+So I'd like now to present a couple of more recent results about the GCD. So Julia talked of it.
+And this is a result about, again, distribution, training distribution, but also interpretability.
+So I'm now looking for a very, very, very simple problem, which is calculating the greatest
+common divisor of two integers. I sample my integers between one and a million. So I get
+10 to the 12 different problems. So the model is not going to memorize the problems and the
+solution. That's way too many of them. I compute the GCD and I train the model to predict it.
+And then once the model predicts, I test out, I test the model from time to time during training
+on a very large held up data set of 100,000 examples. And all appearance are randomly distributed.
+So why do that? I had noticed, so it's known that addition is relatively easy to learn on a
+transformer. Multiplication, on the other hand, is a fairly hard problem to learn. And I wanted to
+see whether rational arithmetic worked. And my initial experiment showed that it's very easy
+if you give a number of four values, A, B, C, D, that represent two fractions, A on B and C and D.
+The model takes no time to learn whether to compare the two fractions. Comparing the two
+fractions is very easy for a transformer. But I never could get a model to add two fractions,
+multiply them, or just simplify one in, you know, lowest terms. So I was saying, okay,
+is it because of the GCD? So that was the idea, the rational of this study in the beginning.
+So you know the drill now. The idea is that you're going to generate things and you're going to encode
+your numbers as sequences of digits in some base. So which base? So if you have a small base, you
+will have long sequence that are harder to learn. If you have large base, you'll have smaller sequence,
+but you'll have larger vocabulary that will take more example to learn. Also, do you want a prime
+or a composite base? In a prime base, you know, fractions never simplify. In a composite base,
+lots of fractions simplify. So I tried it with a relatively large composite base,
+and it seemed like I struggled. You know, if you try in base 30, I'm having transformer with one
+layer and 64 dimensions. That's 300,000 parameters, the smallest transformer you'll ever see.
+And I get after just 300,000 examples, the model achieved 85% accuracy, which seems huge.
+And you know, if I train enough, I'm at 95% accuracy. So it seems that, yeah, it's easy to learn.
+Well, until you try base 31, 31 is the green curve at the bottom. And you see in base 31,
+same examples or same kind of example, the model goes to 61% and never goes up.
+So the model doesn't learn. And it gets more and more curious. If you vary the base from top to
+bottom, you're at 36, 10, 2, 3, 31, the performance seems to depend on the base you are using for the
+encoding. And now this doesn't seem logical. You know, the GCD doesn't depend on the representation
+of the number. So is the model learning the math? What is the model actually learning here?
+So to understand that, you can look at the model prediction. And this is the whole point of 100,000
+test sets that I built. So in this table, I have 100,000 test examples of random GCDs,
+pairs of GCDs, but I get a thousand GCD, pairs with GCD1, a thousand pairs with GCD2, etc.
+And here you can see every line is the result on 1000 pairs with a GCD. And you have a percentage
+So I'm giving you the most common prediction of the transformer and how often it happens.
+So in base 2 and base 10. So the first thing you can see is that the second, the third and fifth
+column is always 100% when it's not 99. something, which means that the model for pairs with the
+same GCD always make the same prediction, which again is a bit surprising, because if I give you
+two pairs, A, B, C, D, and tell you do they have the same or not the same GCD, it's quite a hard
+problem. But the model has no problem with that. It classifies pairs with the same GCD in the same
+class. And then it predicts a unique value. So in base 2, you can see in both the correct
+prediction, the model correctly predicts 1, 2, 4, 8, 16, 32, the power is of 2. It goes beyond
+that. If you, for base 10, you have 1, 2, 4, 5, 8, 10, 16, 20, 25, 32 as well. No, not 32. So
+products of, you know, small powers of 2 and 5. So the model knows how to predict the products of
+divisors of the base. But what's interesting is that there's a lot of patterns here. If you look
+at base 2, you can see that all the odd numbers are predicted as 1 always. All the even numbers are
+predicted as the largest power of 2 that divides both of them. Okay? And if you look at base 10,
+there's also kind of a kind of a rule appearing. In fact, by looking at this on many base for many
+models. So what's happening for base 2? For base 2, what I suspect the model is doing is that it's
+just counting the zeros. You know, if you look at the binary representation of an integer in base 2,
+the largest power of 2 that divides the integer is the number of zeros on the right.
+So the model has a very nice shortcut here. If the model just learns to count the right most zeros,
+and you see 28 and 14, it's going to say, oh, 2 zeros, 1 zeros. GCD must be 2. Of course, it's wrong.
+But that's the model prediction. Sometimes it works. 16 and 56 will work perfectly with this
+algorithm. So it's a wrong algorithm that works. And the same is true in composite base. You know,
+why in base 10 do you predict 20 or correctly? Because all the numbers that have GCD 20,
+the two numbers must end either with 0, 20, 40, 60 or 80. So if the model memorize a very short
+list and look at just two tokens, it's going to be able. So that's what the model seems to be doing.
+But more specifically, I could, by looking at model prediction, say that in this case,
+I can predict every prediction on my test set of every model in every base by applying free rules.
+So the first rules say prediction are deterministic. The model predicts a unique value, f of k,
+for almost all pairs of integers with the same GCD. So the GCD, if you have a GCD,
+everything is classified, is predicted the same. The correct prediction, which are the
+case where f of k equals k, are products of primes dividing b, specifically products of
+small powers of prides dividing b. And in the case where the model outputs an incorrect prediction,
+the incorrect prediction is the largest correct prediction that divides k, always.
+So you see in this case, the model, and this is true at all times during training. So the model,
+with this, I can, by looking at the results, I can perfectly interpret what the model is doing,
+what the model is learning. Right? But it's still a bit disappointing because you see how you get
+good results. You get good results for base 30 because it has so many dividers. You get bad
+results for 31 because it has so few. And if you want to get a very good result, you can go for
+base 420, you know, 4 times 3 times 5 times 7. And you'll get to, you know, 97%, but you actually
+only learn 38 of the 101st GCD. All those are predicted correctly. All the rest are wrong.
+So it's disappointing. Fortunately, you can do better if you use large base. So I tried base
+2023 for, you know, timely reasons, which happens to be 7 times 17 to the square.
+If you train on this, what you're going to see, so these are free learning curves,
+you have the losses on the right and the number of GCD predicted on the left.
+The epochs, each epoch correspond to about 300,000 examples. So 100 epoch is 30 million
+examples. That's a lot. So what you see is that after 10 epochs, the model learns as predicted
+by the previous theory, 1, 7, and 17. It knows the divisors and that's divisors of the base and
+that's all. But and then you wait and the train loss is flat. You see the loss curve at 05,
+which is totally flat for all experiments. And then suddenly after 100 experiments,
+actually the time when it happens varies from one initialization to the other. It seems to be
+some relatively random variable. All of a sudden, the model learns three more GCD. It doesn't learn
+one by one. It learns three more in a very short period of time. And the GCD that are learned are
+free 21 and 51. So three, three times seven, three times 17. So it's like all my group of
+1, 7, and 17, my predictions are now split into 1, 3, 7, 21, and 17, 51. And then after
+again 100 epochs, I'm learning two and then I get a couple new predictions and so on.
+So you can see that if you train the model for a very long period of time, the model is going to
+learn not only the divisors of the base, but also the small primes and their powers.
+And the idea is that if you let it run for enough time, eventually you're going to learn
+all the GCDs. But it's obviously not efficient. It's very slow. But the model seems to be able
+to learn from ways I don't really understand a full algorithm for learning GCD.
+But still, I only learn a few GCDs with this. So the next point is could we do better?
+So you could do better by engineering the training distribution. Remember, that's what I wanted to
+talk about. So far my training sets have uniformly distributed operand, which seem like a decent
+idea. You want numbers between one and a million or sample them randomly. Problem is if you sample
+them randomly, 90% of the number are larger than 100,000, which is a small GCD like GCD69 is almost
+never seen during training, which is totally at odds with the way we learn and teach GCD,
+right? Or teach arithmetic, right? We teach small example to generalize for the large
+world. The model doesn't do that. And there's a way to do that, which is to increase the value
+of a time score curriculum learning. But it's known to have problem that is as you increase the
+values, the model, the values of the, you get to large values, the model tend to forget the small
+ones. But there's a way around it, which is we could engineer the training distribution. We could
+have large uniform appearance. So instead of having numbers uniformly sample, we sample number k
+with a probability one on k or proportional to one on k. And if you do that, you see the training
+curve, they get a bit noisy, but you still see the steps. But the models learn much faster. So when
+you do that, you have as many one-digit number as two-digit, as three-digit, as four-digit. So you
+go to the model and you say, be my guests. I give you a lot of easy examples. Memorize. And you're
+going to generalize. And it works. And it works. So if you do that, you can learn with that all
+primes up to 23. And instead of, you know, in the past being able for base 10, I used to be able to
+predict about 13 or 14 different GCD. Now I'm at 48. And for large base, I can know what the model
+can learn up to 73 GCDs out of the first 100. So the model is clearly learning more by changing
+the distribution, by changing the training distribution. The test distribution doesn't
+change. So this is an even better example of those robust and special distribution I was talking about.
+But you could push that further. You know, we talk of the training distribution, but what about the
+outcome distribution? As Julia mentioned, the natural distribution of the GCD, if you have two
+random pairs, if you have random pairs, the GCDR distribution has one on k square, if k is a GCD.
+That's an old theorem by Césarro. So it means that the large GCDs are never featured in the
+training set. You know, there's 100 times less GCD10 than GCD1. So when you train the model on
+those kind of examples, the large GCDs are hard to learn because you see no examples. So what if you
+use a log uniform distribution, one on k instead of one on k square? Well, you see at this time,
+I go up to 91 GCD out of the first 100. So the model almost perfectly learns everything and
+all GCDs up to 53 are learned this way. So again, by improving the training distribution by biasing
+it, first on the distribution of input, but then the distribution of outcomes in a training set,
+I can significantly improve. I can turn a model that doesn't really work into a model that really
+works. At this point, you might say, okay, we're improving the distribution. Why not have a uniform
+distribution? Well, I tried and it doesn't really work. You see the accuracy, which is
+the number of GCD predicted from one epoch to the other, and it's totally random. So the model
+still learns GCD one by one. As before, the loss is flat, but there's something totally crazy happening
+here. If you look at the prediction in this case, I'm showing you here the predictions
+of the model at successive epochs. So you see 266, 267, 268. So if you look at epoch 266,
+you can see the correct predictions among the 21st, 1, 2, 5, 8 and 20 are correctly predicted.
+The next epoch, you see that 4, 8, 10 and 16 and 19 are predicted, but the others are wrong
+and so on. But if you look at the values predicted, you can see at epoch 266, the ones are predicted
+as 1. 1, 3, 7, 9, 11, 13, 17, 19 are predicted as 1. If you see at the next epoch, they're all
+predicted as 19 and the next epoch, they're all predicted as 73 and then at 7, etc. So the model
+is randomly predicting the GCD, but not totally randomly. There's a lot of method. What I'm noticing
+here is that the classes of prediction, you know, the multiples of 1, multiples of 2, of products of
+the base, are still all predicted as a whole. What is broken by the uniform distribution is how the
+model, actually what the model predicts for every class. So in other words, you can see here a very
+good example of how engineering the training distribution can get you very good results
+or bad results if you make things more balanced. A certain number, a certain volume of imbalance
+in the labels seems to be needed for the model to learn, not how to classify the GCD, but how to
+affect the classes that it's calculated to the right values.
+Okay, so the main takeaway here is that you can see in this model, which I agree is a toy model,
+but that's the point of toy model. You can understand a lot of things from them. The prediction here
+are deterministic and they're explainable. They're not explainable as most of explainability people
+want to do, you know, by looking at the weights. They're explainable in the sense that if you
+look at the model prediction hard and for a long time, you can exactly know what the model
+will predict at all times during training, depending on the values of the inputs.
+Also, you can figure out what the model is learning. You know, the way the model is learning
+to predict is it's not Euclid, not at all. It's a sieve. The model is learning to classify pairs A,
+B by looking at a list of divisors it knows, of common divisors it knows, and taking the
+largest from them. So in the beginning, the model predicts everyone as one, and then all of a sudden
+in predicts two, and so you've got two groups, the odd number that predicted, the odd pairs,
+well, the pairs where at least one of the terms are odds that are predicted as one,
+and the pairs where both are even that are predicted as two, and then those pairs are
+going to split in two more and more. So it's a sieve. You basically learn the small primes one
+after the other, and once you have them, all the multiples of those on previous GCDs are learned.
+So you can easily understand that this model is a perfect model. It's a slow method.
+You know, Euclid is log o of log n in the size of the numbers. This one is probably
+o n square or something like that, so it's not a very good model, or o n. But it does predict
+the correct value. The only thing we've noticed is that the way the model predicts seems to have
+two steps. First, it clusters the value in two groups, and then it predicts a value for those
+clusters, and clustering doesn't depend on the output distribution, but predicting the value
+depends on having an in-balance distribution of the outcomes. And again, we've seen an interesting
+case of a uniform form, a generally robust or a robust training distribution that can
+accelerate training and work on auto-distribution. So yeah, that's all I had to say. So take
+a ways. The transformers can learn mathematics. I hope I've convinced you of this at least to some
+point. I think it's a new field for research with application in science. This is the kind
+of thing we want to try to solve open problem in mathematics, like we did in the Lyapunov function.
+But it's also interesting for AI, because understanding what the transformers can do
+on problems of math is a good idea, a good start to trying to understand what transformers can do
+on every problem. And the key point of my talk was about training distribution. So training
+distribution matters. Some training distribution are better than others. So the matrix, it was
+one exceptional case, but now I got two exceptional cases. So probably it's an area of research that
+would deserve more work and more interest. Thank you very much.
+So for the GCD, there are just sequences of digits. So 10 in base 10 is 1, 0. 32 is 3, 2.
+Plus 3, 2. I use the plus as a separator so that the model, you know, if you see 3, 2, 1, 0,
+it's difficult to know whether it's 32, 10 or 3, 21, 0. So that's the way it is done.
+Can you comment more on the training setup in the large basis and blocking slides?
+On the training set?
+Training setup, like for example, whether the learning rate was fixed.
+Yeah. So here in all those experiments, the learning rate is fixed. It's very low, 5 to the 10
+minus 5, 5 times 10 minus 5. Usually I notice that I need lower learning rate than what you have in
+language models. And I need warm up. So getting the training, the learning rates up by small values,
+but I don't need to schedule it. Basically, a constant learning rate works. In harder problem,
+I usually use a scheduler. So I reduce the learning rate as learning happens, but not here.
+As for the model here, I think there are four layers and code decoder with 512 dimension and
+eight heads or something like that. Do you know that our graphing behavior depends on scale?
+So I don't know. I did try to scale those models to change the size of the model, you know,
+on everything that fit on the Volta because I only have Volta's. So I can go from a few millions
+to close to a billion, a few hundred millions. And I have noticed significant difference in
+performance. So on this experiment, I couldn't see a good case that would say grokhing depend on
+but then the problem here has very, very few parameters. The sequence are very short, etc.
+So even the small models are already over parameters. So I think there's enough slack even
+in the small models for grokhing to happen. Speaking of grokhing, I believe in the original paper,
+they observed it by iterating many times over the same dataset. Yes. My understanding is from
+working with you that you see each data point only once. Do you know if you see that same
+effect if you would use a smaller dataset and go again and again over it?
+So two questions. The first one, yes, this is not grokhing. This is, well, the behavior is similar
+to grokhing in the sense that you have a flat loss for a very long time and all of a sudden it drops.
+And you have, you know, those kind of steps. And this is fun because, you know, the loss is the
+thing that the model learns from. So if it's flat, you learn from the gradient of the loss. If the
+loss is flat, the gradient is zero. So how does the model learn? But it's not grokhing in the
+sense that grokhing in the original paper happens after overfitting. So once the model has seen the
+same data and memorized them, and then it starts learning. In this case, the model never overfits.
+So you're right, it's not grokhing. As for the low data regime, by the way, I did not criticize you.
+No, no, no, no, no, no. I'm trying to explain. For the low data regime, well, the thing is that
+I never had thought of training on fewer data than, you know, in this case,
+infinity, or as many as I wanted, because I could. And actually, I only started exploring the low
+data regime when I started working with you a couple of weeks ago. So, but this is, this is
+definitely on my agenda. So, so I find this, this seems to be learning very opportunistically.
+So it just finds the first shortcut that we need to sum the results which are correct for
+these present problems. We make a difference if you do the same problems, but with larger models
+that have also seen other higher mathematics, more abstract stuff, and so on. Maybe we'll
+need them to find other algorithms for solving. Is that something? So that might be possible. The
+thing is that on the case of the opportunistic thing, you know, there's a way to eliminate the
+opportunism. You take a prime base, a large prime base, and the model has no easy divisors to learn,
+but it will still learn two, three, four, the small prime in order. So, yes, the model is
+opportunistic in the beginning of learning, but then as soon as Gorking takes place,
+all models seems to be relatively equal. As for the pre-training on other tasks,
+it's an interesting question. I don't, I have never tried, so I don't really know.
+I'm sure this will help, you know, if you train on symbolic tasks and perform other symbolic tasks,
+here, no, here, I don't think training on symbolic tasks will work because they use
+different symbols than the numbers, but maybe training on different arithmetic tasks like
+addition, multiplication, and all that might help. So, yeah, this would be something definitely
+interesting to study. Yes. Could you comment a little bit on your recent paper on scattering
+amplitudes? Yes, I can. So, this is an application to physics. So, the main direction, so apart
+from this explainability, the main direction of my current research is trying to attack
+open problems. So, there was Lyapunov, we are collaborating with people, well,
+Jody Williamson from Sydney on group theory representation to try to find, you know,
+elements of kernels, of representations of infinite groups. And we've been working for a while with
+Landz, Dixon, and Karl Kramer on amplitude theory. So, you know, in theoretical physics, amplitude
+is a complex function. The square of it is the probability of events. And scattering amplitudes
+are the same for collisions. So, the problem of scattering amplitudes is that they are extremely
+difficult to calculate. The way you calculate them is by integrating Feynman style. So, summing
+more and more complicated Feynman diagrams that have, so the easy diagram, the three-level
+diagrams are relatively easy to calculate. But as you get into harder problem, you have
+loops, so number of loops inside the diagram which correspond to virtual particles that
+they've created and destroyed. And every time a virtual particle is there, you've got two
+integration variables that happen in a calculation which ends the amplitude, the exact calculation
+of the amplitudes to include polylogarithms which are ugly mathematical functions. And actually,
+it's iterated polylogarithms. So, as you go from loop to loop, the things get more and more and more
+difficult to calculate. And this is a mess because in the standard model, you would need very high
+precision of that if you want to know whether, you know, a new experiment, like in the LHC,
+correspond to the standard model or not. And the technique, the current computational technique
+doesn't do that well. So, theoretical physics, physicist, Lanz-Dixon and team worked on something
+that they call bootstrap amplitude, which takes the problem the other way around for what I
+understand. Basically, they say polylogarithms have so many known mathematical relations that we
+could use the structure of the polylogarithm to guess the look of the solution. And after black magic,
+well, for me, it's black magic. I don't understand anything about it. They managed to represent this
+collision amplitudes for a problem. So, it's not in the standard model. It's planar and equals four
+supersymmetric Yang-Mills. So, it's a related theory. I'm told it's a good model. I don't know.
+But anyway, in this model for a collision of free gluons and a Higgs, they managed to calculate
+everything up to eight loops. In standard model, the best you can do is two or three. So, that's
+enormous. And the way those amplitudes are represented are as homogeneous polynomials
+in six non-commutative variables. So, imagine a polynomial of six matrices, A, B, C, D, E, F,
+with integer coefficients. And the degree of the polynomial is twice the value of the loop. So,
+they calculated all these elements. And they noticed that these elements contain a lot of
+regularity. So, the way they calculated is that they use a theoretical argument to transform
+the integration problem into a huge integer programming problem with tens of thousands of
+parameters. So, that's PSG sweat. I mean, it's a lot of work. But they noticed that those coefficients
+seem to follow patterns. So, we try to train transformers to see if they could do what the
+physicists had done with their PhDs on postdocs and predict, you know, you give them half the
+amplitude and they predict the rest. And it turns out that a transformer can be trained to predict,
+well, first, whether a coefficient is zero or not zero. More coefficients are zeros in this.
+Second, predict the values of the coefficient and even find the coefficient from the next loop
+from the previous one as a relation of the previous one. So, we had, we recently had a
+paper on that describing this. So, at this point, it's only a proof of concept. Basically, we show
+that on data we already have, we show that the transformer can do something that is better than
+what human knows. And we notice a number of regularities inside, you know, what the transformer
+learns that seem to hint at symmetries that, you know, physicists don't know, which might hint at,
+you know, new properties and at least in equal for young males. So, this is the
+status of this paper. At this point, I think it's a proof of concept that you can use a transformer
+to show that there are unknown relations. The next part and the difficult one will be to try
+to see how we can elucidate what the transformer is doing. The transformer obviously is learning
+something relatively easy to predict. We don't know what it is. So, could we do symbolic regression?
+Could we try to do interpretability on the transformer? We don't know this yet.
+Okay, let's thank you.

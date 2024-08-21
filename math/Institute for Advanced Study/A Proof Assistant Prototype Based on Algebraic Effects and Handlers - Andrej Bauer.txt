@@ -1,0 +1,1123 @@
+So on Monday, I gave an easy talk, but this is going to be a hard one, because that was
+just propaganda, and this is some actual work in progress, and that's why, because
+it's work in progress, it's harder to give a good talk, because it's very easy for
+everybody to poke holes in it. Nevertheless, I would like to speak about this topic, because
+I want to raise some questions and propose some answers, where I'm going to suggest
+today that there has to be a slightly different way of thinking about the sort of type systems
+that, for example, Vladimir is looking for. So one way to say what it is that I'm doing
+is today, I'm going to solve this equation, type theory plus what is a proof checker?
+And I'm going to sort of blend the distinction between a proof checker and a proof assistant.
+You can vaguely think of a proof assistant as having an interactive component, which
+a proof checker does not. Of course, we strive to make the proof checker correct, so it is
+good if it's not huge, it has to be small and trusted, but these are secondary issues
+for today. So I'm going to refer to this as a proof assistant, but you can really just
+think of it as the proof checker. And so the main point of my talk is that you can't put
+more type theory in here, okay? Well, maybe you can, but I'm going to propose a different
+solution. So type theory plus some more type theory is not probably not going to give you
+what you want. And the solution that I'm proposing here is that we have to take a very serious
+lesson from programming languages and think not just of type theory, but of the notion
+of computation as a primitive one. So computation cannot be hidden somehow, it has to be made
+explicit. So this has to be something like computation, and I am going to propose a particular
+kind of computational style, which is called algebraic effects and handlers. And I'm going
+to explain a little bit about what this is. Okay, so that's the main idea is that I would
+like to suggest that this is a fruitful way of looking at what is a proof assistant. So
+I think this also may have some interesting, there might be some interesting ideas here
+on a more fundamental level about what is a type theory, but I will leave that to the
+professional type theorists in the audience. So we're going to thread into the theory
+of programming languages here. And let me just maybe say, when I say a proof checker,
+what do I have in mind? What is it that we really want to have? So we want to have the
+possibility, we want, first of all, we want to have a lot more freedom over the style
+of proof assistants that are available now, which means that the user should be able to
+do more. In particular, for example, here are some things I would wish. Maybe I want
+a type theory with undecidable proof checking. If you look at what programming languages
+do and what recursion theory does, you will notice historically that, in fact, recursion
+theory was first done only with total functions. I mean, even at a level of total functions,
+there is undecidability there, but it was really, really helpful to pass to partial functions.
+The theory was much better. And so the same in programming languages. If you try to have
+a programming, a general purpose programming language, where you guarantee termination
+of everything, then it's going to get complicated. And you can just instead do something simple
+and maybe sacrifice certain properties. So in fact, not insisting on this undecidable
+proof checking might be a liberating move. I'm not saying it is, but it might be a liberating
+move because it will bring other benefits. So for example, you would expect that you
+want to have a lot of flexible control. You want it to be much more flexible and you want
+to have good control over issues such as how is judgmental equality dealt with? Yes?
+Not worse than semi-decidable. Yes. So you could always, if there's some information
+missing from your proof, the idea is that some information is missing from your proof.
+So for example, somebody forgot to tell you that they had a particularly nasty lemma and
+they used it, but they didn't tell you. Or maybe they established a judgmental equality
+by some move that your algorithm doesn't see because it's a simple normalization algorithm.
+In principle, you can always recover from such things by searching for all possible lemmas
+and all possible proofs. And one day you're going to find one. But that is of course far
+from being practical. We need something that is practical as well.
+So another thing that we might want to do is, for example, we might want to hypothesize
+a new judgmental equality. If you look at Coq and Agda, judgmental equality is totally
+hidden from the user. It's not totally hidden. The user can produce definitions, but Agda
+and Coq have full control over judgmental equality. They don't let you fiddle with it. They don't
+let you fiddle with it. And I'm saying, yeah, I want to fiddle with judgmental equality.
+Is that possibly going to break things? Yes, it's possibly going to break things. But I
+don't want to worry from the start how I'm going to break things. I know in advance that
+I will be breaking things in big ways and then later on we're going to figure out which
+of them actually need to be unbroken. So I'm taking a different approach here than from
+what you might be used to, namely that you're not willing to give up certain things. You're
+not willing to give up good normalization. I'm willing to give up everything right now
+because I want to explore the design space. I'm actually trying to solve a design problem.
+I'm not really properly doing math. This really is properly PL theory, how to design a programming
+language. That's a lot of math, but you have to take into account humans at some point.
+Okay, so since I'm proposing algebraic effects and handlers, and I'm pretty sure people here
+are not so familiar with this stuff, I would like to spend a little bit of time explaining
+what these are. As soon as I find a chalk that I like there, I'm going to go ahead and
+write this one. Nope. Okay, so let's do this. If that was one for introduction, this is
+two for algebraic effects and handlers. Now, depending on the audience, they are going
+to be different ways of explaining this, and I'm going to do this by explaining it as if
+you were all mathematicians. I tested this on Egbert yesterday and it worked best when
+I was doing it. Here's a mathematician how to explain this. Before I go to this, let
+me make a few observations. There is more to programs than just lambda calculus. There
+is more to computation than just lambda calculus. For example, programs cannot terminate, they
+can abort, they can perform input-output operations, they can launch missiles. Launching a missile
+is not part of the lambda calculus, yet this is what we have programs for, to do stuff.
+The common phrase for all these things is computational effects, and they're also called
+impure parts of the language. You think of the lambda calculus or the type theory itself
+is pure, but then there are some impurities in there, and those are the ones that actually
+do things. If you have no effect at all, then you don't have to run your program, because
+it's not even going to print the result, because printing the result is an effect. Allocating
+memory is an effect, so if you have an impure program, it doesn't do anything.
+Proof assistants have impurities as well. A proof assistant, a tactic may fail. That's
+a computational effect. There is an interactive mode, so you're talking to the user. That's
+also a computational effect. Actually, it gets worse. Even if you just look at the proof
+terms of Coq, those are impure. You like to think that the proof terms of Coq are just
+type theory. That is not true, because in Coq, I might have, let's see, equals something
+in E, and this E doesn't mention C anywhere. Yet, if I remove C, it's not going to work
+anymore. That's because there is fancy unification inside Coq and type classes, which might use
+this C to instantiate, to guess some parts of E here. Sorry? But when you look at what
+is written, you don't see it anywhere. You have to know that the proof assistant is secretly
+going to use C during unification. Another example is, I may reorder otherwise independent
+hypotheses, and that's going to cause the unification procedure to find the different solution to
+the unification problem. Therefore, it's not pure. Because it does something different.
+For that one, I might argue, I might give you that one. I'll say it's not pure because
+you changed the order of hypotheses, and that matters. I thought there was a... In pure
+language, they shouldn't... Yeah. You would... This comes down to the question, are we allowed
+to permute contexts or not? Yeah. But it's a question about purity. We're discussing whether
+it's pure. Look, I mean... Yes. At this point, this is a discussion about terminology.
+So let's just say it's pure. No, pure.
+So in this particular case, it will matter because the witness produced at the end of
+the day is a different one. Now, I think we have to resolve this. I don't know if it's
+a discussion for later because if I go over this point without making Mike happy, he's
+going to be unhappy. So... Yeah. Okay. Okay. Thanks. But you will give me that... Say,
+if C is not mentioned at all in E, I should be able to delete it. The program, the proof
+checker gets this. Okay? And then the proof checker gets this. And then it does something
+behind the scenes called type classes and unification. That's an effect. That is not... That is impure
+because maybe not in Agda, but it's definitely in Coq because it can find different solutions
+to a problem of unification. So unification does not properly belong to the lambda calculus.
+That's my point. Right. Maybe that's the important point. Purity is about competition.
+Purity is about positionality. So how do you compose programs when you take the program
+and you take it from a... There's a same program.
+So right here, G is the expression that defines C in the program. Can you just take E and replace...
+So do you have... Can you... Is it valid? For example, one of the questions about purity
+is this. So if you have a let, you would expect that you can substitute this in here.
+And then that's how people who talk about purity understand purity. One of the two requirements
+is that if you have let C equals E1 in E2, that should be E2 where we have replaced C
+by E1. Yeah.
+I have no idea what you mean when I say purity.
+Go on.
+We just think that it's not in the left hand of the top equation. It's not in the top
+theory. It's in the question mark.
+I think it's important to distinguish between the text that you write down in Coq, which
+is a first script or something like that, and the actual lambda calculus term that you
+represent means it's improved once you're done with it. But you're not claiming that
+you're still landing out those terms that you principally expect once you have a complete
+closed group of the theorem that is pure. It's like the process of arriving at it.
+Right. The process of arriving at it is a computation.
+You're writing a text script that you compute the lambda calculus term when you extract
+it.
+So but I have a question particularly about Coq. Is it true that the term that you get
+out is pure? Or is there still missing information that it's recovering using unification?
+It's out of pure.
+You could do it. It's really, it is pure. Okay. Good.
+So there's no.
+Calculus of construction is pure. Yeah. There is no question about that.
+I'm sure to mention the fact that the text has an economical structure. This is out of
+the text.
+So they belong here? Yeah.
+Okay. So things like type classes, unification, tactics. That's the stuff that belongs here.
+Even normalization procedures belong here. There's no mention of normalization when you
+do just pure type theory.
+Yeah. But it's going to belong there, not here. Right. Okay.
+The Coq script is, it should be properly viewed as a program, not as a lambda term, of course.
+Yeah. Yeah. Okay.
+So these are, these are exactly the things I want to rethink today. So there is a common
+way to deal with, there's a common way to deal with computational effects and it's called
+monads. This was a great discovery of Eugenio Moggi in the 80s that in fact he could describe
+all kinds of computational effects using monads, just like the monads from category theory.
+And this was then widely adopted. For example, in Haskell, they use monads to deal with
+computational effects and it's a very successful way of thinking about computational effects.
+Later on, Gordon Plotkin and John Power said something else. They said, well, it's not
+just any kind of monads, but apart from a couple of exceptions, all the usual computational
+effects are in fact monads which arise from equation theories. The computational effects
+are in fact described very often as algebraic theories. And so that's the next thing that
+I would like to explain, but also keep in mind what this means. This means we, I want to pursue
+the possibility that this thing which I claim is not going to be just type theory. Of course,
+it still has to have sound theoretical foundation and we know that the algebraic effects have
+a sound foundation. It's just, it's just equation algebra. It's still just equation algebra
+and that's something that's very well understood and it has nice properties. Now, whether it's
+going to mix really well when it comes to dependent types, I think that's more of a, that's a
+technical question. Yes?
+Yes?
+No, they're important. They're central. One that is central is the fact that continuations
+are a computational effect which is not algebraic. However, in the theory of algebraic effects
+and handlers, this gets resolved because the limited continuations come in naturally and
+so you still have, the programmer still has the ability to use continuations, but at the
+same time you have a good equation theory. So I, there's something that you get in return.
+But I'm not at all saying that anything you will find in practice is algebraic. What I'm
+saying is algebraic is very good for very many things. Okay, so what is, what are then these
+algebraic effects? So let's start from mathematics, okay? Consider an algebraic operation. So how
+do we think of an algebraic operation? So we have some operation and this operation works,
+it acts on some carrier set, so this is something like a carrier, and then it has an erity, which
+is usually a natural number. I'm going now, the first thing I have to do, so it's easy
+to come up with examples like this, addition, okay, or the unit. So if you put n equals 0,
+you get a constant. I'm going to now generalize this twice. So first of all, some operations
+have parameters. Multiplication by a scalar is an operation which takes the additional
+parameter, which is the scalar we're multiplying with, it's not an element of the carrier, or
+a group action. A group action is an operation which needs an additional parameter, which
+is the group element. So then, slightly more general is you take b cross a to the n to
+a, so now I have a parameter here. This doesn't break the theory of algebraic equations,
+it's fine. Okay, now the next thing I need to do is, I will not be satisfied with erities
+which are natural numbers, I will make them arbitrary types. So my operations, I want
+them to be like this, b cross a to c to a. Okay, so now we arrive at the general form
+that I would like to have. Okay, so how are we going to write these operations? If n is
+2 here, say, then you would write an operation like this, op x1 x2. But now, since this is
+an arbitrary r-ity here, I cannot just list the elements, the arguments. The arguments
+may not be listable in any shape or form, because this could be a very complicated type. But
+what is this? Well, it's a function. So my operation accepts a parameter and a function.
+This function has a special name in programming, it's called delimited continuation. So let
+us do an example here. Let's take a familiar example and rewrite it in this way. So suppose
+you want to have 3 plus 4, well, just so that I follow my notes, 3 plus 4 plus 5. Okay,
+so for 3 plus 4 plus 5, we are going to say, well, first of all, plus is a binary operation
+and it doesn't take a parameter. So this parameter is going to be unit and then it's going to,
+let's say this is on integers, be z squared to z. I'm going to drop the unit right now
+and will not always write the dummy argument. So this will have to be written like this.
+Plus, so now I drop the unit, which is this parameter, and now I have to give it a function.
+But this function takes in 2, so 0 and 1. So in this case, this is the set 0, 1. So it
+has to be a function which takes something in 2 and now what it does is this b is either
+0 or 1. If it's 0, I have to return the first argument, the 0th argument, and if it's 1,
+I have to return the second argument. So I say, if b equals 0, then 3, actually for
+totally bureaucratic reasons, let me write 3 here with return, else, well, else what?
+Else, else I have to do this, but this is another operation, so else plus lambda c in
+2. If c equals 0, then return 4, else return 5. You may ignore it. It's the injection,
+so the way you view, okay, so maybe I can spend the words about this. The way this is
+done in the theory of programming, in the theory of algebraic effects and handlers is
+that these are always operation symbols. They are never operations, and so then you have
+to distinguish between, so they are like free operations, and then these become injections
+of generators into some free algebra. But in a real programming language, you don't have
+to write them because typically the compiler or the parser is able to put them in, so I'll
+delete them right now, okay? So you may think this is the strangest way ever that you have
+seen 3 plus 4 plus 5 written, but it's not because we're going to rewrite it. It's not
+now, it's something that is going to make more sense to programmers. You see, nobody
+is going to write this stuff. You're never going to write op some parameter a lambda
+x and then some c involving x, okay? If you had to write programs like this, you would
+have to say things like print, string that you print, the function which is the rest
+of the computation, and that just sounds crazy, and nobody wants to write things that way.
+So there is now going to be another trick for writing this in a slightly different way,
+and instead of this, I'm going to write it like this. Let x equal op a in c of x, and
+now it suddenly becomes much more familiar to a programmer. Instead of passing to the
+operation, the continuation explicitly, I wrap things in this way, okay? So this has
+something to do with the monadic multiplication of the monad that is generated here, but I'm
+not going to get into that. I'm just saying for the purposes of theory, this is the way
+you think of operations, because they have, you can track back directly to the usual notion
+of operation, but for the purposes of the programmer, this is what is going on, and
+importantly, I'm writing this as let, in terms of Haskell, this is bind, okay? This is bind
+if you know about Haskell. Yes?
+Yeah, there will be many people who probably, you can juggle this around, and you will get
+different kinds of ideas on what to do. Syntax is not unimportant. Syntax suggests certain
+styles of programming, so it's important to pay attention.
+If the question is what is implied by that syntax, so if you try to interpret that as
+just function composition, so c can go with op, but a is that strong.
+So for example, it's important not to think of this as a local definition, because it
+isn't. This is a computation, and this is a computation, and we have a way of performing
+one computation, feeding the result of it into another one, okay? So even if this is,
+even if the result of this operation is unit, I'm not allowed to delete this and put unit
+in here, because this is not a local definition. So I would not expect for this kind of binding
+to have the property that I can substitute this in, okay?
+Because this could be let x equal print hello world, and so if, and the result of print is
+unit. Print does something, print hello world. It has a computational effect, namely some
+photons appear somewhere, and then the result of print is, well, nothing really, that is to say
+unit. So we know in advance that x is going to get the value tt from Coq, yes? But it's
+not correct to replace all prints by tt in a program.
+It doesn't mean that the main effect is on the quality of the program or whatever.
+Yeah.
+You can.
+So Coq A here is, Coq is permitted to have this effect.
+Right now, so right now I have not really, it's, yes, so I'm going to change the view
+in a minute, but yes. So Op A, this Op A is going to, it might have, it's going to have
+some effect. Now we haven't answered the question, how are we going to describe this effect?
+How are we going to describe what Op is doing? That's the next question that we have to answer.
+But imagine in a programming language, this would be something like print or something
+like that, which has a definite effect somewhere outside of the program itself.
+Okay, yes?
+Yes?
+Yeah, I was going to. I'm going to rewrite plus in this style now.
+Yes.
+Can you explain in this, in plus the relation to, what's the Boolean there?
+I guess they are related to the fact that addition is binary.
+Yes, Booleans because addition is binary because we have two here.
+Yeah, so if it were a ternary operation.
+If it were a ternary operation, then I would need here instead of if b is zero, else if
+b is one, I would need a math statement which considers all three possibilities.
+So plus or function would mean that you have to apply this function to all elements in
+the prescribed Boolean.
+Yes, to figure out what the arguments are.
+Now, that's the weirdest way to compute three plus four plus five that you have ever seen.
+And this is how programmers write programs.
+We have just taken a bizarre example where we're computing three plus four plus five
+as if those were computational effects.
+Okay?
+So, I'm hoping I'm making the relation somewhat familiar.
+Okay?
+No?
+I'm not?
+You can't read the program?
+No.
+Okay, so the way you view this, okay, so let's try to imagine, so let's, okay, so let's see
+how are we going to understand this?
+This b here is a Boolean.
+Okay?
+See, here it was, I hope it's clear that b is a Boolean because the arity is two for plus.
+Yes?
+So this b here is a Boolean.
+It's the same b, which means this thing here returns a Boole.
+And the way you understand this is you say, well, you understand what you're thinking,
+how is plus going to return a Boole?
+The plus, when it returns the Boole, it tells you which of the two arguments it wants.
+If this plus returns zero, it says I want argument zero.
+If it returns one, it says I want argument one.
+And then the rest of the computation is going to produce the argument that it asked.
+So plus says give me the zero argument and we go, it's three.
+And then if it says give me the argument index by one, then we go, here, oops, it's another
+computation.
+We have to perform this computation to figure out what it was.
+Okay?
+When is the 12th?
+The 12th?
+Yes.
+Thank you.
+Yes, yes.
+Thank you for leading, thank you for, I have successfully led you exactly into the next
+thing, which is how do we now actually compute anything with this, right?
+So because so far what's missing is I haven't explained what the meaning of, how to interpret
+operations, what the meaning of the operation is.
+I have never so far said here in this program that plus actually adds numbers.
+Okay?
+And this is an important step when you view, in the theory of algebraic effects in handlers,
+you usually think of operations as something that already has meaning.
+When somebody says print, that already means for you that it's going to do something with
+the screen.
+But we are going to separate the instruction to print, that is to say the operation which
+must now properly be viewed as an operational symbol whose meaning is not yet determined
+with its interpretation, that is to say with what it actually does.
+To describe what an operation actually does, we need handlers.
+But let's just view this in terms of algebra.
+When you have an algebra, you first, you can form expressions that use the operations from
+the signature.
+Obviously, you have the signature, you have plus and times zero and one.
+You can form lots of expressions with variables and maybe you have some other constants.
+And those expressions by themselves are just expressions.
+And this is what this is.
+It's just an expression that doesn't yet mean anything.
+It's a syntactic form.
+But then you say, ah, but I can have algebras for this signature.
+To give an algebra for a signature, you interpret the operations.
+You give meaning to the operations.
+You explain in what way they are functions.
+You say plus is this particular function, minus is that particular function.
+So that's the step that's missing and we're going to do this now.
+So the way you do it with handlers is like this.
+You say something like this.
+This is from the programming language F by Matthias Breitner and myself, which is based on these ideas.
+You say handle and here you have some computation that you're supposed to hear.
+Here's in here and maybe other operations appear in here.
+And then you say handle with and you explain how to handle plus.
+So let me give you a particular example here.
+So suppose this is our program.
+We would plug it in here and then we would say when you see plus of some F.
+I'm now using this notation F, you see, plus accepts a function.
+Well, I could write a unit if you want me to, but...
+In F, you do it like this.
+You would say plus and then you put your continuation here next to it.
+Or you just write lambda F, okay?
+But just not to have 25 different notations.
+Let me stick to this one.
+So plus and then this is a function, which is maps booleans.
+So when you give this...
+Okay, let's...
+This one, okay?
+This notation.
+This should be more immediate, okay?
+So you use this notation here.
+And now I have to explain what this plus does.
+And so I say plus of a function is...
+And now I explain how to do it.
+And I say let A be F of zero in.
+Let B be F of one in.
+And now I got my two arguments.
+I asked F what is the first zero argument?
+What is the first argument?
+I got something out.
+And then now I have to do something with it, okay?
+So I would do something like this.
+A plus B mod seven.
+If this is some built-in operation that the processor knows how to do or something like that.
+But I don't have to.
+I can redefine plus for anything that I want.
+So for example, I could be this.
+If A is less than B, then A l's B.
+And now it's not plus.
+Now it's something else.
+But we agree that the syntax is useful.
+That thing here is not the same as the one you used for the...
+Okay.
+So then it's going to be...
+Maybe more readable.
+Well, so programmers know that this is the more readable form,
+but maybe not when you're trying to do plus.
+Because then it's confusing.
+In F, the concrete exam, if we are talking...
+Ooh, if we're talking concretely about F, you would just do this.
+It's plus, unit, lambda, F, and then this thing here.
+Let A be F of zero in...
+Let B be F of one in this thing.
+I have now defined that plus means min.
+Yes?
+Yes?
+It's of the same kind.
+It's this let.
+Yes, because this is going to be another computation.
+In general, this could be a computation.
+For example, when I plug in one,
+and then this one is one, it goes here,
+and this is now again going to have another computation.
+See?
+Applying a function to an argument is a computation,
+which can trigger further operations.
+In particular, when I plug in one here,
+the answer will be,
+oh, well, it's an operation plus followed by some stuff.
+So the handler will again, here,
+there will be a handler that will say,
+ah, plus again, let's handle it again.
+No, F is a function.
+It's a continuation.
+It's this function.
+Yes?
+Yeah, but F is the continuation.
+So I'm saying plus happened, okay?
+Plus is going to say, well,
+plus never receives any parameter,
+so this is unit,
+and this is what has to happen
+after this plus returns the result.
+This plus is going to return a boolean,
+and this, the rest of the computation,
+is the continuation which expects the boolean.
+So this F here is the stuff that happens after plus
+has returned its argument.
+Yes?
+This is an application.
+An application is a computation.
+So there, yes?
+Ah, yes, yes, yes.
+Okay, so in this place, thank you.
+In this place, in general,
+what you have in this place is a computation.
+And there are several kinds of computation.
+You have so far seen three.
+One is return a value without computing anything.
+Another one is perform an operation.
+Another one is apply something to something, okay?
+The trouble with this is that I'm trying to keep the stuff
+to a minimum, otherwise it'll take me two weeks.
+But then that confuses the audience,
+so I apologize this.
+But please ask questions.
+Plus of unit is of this form.
+It's an operation applied to the unit.
+No, this means some operation.
+You have some operations in your language.
+Yeah?
+To Haskell, to Haskell person, return is return.
+This is just function application for him.
+And this is something that doesn't really exist
+in a general monad, but only in specific monads,
+which are, in fact, monads generated by operations.
+Yeah, no.
+No, let.
+I only have bind.
+Yes?
+Yes?
+But in this example, it isn't.
+F of zero is just a number.
+That's why I wanted you to write return three at the beginning.
+That's why I wanted this to be return three,
+because then it's correct.
+Yes?
+This is an application.
+It's a special kind of computation.
+When you apply a function,
+don't argument things happen.
+Are you worried about, there should be returns here.
+Return three is a computation which returns three.
+Oh, okay.
+Got it.
+Yeah?
+Okay.
+Once you get through this,
+I can tell you what happens once you get through this.
+Okay?
+Funny syntax, blah, blah, blah.
+These are just free algebras.
+Return is the injection of generators into the free algebra.
+And a handler is just a homomorphism from a free algebra to some other algebra.
+So the theory is not complicated,
+but it gets time to get used to how this works as computations.
+Yeah?
+Well, okay.
+I can give you that.
+Yeah?
+Yeah.
+So this is the parameter.
+This is the carrier.
+And this is the entity.
+Yes.
+So what does plus look like to us?
+It looks like it's unit to bull.
+It looks like that.
+I pass it to unit.
+I get the bull.
+Oh.
+The something is going to be an A.
+Sorry, what is your question right now?
+Yeah.
+Okay.
+It's the free.
+Yes.
+Yes.
+The underscore dot over there that is a computation.
+Is that the printing of the screen?
+This will be things like print, read, write, launch.
+If you want to, but I would suggest not to do this in real life.
+But div is like that.
+Division is like that.
+Division is not an arithmetical.
+Division is not a function.
+It's an operation because it has a side effect called division by zero.
+It's an exception.
+It can throw an exception.
+Therefore, it has a computational effect.
+It must be an operation.
+Okay.
+So handlers get to change behavior of operations dynamically.
+I can have a piece of program which is wrapped in handlers.
+The innermost handler determines the behavior of a given operation dynamically.
+I'm going to use this to direct a proof assistant because I can say in this particular computation,
+such as such judgmental equality, it has to be proved in some different way.
+Here's how.
+Don't use the built-in handler that's waiting on the outside to kick in.
+So you would typically have some handlers which are pre-installed.
+You have a pre-installed handler for print which actually has access to the operating system
+and then it does something.
+That's like the outermost handler.
+But if a piece of code is wrapped in a small handler that does something to print,
+then that one is going to use that one and then print will do something totally different.
+From a software engineering point of view, this may not be a good idea,
+or it may be a good idea, depends on how you do things.
+But at least we have the freedom to control behavior.
+Okay, so let me try to explain how this should be used in a type system to get a proof assistant.
+And I think because these will be examples, these will be ideas that you are familiar with
+because you have thought about them, I'm hoping it will be a little less confusing.
+I'm sorry, I'm not doing a very good job of explaining handlers and algebraic effects.
+It's approximately as complicated as explaining monads in Haskell for the first time.
+Not really, I think it would confuse.
+Okay, so the idea is that we're going to have a type system,
+and on top of this type system we're going to have operations and handlers.
+And just to keep things in view, operations and handlers will be about computations.
+So we still have to decide which things are computations, but they will be about computations.
+Okay, so let's do what are the...
+So now if we have a proof assistant, how is this going to work?
+Or a proof checker.
+What are some computations or what are the operations in a proof assistant?
+And I propose that these are things like this.
+Check a given typing judgment.
+So check a typing judgment.
+Check, let me be careful.
+Check that E has type T.
+So this would be check that E has type T.
+Or infer the type of E.
+Or equal E1, E2, T.
+Check that E1 and E2 are equal and of type T.
+These are not properly inside the type theory.
+These are about type theory.
+This is what the proof checker does.
+These things.
+If you allow me a little bit of philosophy here.
+What is it that we have after we have checked that E has type T?
+Well, presumably in some way or another, we checked that a certain derivation is okay.
+Now, this derivation may have been implicit in some algorithm which ran.
+Or maybe we actually have an explicit derivation on paper and we actually went through the whole thing.
+But after we are done, the computation, the thing that was going on, the process, after we are done,
+then we have the memory which says, yep, it's okay.
+So what this means is that if I want to have a proof assistant, I have to make two moves.
+One of them is this has to return something because it's an operation.
+So there has to be a type of values that this returns.
+And these values are going to be just abstract entities without any computational content
+because they are just recordings of the fact that a certain computation happened.
+The computation itself is the derivation tree, but I think presumably I could possibly try to store it,
+but I don't have to store it.
+Even if I store it, I may be then tempted to check it again.
+It's the process that mattered, not the derivation.
+It's the fact that I have gone through the derivation which matters and I just need to memorize this.
+Of course, then I have to make bloody sure that my proof assistant cannot produce values
+which are witnesses in any other way but then to go through these things
+because if I can just produce witnesses on the fly and they have not been properly constructed,
+they are not results of actual computations, then I am in big trouble.
+So there is a correctness criterion that I will have to follow here.
+I am sure if Bob were here, he would say Nupro.
+Okay, so I have a smallish prototype and I think I will show you a little bit of it.
+It's not finished yet, but it can do a little bit.
+But to just give you some more concrete idea of what this does is
+let me explain how this is all put together.
+So I am going to have expressions.
+Now, because the parser cannot tell which things are types and which things are expressions,
+I just have a flat grammar which then there are judgments which say,
+yeah, this expression is actually something that can stand on the right-hand side of a typing judgment
+and things like that.
+So there will be expressions and the expressions are going to be, I am going to write them as E
+and well, they can be variables and then there is something called type
+and there is something called sort.
+It will be clear in a moment why.
+Then I have pi, then I have the introduction for pi, elimination.
+No, okay, you could have other stuff here.
+Right now I have identity types and I have natural numbers.
+And then we come to the interesting parts.
+What does this thing return?
+What's the type of the result?
+Well, this is going to be witness for a judgment.
+Therefore, we need the type of such witnesses.
+And I am going to write it like this to distinguish it from the actual judgment.
+E1 colon colon E2.
+And the way you read this is the sort, think of type as the types of your type theory
+and the sorts in LF parlance these would be the kinds.
+Okay, but I don't want to say kind because then you will think I am doing LF.
+So these are the things that are around it.
+So for example, you might be able to define a function which goes from type to type.
+That would be some sort of a type constructor and then this is a sort.
+So there are these large things floating around as well.
+Okay, so this is going to be a sort but not a type.
+And this is the sort of witnesses that E1 has sort E2.
+And there is sort, sort.
+E1 equals E2, E3 and this is the sort of witnesses that E1 equals E2 at sort E3.
+E1 equals E3 at sort E2.
+So I have these two special sorts in there.
+What does this allow me to write?
+Then there have to be some typing rules which in particular prevent sort from being in sort.
+But if you are like really mad you could also do that but I don't think it's a good idea.
+Because then you will be inhabiting way more than you hoped for.
+So I can say things like, okay, so now, oh yes, what are the forms of judgments?
+This is like the small types, think of this as the small ones.
+These are the types of my actual type theory.
+These are the types of my proof assistant.
+The proof assistant has some types that the type theory doesn't know about.
+For example, the proof assistant can hold in its hand a witness that 7 is an at.
+That witness is not something that lives in type theory proper.
+It lives outside on the computational level.
+So what will be the judgments?
+The judgments will be gamma E has type E2 and gamma E1 equals E2, E3 like that.
+So maybe I need a notational difference.
+I have a notational difference here by using this double column.
+Maybe I should have a notational one here.
+Let me use this.
+Okay?
+Yes?
+This is part of, this is a possible expression.
+But then expressions get classified into, so all expressions get classified into
+those that can stand on the left-hand side of a typing judgment
+and those that can stand on the right-hand side of a typing judgment.
+Let's call these sorts and let's call these terms.
+Okay?
+Yeah, okay, so what sort of things can, what can we write?
+So with this we can write things like type is a sort.
+But the system will prevent you from saying sort is a sort.
+And then it's going to look at the pi type and it has this idea that a pi over a something which is in type,
+so one of the rules says if A is a type, then it can stand on the right-hand side,
+and it's sort-like, it can stand here.
+Okay?
+So then A is a sort.
+And then it has rules for pies which compute whether, which tell you whether it's a large pie or a small pie as expected.
+I don't put in any predictivity if you want to, maybe you can explore that.
+But here are some more, here are some more interesting things.
+You can say this, w is 3 equals at n 2 plus 1.
+This says w is a witness for the judgment that 3 is judgmentally equal to 2 plus 1.
+And then you can do w prime, w, w, w prime, 3 equals n 2 plus 1.
+And now this says w prime is a witness for the fact that w is a witness for the fact that this equals.
+Okay?
+Yes, because this is a type, this is a sort.
+But this is a judgment, this is a typing judgment.
+Here?
+Nope.
+This is a judgment of this form.
+It has a single colon.
+This is a judgment which says this thing has that sort.
+Okay?
+So this thing has that sort, this thing has that sort.
+So write something like w, w4, and then outside of it write some kind of w.
+Yeah, okay?
+You can keep going if you want to.
+However, since these, I will make sure that these are proof element, you're not going to get a lot out of them.
+But I think they still have to be there.
+I want them to be there.
+If w equals 1, then w double-column 1 equals 1.
+Sorry, if w is a witness for 1 equals 1, then you want what?
+W double-column 1 equals 1 is a sort.
+Yes, this is going to be, let me put it this way.
+This is a sort-like expression, therefore it can stand on the right-hand side of a typing judgment.
+And in fact, if you can infer the type of this, and it will tell you that it will say this is a sort.
+Okay, so what are going to be?
+Which one?
+This particular one.
+This one is going to be inhabited because right now there is a built-in handler which tries to inhabit such things by normalization and it will succeed.
+Actually, no, it's even simpler than that.
+If you already have this w in the context, so I mean this only makes sense because it's in the context.
+So it's going to look at this and there's going to be some default strategy because the built-in handler will say,
+well, but this is just because I have this in the context.
+Okay, so what will be our operations?
+Well, these ones check infer equal.
+Another one that's cool is Inhabit, which says, inhabit this sort.
+It says, inhabit the sort.
+A very, very important point.
+These operations don't do anything.
+They are operation symbols.
+So they are just expressing intent.
+They are not saying inhabit as using some particular algorithm.
+They're not saying prove these two things are equal using some particular algorithm.
+No, what they're saying is this is what needs to be done and now there will be some handlers around it which will attempt to do this.
+Now, it's possible for an operation not to match any handlers.
+You forgot to write the handlers or maybe the handlers were not good enough, didn't pattern match.
+In that case, the proof assistant is going to say, I don't know how to perform this operation.
+I tried all the handlers.
+It didn't work.
+I'm stuck.
+That's failure.
+Okay, but that's like a really strong failure there.
+So we need good handlers that do something here.
+And so a typical proof assistant like Agda, it has a fixed set of handlers that give meaning to this.
+It's just a fixed set of handlers built in, provided by the implementer of the system.
+And they do things like, well, to do equal, roughly speaking, I'm going to lie here.
+To do equal, first we recurse on the structure of T and we break things down and then we do lots of smaller equal operations.
+And then at some point we start normalizing and then we normalize and then with the things normalized and then we see that they're equal and then we're done.
+That would be an example of a handler.
+I don't know whether that kind of handler would be expressible in this language once I'm done implementing it.
+I'm hoping it will be, because that would be nice.
+But here is the important thing.
+Whatever the handler is doing, once it issues, if it decides to show that E1 and E2 are equal, you have to prove that two other equations are equal.
+Say, because these are pairs and you are going to compare the first and the second component, those are again operations.
+So those again are subject to all the handlers that are currently in force.
+So the idea that I have, which I haven't had the time to implement then, is like this.
+You get something like check that this thing has that type.
+There is, on the very outside, unbeknownst to the user, there is some built-in handler here.
+This is like what currently proof assistants do, whatever they do.
+But then you might decide, well, let's give some advice to my proof checker and say, and by the way, when you see that you're trying to perform such-and-such operations,
+say that these two functions are equal, use some other strategy.
+Perform this computation instead, or provide a witness that these two guys are equal.
+So if I have assumed something like extensionality of a suitable kind for natural numbers,
+then I say, when you see these two guys, to prove that these two guys are equal, just use the natural extensionality,
+and then this is going to kick in and it's going to prove.
+But most importantly, these two terms may not directly mention f and g, or maybe f and g are deeply nested in here.
+Or maybe only f appears here, but g is inferred, and then there is a subsidiary problem where you have to compare f and g.
+If g was computed, f is something that actually appears, and you say, oh, why are these equal?
+This may be generated by the built-in procedure, but it will still use the innermost handler.
+That's how handlers work. You always use dynamically installed innermost handler.
+So that means that there will be, what I'm trying to say is, there's going to be interplay between these two.
+Once you get the built-in handler, if this built-in handler triggers new operations, new equals and new stuff,
+then this is happening really here, so they are subject to all the handlers installed.
+This way I'm going to get a good integration between the user-defined stuff and the built-in stuff.
+So the user will have all chances to break the built-in stuff, however he likes, but also to direct.
+So maybe I, let's see.
+Because you will be able to say things like, in order to show that f and g are equal,
+show instead that g and f are equal and use symmetry.
+And then it's going to go whoo, and we'll never come back.
+That's fine, it doesn't matter, but whenever I return a witness, a certificate, then I'm honored.
+Yes, so this is my correctness criterion.
+I know what it takes to prove that my proof assistant works correctly.
+I have to prove that no matter what garbage handlers the user provides,
+if the computation returns with a witness, then that witness is honest.
+It did not arise in some bizarre way that is invalid.
+Yes, the primitives to produce the witnesses are the operations.
+You cannot write down a witness as a term in your language.
+It must be the result of an operation, of a computation.
+Right, yes.
+So there's another possibility.
+The other possibility is if I manage to make this language so flexible that you can express in it
+handlers for normalization and type-directed equality and things like that
+with sufficiently fancy pattern matching, it should be possible.
+Then I don't have to have any built-in handlers.
+Instead, what I'm going to have is I'm going to hypothesize certain inhabitants of types.
+So for example, let me show you actually.
+This is exactly...
+Right, what I'm saying, I'm saying that there are two possibilities here.
+The rules of type theory could be the actual built-in stuff, the only ones available to you,
+or you can have a prelude file in which you list what your rules of the type theory are,
+which I find more attractive because then you just get to play with it whichever way you like.
+I don't know what's better.
+So let me show you what I have.
+For example, there is an assume.
+Assume just put stuff in the context here.
+So here I'm going to assume that A is a type, that U and V are functions from A to A,
+and that I'm assuming that E is a witness, that U is legitimately equal to V.
+So I'm immediately showing you that I can assume judgmental equalities.
+This is not an accident, I want this.
+Okay, so let's write a more interesting one.
+Oh, this is judgmental equality, by the way.
+It's what was written as U equal equal subscript A, but there are no subscripts, so here, read this.
+U and V are judgmental equal at type A or A.
+Can you assume between arbitrary questions?
+Yeah, no, no, no, you have to explain at what type.
+So I mean, this is the type of judgmental equalities.
+So what happens is if you write this, it's going to, this means U and V are things that are term-like.
+For example, sort is not a term.
+They are term-like, this has to be sort-like, so it can stand on the right-hand side of a typing judgment.
+This guy has that type, this guy has that type, and they're equal.
+So all of this needs to be, all of this is actually going to be verified by, right now, by the built-in handler.
+Verified or assumed?
+This is assumed, but before you can assume this, you have to verify that this is well-formed.
+Oh, so it has to be verified?
+Yes.
+Okay, so here is how you could express the symmetry of judgmental equality.
+You will say, assume a constant, assume a, assume sim, so put this in the context,
+which says for every a type, x and y in a, if x equals y, then y equals x.
+I have just written down a rule of type theory.
+Notice that it's only for small types.
+I could write another one for type arrow type or for type cross type, but I cannot write one for sort,
+because sort is not a sort.
+But I could have a built-in sim which deals with that.
+No, it's not a sort.
+If you say sort is a sort, you are asking for trouble.
+Because, sorry, type colon.
+This one.
+No, sorry.
+Sort can stand, what I meant was this judgment.
+Oh, I forgot to say that this one isn't valid.
+You said that this one wasn't valid.
+Okay, yeah, what I should say is sort is not something that can stand on the right-hand side of a colon.
+I don't have a good name for this.
+Left-hand side, left-hand side, left-hand side.
+It cannot belong to something.
+It's not term-alike.
+If you know a better terminology, please let me know.
+Okay, so let's take this.
+If you have to be term-alike, it will appear in a forward picture.
+As a type in a forward picture.
+Okay, let's just load this up.
+Yes, that's what I didn't understand because...
+Where?
+Because sort can appear on the right-hand side of a colon.
+So what could it affect?
+Yeah, so this is the unfinished part.
+I'm trying to have a two-level system where sorts are about computations,
+and I really don't want sorts to be stratified.
+I don't think it's a good idea to stratify them.
+Yeah, more or less.
+Sort cannot appear in the context.
+in the context.
+It's about the right and left of the term style,
+and it's supposed to arrive at the left as they fall over.
+OK, so let's see, where are we?
+Let's write down something fancy, OK?
+So this we can write down.
+It's not xed, and it says, if you have a type family over net,
+and you have two sections of that family,
+and these two sections agree judgmentally at zero,
+and you can prove that for every natural number,
+because if they agree at n, then they agree at the successor,
+then they agree.
+You can just write it down.
+Sorry, say again.
+Here, yes, that's the typo,
+because that means judgment, that's the identity type then,
+and now it's judgmental, because I have both.
+Thank you.
+OK, so we can ask, for example, we can say,
+well, let me see.
+Oh, let's go a little lower down, because I have plus,
+then I can actually evaluate something interesting,
+because I've just assumed things.
+So I put in the natural numbers,
+and the natural numbers allow you to do net rack into any sort,
+not into type, just into, so important.
+The identity types, you can only eliminate into the small things,
+into type, because if I allow to eliminate identity types
+into everything, they will become the same thing
+as judgmental equality, as is well known.
+So this is how you prevent the identity types
+from being the same as judgmental equality.
+It's similar to what I think Vladimir was proposing when he had,
+you had the fib that certain types are fibred.
+So here, this is just expressed by having types,
+and then things that are in type can, you can eliminate into them.
+Something like that, I think, yes.
+I think that, I'm hoping that it's actually,
+that it can be seen exactly in that way.
+But here is an innocuous use of recursion on natural numbers,
+where I'm just defining plus.
+OK, to add m and n, you have to explain everything,
+there's no type inference, there is no implicit argument,
+so you have to write everything in detail right now.
+So it says, you start with m,
+and then you iterate successor this many times.
+OK, so what can we do with this?
+Well, oh, by the way, just things in square brackets are operations.
+I put in these square brackets because I was confusing myself
+as to which things are operations and which ones are not.
+If it's in square brackets, it's an operation,
+so it's actually a computation.
+So here we have, here we have an important question to think about.
+Suppose somebody says, I'm going to define,
+this is now a let, this is like a let,
+and you can imagine in and then for the rest of the file.
+OK, just like in global let's in any kind of ML style language.
+So suppose I say this, a function which takes a natural number,
+and then it performs this computation.
+So this is the computation which says,
+you must now establish that plus n0 equals to n at type not.
+Question, when my proof of system comes to this point,
+what should it do?
+In a typical programming language, the answer is it shouldn't do anything.
+It should just store the computation, it should just store the function
+because you can't execute a function until it is applied, right?
+But that is clearly the wrong strategy here
+because this is now like an unfulfilled promise
+that I will always be able to do this for every n.
+So let me say it in another way.
+Because we are allowed to assume arbitrary stuff and put it in the context,
+our proof of system must be able to work with open terms.
+This is not a typical, this is now for the programming languages people.
+We cannot afford to say everything has to be a closed term.
+No, we have to compute with open terms.
+And we have to compute under lambdas.
+What this means is we assume this gets evaluated as follows.
+So functions, functions ending in an operation
+are going to be a special kind of computation
+which you can think of as hypothetical computation.
+What's going to happen is this goes into the context
+and then that has to be executed.
+Which means that I will necessarily get a uniform witness.
+The witness will be uniform in n if I do it this way, right?
+But what if you write something more clever
+if n has been I do this, otherwise I do this?
+Yes, so for that sort of thing you would have to use netrack.
+No, but I want to try to check out which is non-uniform.
+Oh, yeah, you can do that.
+You will say function n into net.
+And here we have a match statement saying net is even than this.
+I'll do that.
+My feeling, so this is again you're touching on unfinished work here.
+My feeling is that we either, so there's,
+I think there are two possibilities.
+Either all functions have to be very uniform.
+So in this sense they are more like LF-style functions.
+In LF they are very, very uniform.
+Or uniform means, uniform means, so...
+We would be special term, very uniform.
+Function will be uniform in n in the sense that the witness,
+the derivation that was found here does not look at the form of n.
+It's going to be like a free variable.
+That means uniform.
+I ask you, where would you suggest to not produce special terminology?
+Oh, very, very uniform.
+No, no, no, no.
+I do not, sorry.
+I do not mean to introduce such terminology.
+What I'm trying to say is we have uniform things,
+but then you could consider a function which finds derivations in a non-uniform way,
+where depending on what this n is you find some totally bizarre thing.
+I think maybe we need both.
+Oh, you forget there is no compile time and there is no compile time.
+This is dependent type theory.
+You are necessarily going to do things dynamically.
+You stand no chance of first checking that everything is going to be okay
+and then running.
+This is impossible.
+For example, just because we had infer.
+Infer, what is infer?
+What's the type of infer?
+Infer is going to return a result.
+It's going to be a witness, so the result of this is going to be a witness of what type?
+Well, it's going to be a witness for a typing judgment,
+but this s is not known until you run infer.
+This means you cannot tell what the type of this thing is until you run it,
+because then it tells you my type is such and such.
+It gives you the s.
+I know the spiel about static type checking, la, la, la.
+I don't see how to do it.
+In particular, this could mean that you have a proof, you have a program with handlers
+and some of it is broken, but it doesn't get run, therefore, it doesn't get checked.
+But because it didn't get run, it doesn't matter.
+Yes, for example.
+But infer is returning its own type, that's the problem.
+Oh, you're saying, maybe.
+So, yeah, but then something like s type, e s.
+Yeah, maybe.
+I'm not so sure what this is going to mean, but okay, yeah.
+It's an interesting thought, yeah.
+Maybe this works, yeah.
+Okay, so we have here a design question of how uniform or non-uniform these things can be.
+I think for certain cases, you want them to be non-uniform,
+because in principle, there will be examples where for each natural number,
+you have larger and larger and larger and larger derivations,
+but I'm also hoping that maybe for those, you can just use that track in eliminating to the correct thing.
+Yes, so I agree that there are two possibilities.
+You could have non-uniform functions, but if you have non-uniform,
+then I think you have to guarantee somehow that this is always going to work.
+I think if I don't have this guaranteed, then I have a problem because I could use this.
+Maybe I can get away with computation types.
+Okay, why can't we distinguish between a function that returns a computation
+and a computation of a function that always...
+Maybe that's the way to do it, yeah.
+You always have checked that, if you want to look at all the studies,
+you always have checked that lambda n plus m0 equals lambda nn in natural mass.
+No, I don't want that.
+I think there will be situations where you do not want to replace an equality
+between two terms by equality over those terms abstracted.
+I'm not sure whether that will always work.
+Okay, it's here.
+Unfinished part, unfinished part.
+I would be happy to see ideas on how to deal with the questions.
+Yes?
+Yes.
+So let's say that there are going to be two components.
+One is the proof assistant, where all sorts of crazy stuff can happen.
+But then at some point, you want to have a proof checker,
+where you want to guarantee that crazy stuff didn't happen.
+So I would think of proof checker as a subset of the proof assistant.
+Certainly, the proof assistant should know everything,
+should be able to do anything that the proof checker does,
+not less or different.
+So then the question becomes what part of this stuff is for the proof checker?
+And my feeling is that I would allow for the proof checker,
+the proof checker should actually be able to get everything,
+except possibly interactive interaction with the user.
+So it has to run by itself,
+which means if I give one of these scripts to the proof checker,
+and then it doesn't ask any questions,
+then at the end it says, it's okay, it's okay.
+So I don't want to have a big distinction between the certificate and the original thing.
+But if I do, if I say, okay, let's have a distinction,
+but then I think something like this definitely has to be something
+that the proof checker can actually handle.
+Let me just show you what this example says.
+This says, supposing A is a natural number,
+we want to show that A is equal to plus A0.
+This is exactly the one that doesn't normalize, okay?
+And so here, presumably, the proof checker would need some sort of hint saying,
+by the way, this is okay.
+So assuming somebody has produced this hint somewhere above,
+I just assumed it here, but I tried to write it down yesterday,
+but it gets very complicated.
+Assuming, so then the proof checker at this point needs, it needs an advice.
+So there's something like this, you say, handle,
+and by the way, when you see this goal, this is a very baby example, of course,
+because it's the whole goal, the whole thing that it has to do is exactly this, okay?
+But in an actual implementation, this would be some sub-goal arising.
+So you say, if you want to do this, well, then this is how you do it.
+So in this particular case, I have assumed that 0 plus N is N.
+I have to prove that A equals A plus 0.
+So I can use this previously established witness for N plus 0 A.
+Which one?
+Which, this line or lower?
+0 plus N, N plus 0, oh, yeah.
+No, I have both.
+Yeah, yeah, yeah.
+It's okay.
+So let's see, which one is easy?
+This one is easy, right?
+No, this one is easy, okay?
+So we're going to not use this one because it's easy.
+We want to use the hard one.
+Okay, so it has to be 0 plus N here.
+Yeah, sorry about that.
+I was trying to trick you.
+Is it better?
+No?
+This one.
+Oh, it depends on how I define my plus.
+I'm recursing on the second argument, not on the first.
+Yes.
+Let's see if this still works by any chance.
+Ah, phew, okay.
+So to answer Vladimir's question, I think these handles would definitely be part of what the proof checker gets.
+These are exactly the hints that the proof checker needs to perform a job.
+So my idea is that there would be a scaled-down, maybe a scaled-down version of this language,
+which would still allow for the handlers so that we can pass on the hints to the proof checker.
+The core, when you see the evaluator for this thing, it's not complicated.
+Right now it's something like 100 lines, and the complications are not going to be much larger than that.
+So I would say definitely we want to send programs to the checker,
+and then the checker will execute the programs just like we did,
+and because he successfully executed them, he can confirm that they work.
+That would be the strategy that I would want to pursue.
+So here's another possible strategy.
+When this gets evaluated, we actually do record everything that happened.
+We produce an execution trace, and then that's the thing that we send to Brazil.
+I'm afraid that's going to be, first of all, annoying to implement,
+and it's going to produce something really, really large.
+So maybe it's worth experimenting, maybe it's worth having both.
+This definitely doesn't preclude you from doing that.
+It would just need that your interpreter in the proof assistant has to keep track of what he did
+and then package that up and then send it off to some place.
+My idea would be to fix, first of all, fix this language. This is a totally unfinished language.
+No, the language of algebraic effects and handlers is actually quite simple.
+It's not that complicated.
+Yes?
+Yes?
+Yes?
+I want them to be mixed.
+See, if I separate these two things and I say, I want to have a proof assistant
+and then this proof assistant is going to be about some underlying type system,
+that's the sort of, that's LF style doing things.
+LF works like that.
+I want to have a tighter integration, I think.
+This is probably quite, as far as separating levels,
+I think this is very similar to LF, in fact, to how LF does things,
+except that what LF has on top is yet more type theory,
+but what I want to have on top is computations.
+I think so, yeah.
+That's my hope.
+Are we ready for lunch? Any more questions?
+Yes?
+The whole distinction between compiler and interpreter is a bit fuzzy, if you ask me.
+So, you can always, if you have an interpreter, you can mix these things,
+but what maybe is more important is I want to have a language
+which is not just type theory, but also it accounts for computations.
+In terms of whether it's an interpreter or a compiler,
+I think it's going to be more like an interpreter because there can be no compile time
+because you don't know that things are safe at compile time.
+You must evaluate things in order to discover they were okay.
+Yes?
+Yes, for something that will allow you to explain what the tactics
+or it will allow you to explain what implicit coercions are, ideally,
+or explain, or maybe something that can provide unification hints.
+So, those are the things that I'm looking at.
+I want a language where I can explain these things to the machine and then it will do them.
+So, ideally, ideally, I want to have just a language
+and then the proof assistant, all of it is implemented just in this language.
+There isn't any hidden component somewhere in OCaml.
+Well, I think existing proof assistants can always run the things that you have derived,
+so is that, is that?
+Oh, but at this meta level.
+Yeah.
+I don't know. Does anyone know of such?
+Yeah.
+I think the type checker and interpreter in type theory are bonded together
+in such a way that you can't really separate them.
+You cannot have a type checker without interpreting.
+Okay, you could have an interpreter without type checking.
+You just forget everything.
+You just perform some sort of evaluation strategy.
+You don't care what's going on and then you get something.
+Of course.
+You could do that.

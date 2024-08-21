@@ -1,0 +1,672 @@
+Okay, I want to talk about a very sort of type theory brain thing, but it's actually
+got a very interesting story, like categorically, that leads up to it.
+So we're going to take that walk and hopefully learn a little bit of type theory along the
+way and also see some sort of very interesting structures show up.
+So this is going to be sort of split into three parts.
+I'm going to be talking about sort of bi-directional elaboration.
+Don't worry, I will explain what both of these words mean, but basically the idea is
+that we want to take some surface language of a proof assistant and sort of turn it into
+the core language in a very nice typed way.
+To do that, we're going to take a detour into what is bi-directional type checking, a bit
+of displayed category theory, and then finally, I'm going to tie it all together with some
+polynomial functors.
+So now that we have this sort of broad overview of what we're going to do, let's start with
+the one that I know the best and you probably know the least.
+So if we think about the rules, how we actually type check a term in type theory, what we
+want to be doing essentially is taking a rule like this where say A, B has type A cross
+B, A is type A, and gamma has B to B.
+So as a note, the sort of turnstile rules are meant to be read top down.
+So under the assumptions that from gamma I can deduce that A has type A and from gamma
+I can deduce B has type B.
+Under the context gamma, I can deduce that the pair AB has type AB.
+So what type checking essentially does is inverts this rule.
+So whenever I see a pair AB, and I'm trying to figure out if it's got type A cross B,
+I can just check each condition separately.
+So this is great if you've got a really simple type theory, but problems start to come in
+when you start thinking about application of terms and things like projections out of
+these pairs.
+Because if you look at the rules for these, I'm going to do application.
+So F applied to A has type B under the assumption that gamma F has type A to B and A has type
+A, or I forgot a gamma, A has type A.
+So if we try and invert this rule, if we're doing type checking, I see I have an F applied
+to an A, and I want to figure out if this is type B, or type B, I need to invent an
+A out of whole cloth to type check against.
+And that's not good.
+I mean, we could do some stuff with like, oh, well, I'm going to put it in like an unknown
+variable, and then as we walk up the rest of the derivation, and we're going to try and
+figure out what this is, and if I can't figure it out, I'm going to...
+Little A is big A isn't.
+Big A does not show up anywhere in the bottom.
+It's a type that we've got to make up.
+What type should A have here?
+You can't take it out of F?
+Well, we don't know what type F has either, because it doesn't show up at the bottom.
+Remember we're reading this rule from top, or bottom to top now when we're doing type
+checking.
+So we've got an invent an A from somewhere, and again, one option is we do some like stuff
+with quote unquote meta variables where we say, well, A is really like a question mark.
+I don't know.
+And then as we sort of proceed along, we might see that we add something to A at some point,
+and that's like, okay, well, A has got to be a number, so we can walk back and then
+sort of propagate that information through.
+It's very complicated.
+And if you think it's complicated with just these guys, imagine adding dependent types
+onto here, and then adding like, cubicle type theory onto here, and it gets very complicated
+very fast, and there's a lot of very smart people who have worked on this problem.
+We are going to ignore that work, unfortunately, and do something a lot simpler instead.
+So if we notice that we can't invert all of the rules, when we say, well, what if we made
+some of these rules just read top down?
+So we're going to call rules like the pair rule, is going to be called check rules, because
+we are given the type and the context and the term, and we can just sort of invert and
+just proceed to type check going up.
+But then when the situation is where we get stuck, we add other rules, which we call synthesis
+rules, so synth.
+And these would be rules like function applications.
+And I'm going to write, just as a piece of notation here, if we're in check mode, I'm
+going to write red up arrow.
+And the idea here is we're going to be reading the derivation looking up.
+Whereas for synth, I'm going to write blue down arrow, because the idea is the information
+is flowing downward.
+So if we look at that function application rule again, we've got gamma applies F, A has
+type B, and we're going to be producing the type here on the way down.
+We can deduce this if this gamma F is type A to B, but we're going to synthesize this.
+Oh, I forgot it, B. We're going to synthesize that.
+And then we are going to check that A has type A.
+So now the information.
+Yep?
+Is this where the red and blue for red tg and cool tg come from?
+No, that is a very long story.
+I will not get into right now.
+It would take too much time.
+But yeah, so if you see here, we are producing the type here.
+That's what the synthesis means.
+So to synthesize that F of A has type B, we need to first synthesize a type for F, and
+then we know A, so we can check A against A.
+So if you think about the information flow here, we're sort of coming down, we're synthesizing
+the type, and then we're feeding that in there, and then we're sort of producing that final
+result at the bottom.
+So really, we're sort of splitting up this issue of we have to invent types and saying,
+well, we have some rules that can just invent types, and then letting the information flow
+all sort of propagate through.
+And there's some very nice proof theoretic properties of this that I will not dwell on,
+but it's important to note that this strategy is very easy to implement.
+You just write two mutually recursive functions, and it's also relatively efficient and doesn't
+require many type annotations.
+You only need type annotations on stupid things like beta redexes, which no one writes anyways.
+I might say beta redex means something like this.
+You write a lambda term, and then you immediately apply it to an argument.
+No one writes code like this.
+This is dumb.
+Don't do that.
+That's what let gets de-sugared into.
+Well, don't de-sugar let like that.
+Put let in the core language.
+This is the hill I will die on.
+So this is sort of interesting because when we move to not just type checking, but elaboration,
+the structure becomes a lot more complicated.
+So recall that type checking means I give you a term, I give you a type, and you tell
+me yes or no, whereas elaboration is sort of of the form.
+I'm going to give you a type, and you're going to give me a term of that type.
+So it's sort of proof synthesis generally is the problem.
+It's going to be well-typed.
+Yeah, but I have to give you a term of that type.
+Yes.
+So generally, we'll write out something in some surface language, and that will get
+turned into sort of things that when I write a lambda in the surface language, that means
+I'm going to apply the lambda rule in the elaborator or something like that.
+So all the syntax that you actually write out in your editor will all get translated
+internally to something that sort of builds up a core term of the correct type.
+So here we are at this, the problem of elaboration suddenly becomes our check rules will take
+in a context and a A in that TP in that context, and then produce a term of gamma A, and then
+a synthesis tactic will take in a context, and produce a pair of an A of TP gamma, and
+then also a TM of TM gamma A.
+So this is sort of interesting because if you stare at this for a little bit, you notice
+that these are sort of the same thing, it's just we've kind of moved a sigma around.
+They're not the same, but they're very similar.
+Isn't the top one more pi-ish?
+The top one is more pi, but we're going to see sort of go on a slight divergence to
+see how you can get these two things out extremely naturally just by sort of following your categorical
+nose, and how we can generalize this to basically plug and chug for any type theory.
+So I've got a type in context gamma, and then this is a term in context gamma of type A,
+which also isn't, and this sort of immediately hints at why giving like categorical semantics
+to dependent types is hard, because we have all this crazy indexing going on, like not
+only are the types indexed by the context, but the terms are indexed by the context and
+also the types, which are also indexed by context.
+So we sort of have this like double indexing going on, and normally like the naive way
+of encoding this might be to have, so we've got some category of contexts, which I'm going
+to denote con t for context of some theory t, and then we take pre-sheaves on contexts
+to give us the types.
+The reason we want it pre-sheaves is we want sort of a family, so I'm going to write tp
+up, set, so we want a family over context, like if you just write out the definition
+of tp gamma, like yes, we already have a family of sets over context, but we want them to
+be sort of a functorial family with respect to substitution.
+So if I have a substitution, I want to be able to apply that substitution in sort of
+the types in that context, and sort of apply that functorially, and the op just comes up
+because of how we define substitution, like a subst from gamma to delta means that for
+all a in delta, I can give you a term of a in gamma, so that ends up being contrary.
+Yes?
+Does the application of tp to these substitution morphisms, like one might want like left
+and right adjuvants to that, which are fine and safe on that?
+Yes.
+Does that happen at this level, or at a different level?
+That happens at a different level, yeah.
+Basically, you have to start thinking about like families and then like context extension
+for that stuff to start making sense, and we don't even have the structure of context
+extension here at all, and I'm actually not really going to touch on context extension,
+because it's not relevant to us, but anyways, so types are sort of naturally like here first
+crack at it, you're going to appreciate it, great, and then terms are sort of weird because
+well, they're also indexed by types and terms, so we're going to have to take a pre-sheaf
+over the category of elements of tp, which is already starting to get a little grody.
+So like tm is going to be a pre-sheaf over tp, gross, we hate that, because this really
+is sort of obscuring a lot of the structure that's going on.
+Namely, what we want is some sort of like, well, tm is going to be fibred over tp is
+going to be fibred over conti.
+That's the natural way of like indexing these things as opposed to like unfolding this sort
+of tower of vibrations into this crazy like thing, and then trying to encode like context
+structure here.
+If you do this, you get something that's called a category with families, or there's a bunch
+of ways of doing it, and they're all pretty intense, so ignore that for now.
+We're going to sort of take a look at the fibred point of view.
+However, as I was noting earlier, if you try and do vibrations in dependent type theory,
+you get owned pretty fast.
+Fibrations are sort of like, oh, they're quote unquote evil, and most people are growth and
+deep vibrations specifically.
+The lifting condition requires an equality of objects somewhere in there.
+Discrete vibrations, they're a little bit better, but even to state the lifting condition,
+you still need the equality of objects.
+So, yeah, if we encode this in type theory, in just standard type theory, you end up with
+these equality constraints and like a bunch of subs along those equality constraints,
+and it's just a bad time.
+As I was noting earlier, though, if you encode this in dependent or a homotopy type theory,
+the situation's even worse because suddenly you end up with like, well, that equality could
+really be an equivalence because of univalence, and then suddenly your objects need to be
+like sets, and then things stop working over the category of sets, and it's just a total disaster.
+And street vibrations don't.
+If you've ever tried those in a proof-assistant, you'll know why.
+So, we need to sort of take a step back and think about how we can sort of do the theory
+of growth and deep vibrations, but better in type theory, yes.
+So, just to get a sense of the whole scope of this, like, if you want to do the semantics
+for a type theory in another type theory?
+Yes, because I want to write the elaborator for something in a type theory.
+At the end of the day, this is all about implementation.
+I want to write out all of these structures to be able to actually define the types for
+the tactics for actually generating things and then put that all in a dependent type theory
+and be able to run it at the end.
+Because, like, the categorical perspective on this is you just have a locally called
+Cartesian closed category, then types are elements of context.
+Yeah, that is one way to do it, but if you want to do, like, more syntactic things,
+it helps to have a more syntactic view, as opposed to just saying, like,
+yeah, a dependent type theory is an LCC.
+So, yeah, we do care about syntax, both from, like, an implementation perspective
+and as a type theorist, you care about things being strictly preserved a lot more.
+Whereas the more semantic view, everything gets a little too fuzzy
+and you can't talk about things being, like, on the nose in the way we want.
+Like, it's often very important, for instance, that substitution will commute strictly with
+things as opposed to, like, up to isomorphism.
+But yeah, I want to do this all in a proofs assistant, or in a type theory.
+And growth and deep vibrations, which are sort of the natural way of encoding this indexing,
+do not work.
+So, what's it got to do?
+Well, if you're lucky, you've read a paper by Lumsdan, came out in, like, 2018.
+It describes this theory of displayed categories, which are sort of, if you think about, like,
+a family, like, really what a growth and deep vibration is trying to do
+is trying to encode, like, a functorial family of categories.
+And the way we do that is we sort of take a functor, like, E,
+oh, this guy might be at the end of his life.
+Yeah, even banished on the floor.
+Oh, man, I'm brutal.
+We've got a functor, E to B, and we're going to sort of look at the fibers
+and we want nice re-indexing of the fibers.
+And this is sort of the equivalent.
+If we go to mere mortal land with functions, as you look at a function, like, I to X,
+and then look at the fibers of this function to define a family of sets.
+But there's an alternate way of doing this, which is sort of you look at the classifying map of this guy,
+which is going to be a map I to set.
+And this is a lot nicer than this because this involves a bunch of equalities
+of, like, talking about the fibers and blah, blah, blah, blah, blah.
+This is just a function.
+These compose very nicely.
+We don't need to think about equality.
+So is there a variant of this sort of classifying map perspective for vibrations or functors?
+And the answer is yes.
+And there's the sort of very concise way of doing this where you talk about span,
+but, again, we want to program this in a proof assistant,
+so the easier way to do it is somewhat unfold the definition.
+And that is precisely what a displayed category is.
+So displayed cat over B where B is a category.
+So to start, we've got a family of objects, E sub X, or sub I.
+So for each object, we've got sort of a type of objects that live above it.
+And similarly for morphisms, families of homes, E sub F over X, Y were F is I to J,
+and X is E over I, and Y is E over J.
+So if you think about the sort of space of objects above two objects,
+there's also spaces of morphisms in between sort of objects in those spaces.
+And a very nice way of thinking about these things is you want to think about sort of the like classifying maps
+of forgetful functors of like algebraic structures, for instance.
+So and on the base, you have set, and then over each set, there's a sort of space of say group structures on a set.
+And then for each morphism in between like two group structures, we have like a proof that it's a homomorphism, essentially,
+because this lives over some set function.
+So we've sort of organized, instead of thinking about this all like collapsing down,
+we've organized all this data sort of above a category.
+And this obviously has identities plus composites, where the identity morphism in E has to live above ID.
+So it's, yes.
+You just done saying that you didn't want to think about these as functors to sort of cat or scan.
+But you're happy with that?
+Yeah, so you, morally...
+So it's bad to be a functor from context to set that gives us type and functors from type to...
+That's purely for intuition.
+At some point we want to think purely in terms of the displayed structure,
+but now we're learning what the displayed structure is.
+So it's helpful to have our feet somewhat on the ground when we're talking about these things.
+Yeah.
+Anyways, we have identities and composites.
+So we've got like E, ID, XX.
+And then like E of like U composed of E.
+X to Z for each E over U and then E over V.
+And then equations.
+But if you're astute, you'll notice that the equations have some subtleties with regard to well typedness.
+So if you look at the composite or like left identity law, for instance, we've got F compose ID is equal to ID.
+This side is going to be an E of U compose ID.
+XY.
+That should be an F, sorry.
+Getting into myself where I'm assuming F lives over U.
+But on this side, we've got that E or F lives over just E of U.
+So the two sides of these equations actually have different types.
+So there's ways we can fix this sort of in a proofestant which involves fancy machinery.
+Or we can do what we can do or we can do what we're going to do right now,
+which is just sort of mod out by these equations and just pretend that they're all told on the nose.
+So I don't want to have to think about, oh, we're going to write some substitution when I'm on the board,
+because I cannot do that.
+So now will probably be a good time to take a breather and make sure I've got everyone with me.
+Does it U compose ID equal to U hold on the nose?
+Not necessarily.
+I mean, I think you're displaying over as a category.
+Yeah, so there's a subtle thing here if we're talking about in-type theory about, like,
+judgmental equality versus propositional equality.
+So this holds propositionally, but that doesn't mean these two things are the same judgmentally.
+It's the sort of...
+And if that is still confusing to you, be happy because having those brain worms is not good.
+It makes everything a lot harder.
+Live in a blessed land where you don't have to think about stuff like that.
+I notice that you live in that blessed land.
+Yeah, no worries.
+Yeah, so we can totally ignore that problem.
+Great.
+I'm going to pretend like that does not exist.
+So this is sort of precisely the same datum as a functor into B.
+So the next question is, well, what's the sort of displayed analog of a discrete vibration?
+Because again, these things way, way, way back when were originally pre-sheaves.
+So we want the sort of growth and deep vibration version of a pre-sheaf, which is discrete vibration.
+So a functorial family of sets.
+So how do we encode this in this guy?
+So you do, and we don't need to worry about cartesian vibrations for this talk, luckily.
+If you care about it, it's basically the same definition as normal growth and deep vibrations with the cartesian squares.
+Just written in this language.
+You draw the same diagrams.
+So a discrete vibration is...
+It looks like this.
+So we've got a U, I to J, and then a...
+So I'm going to write, just as a bit of notation, these sort of open-headed arrows for X is in...
+Yeah, it's in the object space over J.
+Yeah, we could write it the other way, but this is just a little bit more natural, I think.
+So something is a discrete vibration if the collection of...
+I'm going to write this X star and U star.
+The collection of pairs of these guys is contractable, so there's only one of them.
+And you can prove to yourself that this is the same as being a pre-sheaf, if you want.
+There's some slight subtlety here.
+If you're in hot, you want the collection of objects over each J to be a homotopical set.
+So you don't have any higher homotopies past regular qualities, but we don't care about that right now.
+Good thing to mention if you want to actually program this.
+So these guys are going to be the building blocks that we're going to start our whole story on.
+And we should note that you can compose displayed categories in the same way that you can compose growth and deep vibrations.
+It's a little tricky because we need to involve sort of the displayed category version of...
+This E is sort of the datum of the functor, and we need a way to talk about the total category of the growth and deep vibrations.
+So we're going to note that like integral E and its objects, total category, objects are sigma types.
+So an I in the base along with an X of E at I, and morphisms similarly, you just take sigmas.
+So then when we take a composite of E is displayed over B, and then we want to say that F is then displayed over E.
+We say that F is displayed over the total category of E.
+And that's how you can sort of compose these things.
+So we've got all the machinery we need now to talk about this structure and this language.
+And if we do that, something really cool pops out.
+Because if we talk about this in like just your regular vibration language, everything is sort of bundled.
+Like the space up here is going to be the collection of context, types, and terms.
+This guy's just going to project out the context and the types, and this is just going to project out the term, or the context.
+The structure of this is way different because...
+So there's two things.
+I'm just going to be very explicit here.
+E, F.
+So objects of this are just going to be families over context.
+Whereas sort of... I'm sorry, there should be term.
+Getting ahead of myself.
+Term, TP, and TP.
+So objects here are just going to be families of types in a context.
+Objects here are going to be families of terms over types and contexts.
+But the composite...
+An object is just a single term.
+An object is a single term out of family of terms.
+Yeah, I'm just talking about the whole object space right now.
+Yeah, so a single object would be...
+You give me... it's indexed by the context and term.
+But the composite of this is different.
+This is a pair of a type and a term over a context.
+If you unfold out all the definitions.
+Because this...
+No, it's not.
+Because this is you give me a context and I'll give you a type and a term.
+And the other one is you give me a context and a type.
+And I'll give you a term.
+Yes.
+Yeah, I should probably write out the definition of composition.
+That would probably help.
+So...
+Composition.
+Composition of displayed cats.
+So we're going to say E is displayed over B.
+And F is displayed over the total category of E.
+The composite of these two is going to have as objects...
+Well, it's going to be pairs of objects over I.
+I are a pair of like an X at E sub I.
+And an X prime at F of I X.
+So the notation that you're using...
+Like if that was a real arrow, then you would put it...
+Like this arrow with a hollow thing is...
+If that were a real arrow, then the codomain would be the integral.
+Yes.
+Yes, exactly.
+It's a little funky because these are sort of families over this.
+In the same way that you don't compose set families by clunking them together,
+you have to do a little work to take the same amount.
+So the objects of the composition are going to be a pair of an object of E
+and then a pair of an object of F that lives over the E and the B.
+So if we move over here, the composite of this guy is going to have objects from types and a term.
+So the indexing structure here is actually different
+than the indexing structure of just terms over types or terms over integral type.
+Now, if you remember way back, so this is going to be the composite
+and this is going to be that vibration.
+I feel like I've lost people.
+Joe, are you talking about sections?
+Yes, something's really...
+What are these two arrows?
+Not that one, this one's fine.
+Let's start over.
+So we've definitely got a displayed category over context, which are the types.
+It's just the pre-chief.
+So it's a discrete vibration.
+We also have the following discrete vibration over the total category of types, right?
+So that is every term in a pair of a context of a type.
+And that's an order of color?
+Yes.
+I'm horrible with that, sorry.
+So we can take the composite of these two guys by using this definition over here
+and morphisms are sort of similar.
+We can take the composite of these, which I'm going to denote Tp composed Tm,
+which will have...
+It's displayed over context and if we just unfold the definition,
+it's going to be a family, each one of the sort of objects over a context gamma
+is going to consist of a pair of a type and a term.
+So if we look at the difference between these indexing structures,
+this one captures the check terms,
+and this one captures the synthesis terms.
+Because just unfold what the object spaces of this guy looks like.
+Again, this is going to be a family over...
+What do you mean the object space?
+No, do you mean that you take the integral of that?
+When I say the object space, I mean this is a displayed category.
+We can just look at what the fiber category over...
+Yeah, an object in the base.
+Which in this case, the fiber categories are just going to be a set because it's a discrete vibration.
+So an object in the base is a type in a...
+It's a context and a type.
+So it's a family of that and over that is going to be terms in that context and type.
+Okay.
+Right?
+Yeah.
+Let's write TM.
+Okay, there we go.
+Yeah, set.
+Let's just write set.
+Alright, but it's morally a set of terms.
+Alright, I'm glad we found the confusion.
+If we look at the fiber categories of this guy though, it's different.
+It's just indexed by the context.
+But up here, your sort of object spaces are really going to be a sigma type,
+where it's a term bundled with a type.
+So if you think about it, this guy gives you sort of the check terms
+because we know a context and we know a term.
+Type.
+No, a type, thank you.
+I'm going to give you a term.
+We're down here.
+It's I have a context or give me a context.
+I can give you a type and a term.
+So by sort of splitting this guy up and sort of encoding this all in the language
+of discrete vibration or displayed categories instead of growth and deep vibrations,
+we sort of exposed a more delicate indexing structure than the fiber case would have.
+Because that, you just sort of bundle everything up at every level.
+Because here, you just have these families.
+If you have an object in tip tp, that is your gamma kind of, your gamma kind of comma tp.
+Yeah, but if you look at this guy, this is going to be bundled up of context, types, and terms.
+Yeah, but if you fix something in tip tp, you get to have the gamma in the tip tp.
+Okay, yeah.
+I think this is a little bit more natural for reasons I'm about to describe.
+So basically, this is like a way of getting some things that were true in the fiber case.
+Yes, and making it very clear as to what's going on.
+Specifically, so do we all agree that these two vibrations or displayed categories sort of
+capture the like indexing structure of the check terms and the synthesis terms?
+Just like if you were to write these things out as like families, what they would look like?
+I'm going to start over here.
+There is an extra level of machinery.
+The final one, which is there's a very natural way of building a polynomial functor from a displayed category.
+Sort of like the generalized families.
+The set of positions are just going to be objects of B.
+And the set of directions are going to be sort of object spaces.
+So like you give me an I and B and I'll give you like E, I, the set of objects that live above I.
+Yeah, and these are discrete vibrations, so it doesn't really matter.
+Yeah, I mean, we don't really care about that for what I'm about to do.
+Yeah, so it's sort of like the object polynomial associated with the displayed category.
+I'm sure this is somewhere in the literature.
+So what happens if we do this with these check and these are these guys over here?
+So the positions for this are going to be objects of the total category of TP.
+So that's going to be the sigma type of a gamma of type context and a TP or an A in TP gamma.
+And then the directions are going to be, well, you give me one of these, I'll give you one of these sort of fibers.
+So that is going to be from a gamma and an A to a TM of gamma of A.
+Now, what about this composite? Well, the positions are just going to be context.
+So I'm going to call this the check polynomial.
+And then sin is going to be the sort of object polynomial of the composite.
+So that is going to be just context or the positions.
+And this is you give me a gamma and I can give you a sigma of A, A in TP gamma.
+And then a TM of gamma A.
+So these are exactly what we need to start doing elaboration.
+Because if you look at what happens when you look at the morphisms in between these, you get something like this.
+Specifically, we're going to take the composites of a bunch of polynomial functors.
+So let's write out the function application rule from earlier in this language.
+So that is going to be a sin to a sin composed with check.
+So the forward direction of this morphism means I'm going to give you a context.
+And then the goal over here, we're just going to plumb that gamma into this guy.
+So let's call this, this is going to be a pair of goal then.
+So this goal here is going to be gamma.
+Then this produces both a type and a term on the output just by chasing the definition of the polynomial composite.
+So this is going to be A and A and A.
+Yeah, I'm just thinking of a good name for it, an FN.
+And then we're going to pattern match on this A.
+So case A of, if this is a function type, then what we're going to do is we're going to produce a goal of...
+Sorry, I'll change the names.
+We're going to produce a goal of gamma B and otherwise we're just going to blow up.
+And you could encode this by adding a bunch of maybes in here or we could just say we're over partial functions.
+Because we're in a programming language and who cares?
+So this is the forward direction.
+Now the backwards direction is going to take in a pair of a type.
+But we know that this is going to be of this form because otherwise we would have hit this case.
+And then we are also going to get a pair of terms, FNA.
+And then what we can produce is the return type along with app FNA.
+So just by sort of chasing our nose through all this stuff and then encoding this in terms of polynomial flunctures,
+this sort of tensor product gives you exactly the right index or sort of dependency structure to encode this bidirectional
+and type checking stuff.
+And you can continue with this with the pair is going to be check to check tensor check.
+And that will just...
+Yes, yes, sometimes like if you're doing a function introduction, for instance,
+you're going to add stuff onto this context and extend it.
+Yeah, well people didn't like it when I reused A.
+T, we love T, A, B, A, B.
+Yeah, so you can kind of continue to encode all of the other rules into this and it just works.
+And this includes like some of the trickier rules that sort of mediate in between synthesis and checking.
+For instance, like the annotation rule would be you give me a check and a TP,
+assuming that we can obviously take the like associated object polynomial of the just like TP vibration.
+You give me check tensor TP and then I can give you a sin.
+And this will just plumb the sin or the type from here to the output.
+And then actually this would be TP tensor check.
+No, it's actually TP, this guy check.
+Yeah, because you need to be able to plumb back into there.
+And the synthesis rule is similar, it's going to be sin.
+So this one is, yeah, check.
+And this will just run this guy, get the type that's expected out and compare it with this guy's goal type
+and then blow up if they're different.
+Otherwise you just return the term.
+Yeah, if you want you can this anytime you see a type here, it should be maybe type or type plus one.
+Yeah, it's a little like yeah.
+And then if you want you change this family to if it's the nothing case, then this is the empty type.
+Yeah, yes.
+Are you compose all of these into something that like, okay, try to decompose like quicker.
+You have this goal, now try to decompose it this way.
+That doesn't work, try to decompose it this other way.
+Like here you have a case statement and it's like, oh, if it's a function type then do this thing.
+But like how are you compose that with another case statement which is like, oh, it's a product type, do this.
+So this is what I, these guys, I want to draw a very important distinction here.
+In between like, I call tacticals versus rules.
+So a rule is something that we'd like write out like this that does these actual like case statements and all that stuff.
+And these are sort of like, to even get yourself off the ground, you have to write these by hand.
+These cannot be generic over your language.
+You just like, at some point you need to write out the rules of type theory if you're going to implement type theory.
+And this is where you write them.
+Whereas tacticals are the combinators, are generic combinators that allow you to do these like, well, if I have say like a race statement for instance,
+if I have something like, I want to like synthesize something.
+So I'm going to like split it up into sin, tensor, sin.
+And whoever completes first, I'll just use their answer.
+So you can write those generically over like the sin and check interface.
+I should be talking to you.
+Yes.
+So the tacticals, you can write those generically.
+Or as these rules, you have to write these every time.
+Okay, so that's sort of these maps?
+Yes, yes.
+Is this things that aren't like, I have to write out this manual thing.
+It's going to be tensor, tensor, tensor, tensor, tensor to like candle the M.
+Okay.
+But like, so say we have, so, you know, we have different maps out of sin.
+Oh, I guess let me compose their codemates by times two.
+So, like, if you have, like for instance, if you're trying to do this function application thing,
+and also product application, you end up with like this pretty big codemate type.
+Yeah.
+Which is like sin to most check times, check to most check.
+And that just sort of keeps getting bigger and bigger and bigger.
+Yeah, eventually what you can do is you'll hit like either like variable cases,
+which are just going to be like nothing, basically, you either succeed or you fail.
+Or you can sort of start taking like the way I normally think about this,
+because I have this all implemented in two ways.
+I have one version of this in Haskell, which is the old version, which is not as elegant.
+That's actually what powers a bunch of code synthesis stuff in the Haskell language server now.
+If you ever used Wingman, that was me, and Sandy McGuire.
+But yeah, you sort of, how that one works is you basically define this like auto thing,
+which will produce a bunch of sub goals and then compose itself onto those along with some like gas.
+So you take like a fixed point of one of these guys and just like repeatedly compose down all the way.
+Yeah, what you do there is like at some point you're going to end up with something with like a big tensor at the bottom, right?
+And one option and you can do is you just compose on fail if you ever hit this level,
+because your proof search depth has exceeded.
+And that's what a lot of tools like reasonably do.
+You want it to blow up at some point.
+Or you can, because we're in a like necessarily not total programming language,
+say Haskell, we can just like keep going and just, yeah.
+Mathematically, I don't know what the full fixed point looks like.
+I have a version of this in Agda now for like simply type the lambda calculus.
+I can put the code up somewhere after this talk.
+That one would just run out of gas because it's Agda, you know, it's a total programming language.
+So you add like an, you like add a parameter to everything?
+Yeah, what you do at the end is you say auto, auto takes in a NAT and then it inducts on the NAT
+and just keeps composing itself till it runs out of gas.
+Okay.
+Yeah, I mean that's how you do things in like total programming languages when you have these like
+things that could be of infinite depth as you pass in some gas.
+Yeah, I feel like you should be able to do this with three code ones.
+Hmm, interesting.
+Yeah.
+Which, which is very cool.
+Anyways, the tensor product for me, like doing this work, there's a lot of stuff to be mined here,
+specifically with type theory, because there's a longstanding issues with representing context internally nicely,
+specifically like record types and having those be extensible.
+There's all sorts of ways that you can try and do it, but you get absolutely destroyed because of like issues of,
+oh well this should be a context, but it can actually compute in some places and depending on what value the first element is,
+it's not a context, that's some other messed up thing.
+So having this sort of like more rigid structure seems very, very useful.
+And in general, the fact that like if you were to implement a type theory for poly itself, it could eat itself.
+Its elaborator could be implemented like this.
+The internal implementation could, you could expose an interface for these check and sin polynomials and give all of the basic rules of the type theory as sort of magic primitives.
+Like we could have the lambda rule as a term in the type theory for poly.
+So you could write, basically do your like reflection on yourself and generate proof terms in a very natural way,
+just using the machinery that the type theory already has.
+So that to me is a very compelling use case for all this stuff.
+And this pattern of sort of synthesis checking and one thing I forgot to mention,
+there are other ways of doing this like tactic based stuff.
+Most of them have issues with one connective, which is the sigma type.
+This guy might also be dead. RIP.
+Oh, lovely.
+So the problem with the sigma type, so we've got a comma b has type sigma x and a b of x, right, is the goals are dependent.
+So I have to prove that a has type a and depending on what I choose for a, the type of b must change.
+Gamma b at a or b has type b at a.
+So if you try and do this with tactics, you end up in weird situations where I haven't figured out what a is yet,
+but I somehow need to proceed with synthesizing b if I'm doing like interactive proof.
+And this is just, there's all sorts of ways of doing it with like meta variables.
+Yeah, you don't know a.
+We're writing out a term and I've just put a question mark for what a is because there's holes, right?
+We want to have, this supports interactive development, right?
+Like there's a whole tactic, for instance.
+If you don't know what a is, writing b is very confusing, but b may not depend on a or only parts of b may depend on a.
+So you can still make progress.
+So most people normally do this with meta variables and all this other messed up junk.
+But this allows for a very natural notion of dependent sub goal if we just have check tensor check.
+Because once you run the first check, we've already got our hands on what the value that the second one synthesized.
+Check.
+Yes, thank you.
+Sorry.
+Triangle tensor.
+Yeah.
+So once we run the first check, the second check has access to what the first checks emphasized.
+And even if that check is a question mark of this is not complete yet, it's still able to proceed as opposed to like having all these messed up evars.
+And if you've ever used cock, you know where that goes.
+Bad places.
+So just being able to get that problem solved sort of for free from this machinery is also quite compelling.
+I think we normally go for an hour, right?
+Yeah.
+Yeah, all right.
+I think I open the door for questions then if anyone has any.
+Yes.
+So you can implement the elaborator, which is the part that everyone else interacts with.
+Like you've got your rules for your core calculus, right, which like doesn't have implicit, doesn't have may not have pattern matching.
+It might just have like primitive eliminators.
+All your nice syntax sugar is just gone, you know, any like underscores that you might write for like, oh, you can figure this out.
+Gone.
+It's just like raw core terms of the type theory.
+This is what produces that and writing the elaborator is like the hard part, I think.
+Like writing the evaluator is relatively easy.
+And writing the conversion checkers a little tricky.
+That's the thing that compares two terms if they're equal.
+But then all the fun cool stuff is a user that you're like, wow, this is so great.
+That's all in the elaborator.
+So you'd use this then to build the elaborator and sort of not only build the elaborator, but have a toolkit for building elaborators.
+So all of your like tactic stuff, like race these two terms, see which one finishes first.
+Or if this fails, try this other tactic.
+That can all be written generically.
+So if you have some crazy complicated thing that does a bunch of like weird backtracking or whatever, you only have to write that once.
+And then you can instantiate it at each type theory that you create.
+And that's sort of the pitch.
+And it turns out this pattern also shows up in a bunch of other places.
+Like we have goals and then we have a bunch of sub goals that we produce that may be dependent.
+And then we want to gather those all up together into a solution for like, I don't know, like project planning.
+For instance, this is a very applied example.
+We may have some thing that we're trying to do and that may decompose into different goals.
+And then we make a choice at one point and that changes what the goals look like later on.
+That is also described in this way very nicely, especially if you need to like,
+this is happening in some context and we may not know what the goal is at certain points.
+We may have to figure out like, not only we need to produce some result, we need to figure out what we're doing and a result about the thing we're doing
+and how to mediate in between those two worlds.
+So this is not just interesting for type theory reasons, though it is.
+Interesting for that.
+I know we think really good.
