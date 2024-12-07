@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Visualizer</title>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            overflow: hidden;
+        }
+
+        #container {
+            width: 100vw;
+            height: 100vh;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: start;
+            background: #f4f4f4;
+            position: relative;
+        }
+
+        #output {
+            padding: 20px;
+            background: white;
+            border: 2px solid #333;
+            border-radius: 8px;
+            min-width: 800px;
+            min-height: 600px;
+            max-width: 95%;
+            max-height: 95%;
+            overflow: auto;
+            position: relative;
+            user-select: none;
+        }
+
+        .folder {
+            font-weight: bold;
+            color: #333;
+            margin-left: 20px;
+            margin-top: 5px;
+        }
+
+        .file {
+            color: #555;
+            margin-left: 40px;
+            margin-top: 5px;
+        }
+
+        /* Custom scrollbars for desktop */
+        #container::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+
+        #container::-webkit-scrollbar-thumb {
+            background: #aaa;
+            border-radius: 6px;
+        }
+
+        #container::-webkit-scrollbar-track {
+            background: #f4f4f4;
+        }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <div id="output">Loading...</div>
+</div>
+
+<script>
+    async function fetchData() {
+        try {
+            const response = await fetch("./structure.json");
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            const data = await response.json();
+            return data;
+        } catch (error) {
+            console.error("Error loading file:", error.message);
+            document.getElementById("output").textContent = `Error loading file structure: ${error.message}`;
+        }
+    }
+
+    function renderFolder(folder, parent) {
+        const folderEl = document.createElement("div");
+        folderEl.className = "folder";
+        folderEl.textContent = `📁 ${folder.name}`;
+        parent.appendChild(folderEl);
+
+        if (folder.contents) {
+            folder.contents.forEach(item => {
+                if (item.type === "directory") {
+                    renderFolder(item, folderEl);
+                } else {
+                    const fileEl = document.createElement("div");
+                    fileEl.className = "file";
+                    fileEl.textContent = `📄 ${item.name}`;
+                    folderEl.appendChild(fileEl);
+                }
+            });
+        }
+    }
+
+    async function init() {
+        const data = await fetchData();
+        if (data && data.length > 0) {
+            const output = document.getElementById("output");
+            output.textContent = "";
+            renderFolder(data[0], output);
+        }
+    }
+
+    init();
+
+    const container = document.getElementById("container");
+
+    // Detect mobile device
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+
+    if (isMobile) {
+        let isDragging = false;
+        let startX, startY, scrollLeft, scrollTop;
+
+        container.addEventListener("touchstart", (e) => {
+            isDragging = true;
+            const touch = e.touches[0];
+            startX = touch.pageX;
+            startY = touch.pageY;
+            scrollLeft = container.scrollLeft;
+            scrollTop = container.scrollTop;
+        });
+
+        container.addEventListener("touchmove", (e) => {
+            if (!isDragging) return;
+            e.preventDefault();  // Prevent mobile scroll
+            const touch = e.touches[0];
+            const dx = startX - touch.pageX;
+            const dy = startY - touch.pageY;
+            container.scrollLeft = scrollLeft + dx;
+            container.scrollTop = scrollTop + dy;
+        });
+
+        container.addEventListener("touchend", () => {
+            isDragging = false;
+        });
+    } else {
+        // Enable native scrollbars on desktop
+        container.style.overflow = "auto";
+    }
+</script>
+
+</body>
+</html>
