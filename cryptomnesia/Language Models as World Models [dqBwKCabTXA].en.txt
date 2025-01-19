@@ -1,0 +1,2050 @@
+what this talk is sort of broadly about
+is understanding whether uh neural
+sequence models that are trained to
+generate text build representations of
+the meaning of that text and maybe even
+of the sort of world described by that
+text um so I want to start with an uh at
+this point a sort of oldish example uh
+from Marcus and Davis originally
+actually from the late Eugene charc PhD
+thesis um the example goes as follows
+Janet and Penny went store to get
+presents for Jack Janet said I will buy
+Jack a top don't get Jack a top said
+Penny he has a top he will dot dot dot
+um and in 2020 if you took this example
+and fed it into what was then a
+state-of-the-art language model I think
+chap or not J gbd gbd3 um it would
+complete it as follows uh he will get a
+top I will get Jack a top said Janet now
+there are many things that are
+remarkable about this example right it
+stays on topic it knows who's involved
+in this situation it knows about enough
+about sort of the structure of dialogues
+and and social conventions to know that
+it's Janet that's likely to speak next
+uh and we get all of this complicated
+Behavior right just from training a
+generic next token predictor on a bunch
+of text which you know was not true in
+2019 and you know I think sort of
+unimaginable as as recently as like 2014
+or 2015 um the other sort of interesting
+thing about this passage is that it is
+total nonsense right Penny says don't
+get him a top he has a top he will get a
+top Janet says she's going to get him a
+top this is not like actually whoops uh
+a conversation that you can imagine real
+human beings uh having with each other
+um you know this example is certainly
+fixed in modern language models but you
+don't actually have to work that hard uh
+to get things that are kind of in the
+neighborhood of this um and so what all
+of this raises is the sort of big
+question of what's actually going on
+under the hood to support uh this kind
+of text generation in a way that might
+both ex explain uh the failures and the
+successes uh and in particular right is
+there is this just sort of babbling is
+this just a really good model of the
+surface statistics and text or is there
+some sort of representation some sort of
+reasoning about the situation that's
+being described in text um and you know
+like I said this is an old example
+modern models can generate longer
+documents uh they can generate documents
+describing sort of weird counterfactual
+states of the world uh involving you
+know sort of unicorns that speak English
+that live in Peru uh they can sustain in
+some cases hours long conversations with
+humans uh that are like mostly coherent
+over those windows um so again what's
+going on here and I think the sort of
+mental model or a popular mental model
+of language models at least in their
+earlier forms was that they were just
+really good models of linguistic surface
+data right that they knew a lot about
+co-occurrent statistics that they could
+you know sort of generate grammatical
+sentences as long as they weren't too
+long and did a really good job of
+manipulating strings in sort of
+realistic ways without needing to go
+through any sort of computation that
+required them to understand what those
+strings meant um but I think once you
+start being able to tell long stories
+about uh complicated situations in in
+counterfactual Worlds like this sort of
+un famous unicorn example um I think it
+becomes increasingly difficult to
+sustain a picture or a model of how
+language models work uh that is just
+based on string manipulation um and it's
+become increasingly popular to instead
+talk about uh World models or situation
+models that live inside these language
+models uh and to sort of make claims
+that modern language models are are
+building and representing and reasoning
+about and manipulating um explicit
+structured representations of uh
+situations and states in order to
+generate the text that they generate
+today um and so what this is about is
+sort of probing into that and trying to
+uh see what we can say uh and what kinds
+of empirical evidence we can produce for
+against uh the presence of of of things
+that look like World models inside these
+language models um so that's going to be
+most of this and then maybe a little bit
+of uh more sort of uh higher level
+philosophizing at the end about what it
+really means to have a world model um
+but yeah let's Dive Right In starting
+with the sort of actual empirical
+questions about what's going on here
+okay so just to sort of very briefly set
+the stage and yeah I imagine this is
+review for people in the room at this
+point right by language model we're
+talking about sort of Transformer Auto
+regressive next token prediction models
+uh so we have a sequence of words as
+input uh to every sort of uh word in
+this sequence we're going to assign some
+sort of uh high-dimensional Vector
+representation uh using something that
+uh you know looks like an attention
+mechanism and some feed forward layers
+we're going to stack a bunch of these
+things on top of each other uh such that
+if I look at the sort of final
+representation of the final word in any
+piece of text I can use that to make a
+prediction say place a distribution over
+all the words that might come next okay
+so what would it mean for a model and
+especially for a model that looks like
+this uh to reason about a situation
+that's being described in text um and
+here's one cartoon which is certainly
+not the only way to implement this uh
+but that comes from the sort of dynamic
+semantics literature in linguistics um
+when we say Janet and Petty went to the
+store presence for Jack we're going to
+build some sort of explicit symbolic
+representation of the state of the world
+uh that includes both all of the
+entities that we know about in this sort
+of world described in the story there's
+a store there's a person named Janet
+there's a person named Jack uh there's a
+top uh we know some information about
+the relationships between these things
+right we know that Janet uh is going to
+or is maybe already at after this
+sentence the store uh we know that the
+top is located in the store that she's
+going to buy um and as I'm drawing these
+sort of GRA shaped State representations
+um it's important to pay attention both
+to sort of what's represented here which
+corresponds to what we know based on
+what's been said so far um and what is
+not represented here right what we don't
+know about this situation so it is
+possible in this sort of current state
+of the world right that Jack already or
+that the top that's in the store is
+purple that Jack is already in the store
+and has already bought that same top uh
+and so on and so forth so various pieces
+of information uh that are compatible
+with this world but that haven't yet
+been described um so we're going to call
+these things information States right
+they represent everything that we know
+about the current state of the world in
+these very simple sort of graph
+structured relational terms we have some
+objects the objects have some properties
+the objects have some relations between
+them um and if I now add a sentence to
+this document right if I say Jack
+already has a colorful top I'm going to
+think of what that sentence does is
+specify some sort of update to this
+underlying state representation right so
+I know now after the second sentence
+that there's some other top in the world
+that that top belongs to Jack that the
+top is colorful and so on and so forth
+and similarly if the sentence were or if
+we instead added a sentence that said
+she gave it to him um in addition to
+various other consequences that were not
+showing one of the side effects of this
+sentence is that Jack is now going to
+possess that top that Janet possessed
+earlier on right and this is something
+that's never explicitly stated in the
+text but that sort of follows logically
+from it if a gives B to C then as a
+consequence of that a no longer has B
+and C does okay okay good so this
+cartoon comes from uh the S Dynamic
+semantics and the Linguistics and
+philosophy of language literature uh for
+those of you who've seen you know I
+think especially people in sort of NLP
+computational Linguistics when they
+encounter formal semantics it's more
+often uh this sort of like monu truth
+conditional meaning of a sentence as a
+function from possible worlds to truth
+values here we're thinking of basically
+what a sentence does uh is specifies
+some sort of update to one of these
+World models basically specifies a
+transition uh in in this underlying
+State Dynamics okay um so what I want to
+claim is that this is at least a useful
+framework for starting to think about
+what world models might look like inside
+neural sequence models um and you know
+one reason to think that this might be
+uh part of what's getting encoded or
+something that would be useful to encode
+in the process of language generation is
+if I had access to a state
+representation that looks like this it
+would help me do all kinds of Downstream
+language generation tasks right it's
+easy for me to figure out what I'm
+allowed to say next uh what I'm allowed
+to refer to by sort of Consulting that
+the what entities are already available
+here it's easy to figure out what's
+allowed to happen next by sort of
+simulating this model forward in time
+and looking at the kinds of states that
+could result and then describing those
+States in text uh it's easy for me to do
+other tasks that we care about like uh
+you know sort of entailment judgment and
+NLP by just comparing these graphs to
+each other and so on um now obviously
+the models that we have don't actually
+build nice discret algebraic graph
+structured meaning representations like
+like this uh there's no supervision for
+them and more fundamentally there's kind
+of no where to put uh a representation
+that looks like this inside a big neural
+model um but to the extent that we think
+these things are useful um it's
+reasonable to ask whether these you know
+sort of graph structured meaning
+representations or something like them
+are are maybe represented implicitly
+maybe even in a half-baked way inside
+this uh bag of vector representations um
+another perspective that I think is
+useful for understanding what kinds of
+representations language models might be
+constructing uh is just to think about
+uh language generation generally as a
+latent variable problem right how does a
+document or at least a story get written
+well the world is in some underlying
+State uh it passes through some sequence
+of other state transitions that we want
+to describe uh There are rules that are
+not rules of language that are rules of
+sort of physics and how social
+interactions work and so on and so forth
+that specify what kinds of transitions
+are allowed up top uh and if we know
+what those rules are then we can place a
+distribution over over plausible uh
+State Transitions and so when we're
+generating text figuring out what
+sentences might come next given some
+prefix that in which we're trying to
+predict um involves inferring what
+states might have been compatible with
+the sort of initial sentences that we
+saw what kinds of States might result uh
+and what things I might be allowed to
+say about those um and so you know
+fundamentally
+uh a good way to do language generation
+and maybe the only way to really really
+really reliably do language generation
+is to some sort of inference that looks
+like this that involves figuring out
+what was the underlying state of the
+World describ by text uh simulating that
+forward and then figuring out how to
+talk about it okay so if language models
+are solving this next sentence
+prediction Problem by doing this kind of
+inference uh then we would expect them
+to produce representations that encode
+this uh distribution over possible
+states of the world uh and so what we're
+going to try to do now finally
+concretely uh is to look for some sort
+of representation of that
+distribution so the setup for this is
+going to be as follows uh we're going to
+look at a language model we're going to
+be sort of picturing these things
+generically as encoder decoder models
+but uh you know if you want to think
+about a modern uh you know Auto
+regressive thing just think of this as
+like everything up until the point where
+we're predicting a single next token or
+whatever Transformer computation is
+happening Downstream of the
+representations that we're going to look
+at um we're going to gather up a bunch
+of documents where we have access to
+some ground truth representation of the
+underlying state of the world uh either
+because the sort of text was machine
+generated from these states or because
+some human went in and hand annotated uh
+documents with a bunch of these states
+or hand annotated uh you know s we
+showed them a sequence of State
+representations and then they label
+those with text but you know some paired
+data set where we have language that
+looks like this on one hand and state
+representations that look like this on
+the other hand um and what we're going
+to try to do is figure out whether we
+can decode these sorts of things from
+the internal representations that are bu
+being built by our language model so
+we're going to train uh what's now
+called a probing model uh which is
+basically a teeny little you know
+basically we're going to take our big
+language model we're going to freeze its
+parameters and we're going to train some
+teeny little decoder that's going to
+look at the internal states of the big
+language model uh and try to read this
+structured representation off um you
+know these are Big complicated objects
+so we need to be a little bit clever
+about how we do this and in particular
+we're just going to sort of reconstruct
+or we're going to read the the state of
+the world off um uh one Edge one
+proposition at a time right so if I want
+to figure out whether in the state of
+the world that I'm looking at here uh
+there is a locked door I'm going to
+train some little model that's going to
+take as one input a representation of
+just this Edge the door is locked as
+another input uh a rep you know some
+hidden state from inside my neural model
+and I'm just going to try to predict
+whether this thing ought to be uh
+present in my State Rep presentation or
+not um concretely the way we're going to
+do this is for you know we're going to
+represent these edges also as like
+little natural language descriptions
+we're going to have some other language
+model that just encodes those and gives
+us Vector representations of these
+propositions um for looking inside the
+language model itself uh we're going to
+write remembering that what these models
+do is actually assign a separate
+representation uh to every word in the
+document uh we're just going to sort of
+pick one of these representations to
+probe and we'll come back to the choice
+of the representation to look for later
+on uh and then the actual machine
+learning part of this model that uh that
+makes these predictions here is going to
+be the simplest thing possible it's just
+going to be a little uh Matrix uh right
+a little linear model that takes in on
+one hand this Vector on the other hand
+this vector and just assign some sort of
+scale or score uh to whether uh this
+Edge is likely to be present uh in the
+state of the world or not um and it's
+really important here right that this is
+a very very very simple model uh if this
+was a whole sort of arbitrary deep
+neural network or whatever uh we
+wouldn't necessarily be able to convince
+ourselves that what we were seeing was
+evidence that the language model was
+building these representations instead
+we'd be seeing evidence maybe uh that
+this model uh you know is itself
+learning to parse these documents and
+generate these kinds of structured State
+representations for us but uh because
+we're just going to learn a linear map
+here what this means is that if we can
+do this task Rel ibly right if we can
+read off these State representations
+from the LMS uh those things are already
+encoded up to a linear transformation uh
+in the representations uh produced by
+the big LM so to the extent that you
+believe that you can't sort of do all of
+this complicated semantic inference with
+a linear model uh uh then this is you
+know all this is really doing is
+translating and we'll see some evidence
+later on that uh you know a
+supplementary just the Simplicity of the
+model that that's actually the way to
+think about what's going on
+okay so just to say this one more time
+right we have our language model our
+language model produces some
+representations uh we're training a
+little linear model to try to decode
+those representations into these
+structured State representations uh one
+Edge or one node label at a time yeah
+the only thing being trained is the are
+the ways of the Plus for that's right
+the only thing being trained is this one
+Matrix W and in particular we're going
+to share this across uh every
+representation or every
+uh like Notre Edge label over here so on
+the left is some kind of large language
+model yeah so on the left is the
+language model about which we want to
+claim it has a world model or it doesn't
+have a world model so think of that you
+know in the experiments the first
+experiments I'm going to show because
+this is like oldish work these are
+smallish models this is like Bart T5
+kinds of things uh later in the talk
+we'll see uh some larger Scale Models
+but yeah this is a big pre-trained
+language model uh that we downloaded
+from somewhere and this is something
+that we're training and and the one on
+the top is just smaller uh this is so
+for the experiments that I'm going to
+show now uh these are actually the same
+model uh you could also learn all of
+these encoding separately and uh again
+we'll see some variations on that later
+on yeah yeah what is the what kind of
+Texs like what is the training data
+we're going to use uh so the training
+data like we said before looks like this
+right so we have a bunch of documents we
+have a bunch of some varant of this T
+sorry some
+like some variety of this kind of text
+like lock door text uh yeah yeah yeah
+but we're going to train we're going to
+evaluate on totally held out situations
+okay yeah and I'll I'll say a little bit
+more about the training data in a minute
+yeah um when you say semantics is there
+a way to like make the difference
+between lexical semantics and like the
+composed semantics of the phrase because
+I guess here we both have like we have
+the wood store and locked yeah and so
+similarity there is like are you making
+a distinction do
+our well the so what we're going to need
+to you know so what does it take to
+actually do this task say 100% correctly
+it certainly requires not just knowing
+that door and locked are kind of similar
+to each other right but that uh
+after
+uh I guess going back to the original
+example here right after you unlock the
+door uh then the representation of the
+door should change to reflect the state
+change now here you know uh this is sort
+of a simple example maybe it will be
+easiest to think about this actually in
+the cont or by looking at uh what some
+of the real environments look like uh so
+the experiments that I'm about to show
+are on two different data sets uh one of
+them is this Alchemy data set that
+basically describes uh sequences of
+operations on beakers full of colored
+liquid so you have some initial state
+representation or some initial textual
+description of a state that says you
+know there's a beaker with two units of
+green liquid a beaker with one unit of
+red liquid and so on and so forth all
+model is going to see is a sequence of
+things like pour the green Beaker into
+Beaker 2 then into the first and then
+mix them and if you really sort of
+modeling what's going on here if you're
+representing these situations then you
+need to know uh right that as a
+consequence of pouring the last Beaker
+into Beaker 2 uh uh the last green
+Beaker into Beaker 2 right the world is
+going to look like this uh after mixing
+oh no and then you pour it into the
+first uh it's going to look like this
+after mixing the color is going to
+change um and importantly you you sort
+of expect to need to learn these things
+just to be a good language model for
+sequences of instructions like this
+because the instructions are never going
+to ask you to do impossible things or
+nonsensical things like mixing a beaker
+in which everything is already the same
+color or emptying out an empty container
+or pouring you know this container into
+a container that's already too full and
+that would cause it to overflow um but
+these kinds of inferences require
+certainly more than just lexical
+semantics because they do need you to
+keep track of the underlying state of
+the world so this is one of the
+environments we're look at and then the
+other one that looks more like the
+examples we were seeing before are these
+sorts of text Adventure Games where
+you're sort of walking around an
+environment you're picking up objects
+here opening or closing doors and so
+on okay so what happens when we try to
+train this proing model um the first
+thing to not so what we're looking at
+here is for all of the objects that are
+mentioned uh in uh one of these stories
+either one of these sequences of Beaker
+instructions or one of these
+playthroughs of one of these text
+Adventure Games
+uh in what fra you know if I look at on
+a sort of state-by-state basis and an
+object BYOB basis what fraction for what
+fraction of objects can I perfectly
+recover the true state of the object so
+all of its properties and all of its
+relations with other things um and the
+main thing to notice here is that uh you
+can actually do this quite well even in
+relatively small you know sort of Circa
+2019 models in this Alchemy environment
+you can get the underlying states of
+these beers with about 75 76% accuracy
+in these text and Bor envir environments
+you can do much better 95 97% accuracy
+now one important thing to say here is
+that there are a bunch of very very
+simple baselines that also get
+reasonably high scores in these Alchemy
+environments if you assume that nothing
+ever changes its state that already gets
+you 63% accuracy uh and if you just
+guess that things are in their most
+frequent state in the entire training
+data set uh Without Really building any
+kind of language model representation at
+all that gets you at least non-trivial
+accuracy um you can evaluate rather than
+did I get every you know what fraction
+of object did I get exactly right uh
+what fraction of like entire states of
+the world did I get exactly right uh the
+numbers are all much lower maybe
+unsurprisingly but also the gaps between
+uh these baselines and so similar things
+over in text world uh and the main
+takeaway here is uh is I think just that
+uh you can do this uh surprisingly well
+uh and you can do this yeah you can do
+this surprisingly well even with
+relatively simple models um question
+yeah so how do you know if it's like
+detecting that particular State verus
+something that cooccurs with that
+State uh what do you mean by co-occurs
+with someone walking through the door
+could also cooccur and have a high
+similarity to
+Door
+um so maybe I mean another thing that
+you can do to evaluate this is to uh see
+whether you can actually control model
+generation and we'll see an example of
+that in a minute um it is true that like
+you know fundamentally if like event X
+and Event Y always co-occur then maybe I
+don't even expect in the underlying
+state representation those things to be
+distinguished from each other right and
+there's no reason for the model to learn
+separate representations of you know I
+walk through the door and the door is
+open I W you know I walk through the
+door implies that the door is open so
+you probably after seeing that sentence
+do want your state representation to
+encode this thing um a sort of deeper
+question here is whether uh you what
+we're reading here are representations
+of you know basically I'm piling up on
+top of every object all of the things
+that have been said about the object and
+the probe is just saying you know can I
+sort of uh see whether a particular
+thing has been said about this object or
+not um and I think that is actually
+probably true or at least what these
+World models
+like as we're seeing in these
+experiments look like under the hood is
+basically keeping around like what's the
+most recent uh text and all of the
+implications of the text that was
+predicated of this particular object uh
+but they are structured and localized
+and causally implicated in uh Model
+Behavior in a way that we're going to
+see
+in a minute yeah and the fact that you
+get surprisingly good results with that
+no language
+model linear predictor do mean that the
+linear
+predictor maybe surprisingly well build
+model well I think the way to so first
+of all uh
+these neither of these things are
+actually training the linear predictor
+um these are doing other kinds of
+trivial things uh another thing that you
+can do that maybe gets at that question
+more is to say what happens if I uh
+rather than taking a pre-trained model
+off the shelf take a randomly
+initialized model and try to um train
+the same probe yeah and again you do uh
+surprisingly well uh non-trivially but
+maybe just comparing these things side
+by side like not actually better uh at
+least in this Alchemy environment which
+is the a slightly more complex one than
+not having access to a language model at
+all
+need
+simp oh like an even simpler class of
+probes to yeah well so will uh I
+mean what that would actually look like
+you know I guess you could force it to
+go through some like super low
+dimensional bottleneck or um do some
+fancy mdl thing I mean there yeah there
+are lots of other tweaks you could make
+to the probe architecture and to how
+you're actually uh estimating it but um
+for now we're we're just looking at
+linear probes and sort of comparing them
+to these
+baselines okay um so one of the things
+that we sort of glossed over before was
+this question of which representation we
+should actually pull out of this model
+uh in order to figure out uh what the
+current state of some entity is um and
+so what we're going to look at now is
+actually what uh the implications of
+that particular choice are uh and we the
+way we're going to do this is we're
+going to take our probe uh and say we're
+trying to probe the state of Beaker
+number three right here we're going to
+point it at just different sentences in
+the initial State description uh setting
+up the sort of initial state of the
+world and these uh these Beaker tasks uh
+so maybe we pointed at the word has in
+the sentence describing the third Beaker
+and we get 64% accuracy uh we point it
+at all of the other sentences both in or
+all of the other words both in the
+sentence describing uh the third Beaker
+and maybe some sentences describing
+other beakers instead uh and we repeat
+this EXP experiment and what we see is
+that there are actually pretty
+significant differences in the accuracy
+that you get in these places so you know
+to the extent that the model is
+representing information about the state
+of this blue Beaker uh it seems to be
+localizing it to this initial
+description of its state even though
+what we're trying to PR probe out here
+right what we need to predict uh at the
+end of this document is not that the
+beaker contains four blue things but
+instead that it winds up
+empty um and so you know coming back to
+the what does this tell us about uh how
+these representations are organized uh
+says something about them being
+localized to mentions of the objects
+that are being discussed here uh you can
+do this experiment also looking at sort
+of final mentions rather than initial
+mentions and the accuracies are pretty
+similar suggesting at least in these
+sort of encoder decoder models uh which
+importantly this guy gets to attend to
+uh this which is not true in modern sort
+of purely Auto regressive models uh you
+localize information uh in all across
+all of the mentions okay and so the last
+question is whether whether you know
+sort of what we found here is telling us
+anything about um Model Behavior and not
+just uh some sort of correlation that
+the probe has picked up on that's not
+really sort of causally implicated in
+the models predictions at all um I'm
+going to start by doing a very crude
+version of this experiment now and then
+I'll show you a sort of more a fancier
+version of this later on what we're
+going to do here is we're just going to
+take a pair of documents um one of which
+has as its Final Consequence that the
+first Beaker is empty and another docu
+which has as its Final Consequence that
+the first Beaker is not empty and the
+second Beaker is empty and if this
+hypothesis that we've made about how the
+language model is sort of representing
+the underlying state of the world is
+right uh then what I expect is that if I
+build a sort of Franken representation
+that takes the representation of this uh
+first Beaker from the first document and
+of the second Beaker from the second
+document and I just pce these things
+together uh in a way that doesn't
+actually correspond to any text that I
+could have fed into the model at all all
+I should nonetheless wind up with a
+representation of the world that looks
+like this that has as its Final
+Consequence that both of these things
+are empty um and in fact if you sort of
+look at the text that the language model
+generates in this state uh oh right so
+sort of concretely we expect that it
+will say things like empty the third
+Beaker because that's well formed uh we
+don't expect that it will say things
+like stir the red Beaker because the red
+Beaker is now empty um and if you do
+this you see that in general you get
+text that's consistent with this state
+much more often than the other two
+states okay so another thing that you
+can do here once you uh have this sort
+of basic machine for probing out uh what
+the model thinks is uh true about the
+world at a particular state in time uh
+you can also start to predict in a finer
+grained way uh what kind of text it's
+going to generate uh and so here we're
+going to try to use this as a tool for
+uh predicting ahead of time whether a
+language model is going to hallucinate
+or not in the sense of generating some
+text that contradicts uh the input uh
+and the way we're going to do this right
+uh if we're hypothesizing that now we
+have a piece of text that says Gordon
+focuses on cases pertaining to business
+litigation business reorganization
+bankruptcy litigation small business
+restructuring blah blah blah blah blah
+uh Gordon has the occupation of dot dot
+dot we expect right that if the sort of
+model has accumulated all of this
+information has inferred that Gordon is
+a lawyer that the representation of this
+last word Gordon over here will actually
+encode that he's a lawyer uh and not
+some other thing uh and so we're just
+going to encode a bunch of propositions
+right is an attorney is an accountant is
+a judge uh and figure out which of these
+things looks most similar uh uh or you
+know to which our probing classifier
+assigns the highest accuracy when
+applied to this word Gordon uh and if
+this is higher than all of these other
+things then we sort of predict that the
+model is going to generate uh uh correct
+text and if it picks one of the these
+other things instead then we predict
+that it's going to hallucinate in the
+sense of contradicting this input um and
+here you know for this real example
+uh this is the proposition that gets the
+highest scorer uh and in fact the model
+generates uh the word attorney in this
+context um and maybe more interestingly
+you can do this uh uh in or or rather
+this works in cases where the language
+model is going to hallucinate um this
+comes up especially in cases of bias
+like one of the sort of motivating
+examples here is this particular model
+that we're looking at which I think is
+gptj uh like thinks that a person named
+Anita is a nurse no matter what other
+context you provide uh about that
+person's biography and we can actually
+see that happening that if you just look
+at the final representation of the word
+Anita no matter how much additional
+context you pile on uh nurse is still
+the most likely prediction here um uh
+cool and you know another so here we've
+been looking at hallucination in the
+sense of contradicting information
+provided in the input you can also use
+this as a way of pro models uh
+background knowledge about the world uh
+by just taking sort of uh just the
+string surer pay just the string Carlos
+banega and looking at what kinds of
+things that the model is uh predicating
+of that um and so what's cool is that
+this tool that we originally developed
+for sort of monitoring Dynamic State and
+stories you can apply just in exactly
+the same way to also figure out things
+about how models encode their background
+knowledge about the world uh that they
+sort of learn from the training data
+rather than that they learn from the
+input uh in representations of words in
+the input um so so far I've been showing
+qualitative examples but just here's
+some you know sort of numerical things
+about how well you can do with this um
+Let me show the very last one here the
+pink pars are two different ways of
+training this uh probe that we've been
+looking at before um the uh gray bar
+here is what happens if rather than even
+trying to learn that probe at all you
+just fix it to be an identity Matrix and
+that actually works surprisingly well
+right which tells us now something about
+the actual encoding scheme being used by
+this model uh that the representation of
+uh CER Pai looks like uh maybe a sum of
+all of the other things that the model
+knows about him including uh the
+encoding of works for Google and this is
+maybe something that should not be super
+surprising if we think about how uh like
+what's known about uh word embeddings
+and analogies with word embeddings even
+in much simpler models um cool uh and
+you know sort of coming back to the uh
+like State manipulation experiments that
+we were doing before um another thing
+that you can do with this tool is
+actually use it to control generation
+right so if I know the representation or
+the sort of Direction and representation
+space uh that corresponds to being the
+CEO of Google uh I can subtract that out
+and add some other thing back in instead
+uh and cause the model to generate now
+uh texts that describe sunarp not as the
+CEO of Google but as the CEO of Apple
+instead um and a cool thing about this
+is that it works sometimes even in cases
+where uh just providing a textual prompt
+to the model doesn't work and so again
+in a sort of smallish model uh I think
+this was gptj uh if you just prompted it
+with
+um uh the sentence sunpi works for apple
+and then ask it to generate completions
+the completion that you get is syar Pai
+is the CEO of Google so it's ignored
+this initial piece of input whatever
+background knowledge it had has
+overridden the information that you've
+provided in the context the sort of same
+phenomenon that we were seeing with
+Anita the nurse before and it just
+ignores what you wrote uh and actually
+one of the sort of motivating uh
+examples for this entire paper here was
+uh Evan one of the students who was
+working on this was trying to get the
+model to write a story about a like 27y
+old firefighter named Barack Obama and
+it just absolutely absolutely refused to
+do it bigger models will do this now uh
+but importantly even in these smaller
+models right once you understand how
+their knowledge is represented and how
+that gets encoded in embeddings uh we
+can just manipulate the representation
+directly so that the probe predicts that
+CPI works for apple and doesn't predict
+that CPI works for Google and if you do
+that you actually get text that's
+consistent uh with this modified state
+of the world even in cases where probing
+doesn't work and so you can do this for
+sort of biographical things you can uh
+you know cause puff pastry to have been
+invented in Internet you can turn Dodge
+into a plane company uh and in
+particular this works sort of as well uh
+as maybe a little bit more specifically
+than what was then a state-of-the-art
+model editing approach yeah on the back
+yeah sorry maybe I imag this but like
+where or like how exactly do you inter
+on yeah I guess I went through this
+pretty quickly so because we have
+um the probe represented as a linear
+transformation that looks like this all
+you have to do is you know basically if
+you hypothesize that this blue thing
+here uh is
+um consists of like the fact encoding
+time W plus a bunch of other stuff then
+all you have to do to make the change is
+subtract out fact encoding times W and
+add in the new fact encoding times
+W yeah um I was wondering like after so
+I had two questions so one was um I
+guess you could intervene on manyu
+layers and so is the truth value sort of
+like a union bound over the probability
+over all of the layers or is it like a
+like do you find thetics for one layer
+or how does that work yeah that's a
+great question so for and this has
+changed a little bit as we've gone
+through iterations of this so for these
+experiments uh we're
+using uh I think just the last layer of
+the model and then
+for this these experiments and
+everything that comes after uh we're you
+know part of the like training procedure
+is also a search over what's the right
+layer to uh in which to either do the
+read or to do the intervention um
+interestingly in a lot of cases you want
+to do and you know there's been work
+going on in parallel uh that especially
+for kind of background knowledge about
+the world uh there are specific layers
+that are like intermediate to the models
+where that knowledge seems to get
+encoded and most of these interventions
+uh work best if you do them actually
+before the knowledge readout and if you
+actually look at what
+the um
+uh sort of size of the intervention that
+you need to to make in in this new fact
+direction to cause changes in the models
+it's quite large um and we think
+basically what's going on is you have to
+both suppress whatever uh knowledge
+retrieval mechanism the model would
+natively invoke on this entity and add
+you sort of Supply the new information
+on its own um and then I was wondering
+also like after you've changed it so
+after you prompt it with um sender Pai
+is the CEO of Apple then if you ask
+again like who is the CEO of Google does
+it say does it say I don't know or like
+great question right so because we are
+only manipulating the representation of
+this entity right here uh in particular
+all of the experiments that I'm showing
+right now were sort of manipulating uh
+representations and not weights inside
+the model so a lot of the other work
+that's gone on on editing sort of pushes
+this all the way back into uh weights uh
+and there people have found well and so
+here in particular right because we're
+only manipulating this and we haven't
+changed the representation of Google at
+all uh certainly it's going to continue
+if you say who's the CEO of Google and
+these words don't show up in the input
+it's going to say he's the CEO of Google
+still and you would need to do a
+corresponding change to
+uh to the representation of Google if
+you wanted that to sort of be globally
+coherent um an interesting thing is that
+basically all of the weight editing
+methods that exist right now even though
+in principle they can make Global
+changes like that in practice they don't
+seem to uh and we come back at the end
+of the talk to why I think that is and
+what we would need to do to fix it yeah
+in the first example do I understand
+correctly that the fact that it changed
+for to be a CDO is an undesirable effect
+in in theory like maybe this is a small
+detail but I think the only thing we
+would want to change is the company Oh
+you mean that it says he's the vice
+president rather than the CEO yeah like
+ideally I understand that this mind but
+ideally we would want to him to remain a
+CEO of app means that the factual well I
+yeah I mean I I think yes uh actually
+sort of formalizing why that's the right
+intuitive thing you know basically what
+is this edit operation supposed to do um
+although you change Works forever yeah
+um but you know in the basically in the
+counterfactual world what's what's the
+semantics of these edits is actually a
+very complicated question and one that
+uh we we're not treating in a very
+precise or formal way uh here and so
+yeah I think you know it maybe you would
+at least expect it Baseline that it will
+keep his like Rank and the company the
+same and just move him somewhere else uh
+and that doesn't happen here so it is it
+is a little sloppy and of course it
+doesn't always uh work so here's an
+example down at the bottom where we try
+to move Putin to Denmark and
+fail okay um you can also a sort of fun
+thing that you can do here is to um uh
+use this redefine words rather than just
+change sort of facted knowledge about
+famous things uh so here's I think
+turning uh modifying the definition of
+the word fork so that it is used for
+chopping wood uh and one of the cool
+things that you get uh and I think this
+coming back to what Brian was saying
+mostly has to do with sort of
+correlations between features that the
+model has seen in the training is that
+if you intervene in the representation
+of fork so to increase the probability
+of a fork is used or so that the state
+representation thinks a fork is used for
+chopping wood uh that increases the
+probability that it has a handle that
+it's used for cutting that it's used for
+killing that it's dangerous um
+interestingly it also increases the
+probability that it
+is uh somewhere on here oh now I can't
+find it there's I think it's like is
+made of wood or has leaves or something
+that you know basically is just picking
+up on co-occurrence with trees rather
+than actually being a killing instrument
+so definitely like nothing that I'm
+showing you here is is surgically
+precise and you do get bleed for uh into
+things that would look more like
+uh surface correlations
+instead okay um so one question that you
+might still have at this point is can we
+say any you know so we've shown that we
+can read this information off of models
+uh with linear probes we've shown that
+if you do sort of Fairly crude
+interventions into the models uh by
+editing back through these probes You
+Can Change Model Behavior in a
+controllable way um but that doesn't
+actually say whether the computation
+that the model is performing internally
+actually looks anything like the
+computation that our probe is performing
+and so sort of question that all of this
+leaves open is how are the LM themselves
+actually decoding the information uh
+that is written into these
+representations and using that to inform
+next token prediction um and you know a
+sort of reasonable Baseline hypothesis
+given yeah so just to say again right
+what we know from all of this is that in
+a sentence like Miles Davis plays the
+where the model is able to predict
+trumpet uh we know that you can read off
+uh is a trumpet player from these
+representations of uh of the name Miles
+Davis um uh and you can do that linearly
+you also know right that what the
+language model is actually doing on top
+of this is some complicated thing
+involving a bunch of attention
+mechanisms and a bunch of multi-layer
+perceptrons and so on and so forth um
+can we say anything more precise about
+the actual form uh of this computation
+or what's going on inside these models
+um and a reasonable hypothesis to have
+given how effectively all of these
+linear probes work is that the internal
+computation being performed by the
+language model itself uh is also
+basically linear that as much as you
+know the sort of language model is able
+to express more complicated interesting
+things what it is doing is also just
+linearly reading information off of
+these representations uh and feeding
+that directly into the prediction
+mechanism um and a way you can test this
+is just to say well let me try to
+approximate my entire language model to
+first order uh in context requiring
+these predictions so let me see if I can
+explain uh the language models
+predictions uh again uh as a sort of
+single
+uh approximating the language models
+predictions with a single weight Matrix
+that I'm going to derive now not by
+training a supervised probe but instead
+just taking a sort of first order
+approximation to the model itself in a
+bunch of contexts that I expect to
+involve this like retrieve the
+instrument that this person plays
+prediction um and so you know I'm just
+going to compute this Jacobian here this
+thing is just a matrix uh that is this
+first order approximation to what the
+language model is actually doing um and
+if this hypothesis is right uh then what
+I expect this Matrix to encode is
+exactly this uh plays the instrument
+relation where previously we might have
+been training some sort of supervised
+probe uh to to compute this relation um
+and so you can do this you can do this
+for a bunch of different relations um
+and here's what happens what we're
+looking at on the uh x-axis here are
+just a bunch of different relations for
+which we tried to find these linear
+representations and on the Y AIS is how
+well these things actually work uh at
+predicting the associated property for
+new entities that weren't involved in uh
+the training of of these probes or the
+the computation of of this Jacobian um
+and maybe the really I mean I think the
+the interesting and surprising thing
+here is both that this works super well
+uh a lot of the time and this doesn't
+work at all a lot of the time even in
+cases where models are actually able to
+generate the right uh prediction right
+so the way to read this is that it's
+saying um you know so actually the sort
+of highest scoring thing is what's the
+occupation that's stereotypically
+associated with a gender models are
+great at that and it's linearly encoded
+in the representation of of the
+occupation um similarly you know sort of
+lower level linguistic stuff like
+comparative forms of adjectives largest
+cities and countries all of this is
+linearly decodable from word
+representations uh and that that is
+actually what the model is doing uh to
+um uh to do next door prediction uh if
+we look over at the other end uh CEOs of
+companies uh parents of famous people
+evolved forms of Pokemon for the Pokemon
+players in the room um models know a ton
+about this stuff as well and it does not
+seem to be uh at least linearly read out
+uh that if you do this first order
+approximation that doesn't give you a
+good description of of Model Behavior
+and it doesn't actually let you do these
+predictions um and so you know I think
+this paints at least a much more
+complicated picture of uh of the story
+that I've been building up to this point
+that there's a bunch of stuff that
+models do encode in this nice clean
+linear way uh and there's a bunch of
+stuff that they just don't either
+because they don't think of like Company
+CEO is corresponding to a single
+coherent relation uh or uh because that
+readout is just not linear at
+all and building on this um you know you
+might sort of ask well how far can you
+push this notion that what we're
+actually interacting with here via these
+linear probes is the language models uh
+knowledge representation um and another
+way of getting at this is just saying
+well what happens uh if I
+compare take a big question answering
+data set and just compare classifying or
+you know putting questions in this
+question answering data set into the
+model and measuring the model's accuracy
+and training some sort of probing
+classif ire like we've been training
+before uh to just read off uh the
+answers to these question answer pairs
+from the language model itself uh
+without actually requiring the language
+model to generate any text at all um and
+if it's really the case right that all
+of the knowledge is accessible to these
+probes and linearly decodable and all of
+that then you would expect these things
+to agree basically all the time right in
+cases where the language model is
+answering the question right the probe
+should be able to see that it's
+answering the question right or that it
+sort of knows the right answer to the
+question uh and vice versa um and and in
+fact what we see uh is that this isn't
+the case uh really uh at all so these
+probes actually do better right
+suggesting that there are cases where
+models sort of encode some piece of
+information internally but don't
+generate that when an asked a question
+right so a model might uh you know know
+that sting is not a police officer but
+still if you ask a sting a police
+officer uh produce the answer yes uh and
+there are lots of you know reasons we
+can give for why this might be the case
+uh but in general these sort of probing
+methods are a little bit better at
+recovering from Models what's true about
+the world than just asking these models
+questions um on the other hand there's
+just a lot of disagreement between these
+things so like what I'm highlighting
+here on a fact verification data set uh
+are tasks where um the probe is correct
+with high accuracy and the language
+model is incorrect with very high
+accuracy and cases where the probe is
+extremely uncertain uh and the language
+model never gives the right answer with
+extremely high accuracy um and so you
+know again I think what all of this
+points to is just that uh there's quite
+a lot of heterogeneity in uh how
+prediction Works inside these models uh
+and that this nice clean sort of linear
+readout story uh is part of the story
+but definitely not a complete
+description both of sort of what
+language models uh encode in their
+representations and how uh how they
+encode it
+yeah the procedure here to get the
+actual so is was there like a particular
+temperature copy I think these are the
+um just most probable outputs from the
+model is there any kind of setting that
+we can think about where it would
+actually be
+more similar to the pro where it would
+actually encode what the probe is saying
+in some sense like what we're saying
+here is that um the most probable
+doesn't necessarily match the actual
+probe but like when you actually sample
+across the distribution you or maybe
+like considering waiting different
+values I don't know if that's yeah I
+mean you know so it's a language model
+right so every string gets some nonzero
+probability and the right answer is
+going to get assigned some probability I
+mean so I I I think I have a slide for
+this yeah one kind of goofy thing that
+you can do is just onsemble the probe
+and the model together knowing that
+they're right on different answers and
+this in some cases does actually give
+you a little bit of a boost in accuracy
+on hard question answering tasks this is
+a weird thing to do and not necessarily
+something you would want to do in the
+real world but at least suggesting that
+these things are uh really are
+complimentary I don't know if that
+actually answers your question
+okay okay so you know just to sort of
+say this again um uh there's a
+substantial amount of disagreement
+between uh factual knowledge as
+recoverable by these probes that we
+train uh and queries that you would get
+from the model uh and in particular it's
+not that one of these or the other is is
+always consistently better uh sometimes
+language models know with big scare
+quotes around it uh things even though
+they don't assign them high probability
+in the sense that you can read that
+stuff out with a probe uh and sometimes
+there's stuff that we don't know how to
+probe for the language models are NE
+nevertheless uh quite good at doing um
+cool when am I supposed to
+stop sorry noon okay cool
+um yeah questions before we go on uh
+that that's the pro uh like people
+design the probe right maybe what people
+are probing is different from what the
+model is
+yeah no I think that's right and I think
+in particular that shows up here where I
+glossed over this the design of this
+experiment is a little bit different in
+the sense that we're learning a
+different linear operator for every one
+of these relations that's described here
+and so sort of the Assumption is that
+whenever the language model wants to
+retrieve um you know the comparative
+form of an adjective it has a coherent
+notion of like you know the relation
+between uh big and bigger or good and
+better uh is the same um and it could be
+the case right that uh it represents all
+of these things linearly but we're just
+not uh grouping the relations in the
+same way that the model internally
+groups the relations so you know it
+knows that there's a Company CEO
+relation but it has one version of that
+relation for companies based in the US
+and one version of that relation for
+companies based outside the US or one
+for companies that start with the letter
+P and one for companies that don't start
+with the letter P um so yeah I suspect
+actually a lot of what's going on is
+just that the um the specific represent
+or the specific data that we're using to
+train these things makes assumptions
+about kind of the conceptual structure
+of the world that doesn't exactly align
+with what's going on inside these
+models yeah when you you're related to
+the structure that some things maybe are
+nonlinearly represented like as a graph
+relationship like
+hierarchies well yeah I mean certainly
+things are being represented nonlinearly
+in inside these models and you know
+there's lot of other sorts of algebraic
+structures that you'd like to be able to
+embed inside them that would require you
+to uh not just encode all relations
+linearly and I think what we're seeing
+is that there is is some amount of that
+if we know that lar then it means it's
+not in
+aarch and if it's in linearly
+then yeah I well I think it's more
+complicated than that right that you can
+encode lots of sort of graph relational
+structures linearly there's work on this
+going back to like the late '90s early
+2000s um and uh and lots of other sort
+of interesting algebraic structures that
+you can encode with uh with simple
+operations like this but not everything
+I don't think it's as simple as
+uh uh you know if
+the probe with one parameterization
+works then you can say something
+Universal about how the model represents
+that internally both because we're
+seeing in some cases there's disagre
+agreement between the predictions that
+you get from the probe and predictions
+that you get from the model and on the
+other hand things like this where even
+though we know um you could in principle
+represent this thing linearly it's it's
+not
+Yeah question can we somehow or are we
+dising the representation which can be
+coming from syntic relationship and Sy
+relationship because for example U like
+occupation of gender or I just look some
+the example that some of the
+relationship could be really just
+guessed from the sythentic um structure
+of the CR um or the words for example
+and then some of the relationship you
+really need to have understanding of the
+scene or the paration of those and then
+I'm trying to figure out where this goes
+in this particular
+setup yeah well so I think this sort of
+comes back to maybe also what Brian was
+saying at the beginning is like can you
+uh give a an account of what this model
+is doing uh that is purely about sort of
+uh syntax manipulation but that
+nevertheless gives you structured
+representations that have all of the
+properties that we're saying here that
+you know sort of world models ought to
+have um and I think for some of these
+tasks that's definitely true right so
+thinking about the Alchemy task uh you
+know if I just remember about every
+Beaker like was on by the uh dependent
+of the word empty um uh that's going to
+allow you to predict you know some
+reasonably large fraction of the time
+whether uh the state of the beaker is
+empty right now um and this was in fact
+uh I think I have this paper here um a
+point that was being made in this paper
+is that in this Alchemy task in
+particular you can actually get a lot
+just by sort of keeping track of like uh
+did this word participate in a
+particular relationship with this other
+word at some point uh and if you've
+written that into the word
+representation then uh you can linearly
+read off in this fashion the the state
+of the world
+um I think whether you can then give
+like a sort of
+entire sort of account of meaning and
+state tracking and all that that's just
+in terms of these sort of Word level
+operations I think is actually a big
+interesting question it seems plausible
+that you can uh and that there isn't
+really it's not possible to make a hard
+cut between this is like a really good
+model of syntactic dependencies and this
+is a a simulator of the underlying state
+of the world at the same time uh you
+can't actually get all the way up to the
+accuracy of the probe with at least any
+of the sort of purely syntactic
+heuristics that we've been trying here
+you can do quite well but not not quite
+as well as the probe uh which is I think
+a little bit of evidence that something
+like that is going on but you know again
+I
+think if there's like one thing to take
+away from all of this it's that things
+are super messy and they're still super
+messy and that uh you know we certainly
+don't have the ability to uh at any of
+these levels of representation exactly
+predict how the model is going to behave
+exactly predict what kinds of
+representations the model is going to
+build exactly predict the correspondence
+between those representations and uh
+Downstream behavior um and that probably
+what's going on is a mix of really like
+surfacy syntax things and some amount of
+deeper structured model building
+yeah um so just a sort of hypothetical
+question um so when we look at like
+human memory um and concept learning
+there's this idea that the better the
+more sort of relationships we understand
+like again instead of looking at let's
+say like tree trees and leaves are sort
+of just close together because they're
+both in nature rather looking at it as
+like leaves are on trees and flowers are
+next to leaves so sort of these uh
+relational
+representation um our ability to recall
+items in them improves when the
+representation is bigger and more robust
+so there's more items in these
+connections uh so is there any way
+to evaluate almost the size of the
+representation of the model is learning
+so going back to that previous the first
+example you gave about the top right
+would that change if there was more sort
+of information in that um in that
+representation and might that
+underly uh that sometimes we see like
+names of CEOs are maybe not uh aligning
+with the pro but other things fall yeah
+yeah no that's a great question so I
+think you know one thing to remember
+with all of these experiments is that
+we're looking at for the most part
+models that were trained first on a huge
+amount of like Rand text on the internet
+uh and then either fine-tuned or not
+fine-tuned on data relevant to the task
+of interest and so the like maybe one
+piece of evidence that I can give in
+favor of what you're saying here uh is
+um that you do much better you know in
+terms of like how well the probe
+actually performs at these tasks it's
+much better uh in models that have been
+pre-trained on like the entire
+conceptual structure of the entire
+internet and then fine-tuned on these
+individual tasks versus models that have
+just been learned in these like sort of
+relatively narrow domains from scratch
+where you probably can get away with
+just like memorizing things and not
+building this uh this larger hierarchy
+um that being said this is a super sort
+of coar messy experiment not least of
+which uh
+because
+um for I guess not for these models but
+for the bigger models that we were
+looking at in the second half of the
+talk uh we don't even know all of the
+time exactly what went into the training
+data and certainly it's like too big and
+complicated an object for us to like
+hold in our head everything about the
+world that's communicated by it um I
+think a really interesting project would
+be to do a much more systematic study of
+you know as you scale things up either
+in diversity or just size uh or
+complexity of the situations described
+or whatever how does that affect um
+these kinds of things but yeah we have
+not done that oh yeah okay so just to
+talk about some other uh cool followup
+that there's been so uh this paper
+basically arguing that our Alchemy task
+was too easy and you can get you know
+not quite all the way up to the probe
+but but most of the accuracy of the
+probe um by not even really keeping
+track of how much liquid is in each of
+these beakers and just whether they've
+been emptied or not uh and uh building a
+much much harder version of this task
+and evaluating modern models on it um
+and a cool thing is that you know this
+still works even in the the harder
+version of this task at least
+behaviorally models can do it um but it
+seems to actually be really important
+that those models are first pre-trained
+on uh code and not just language data
+and there's a big separation between
+models that have code in their training
+sets and models that don't have code in
+their training sets uh in terms of their
+ability to do these more challenging
+tasks um so uh you know this I think
+also comes back to the question about
+like how does training data influence
+all of this and in fact stuff that's
+seemingly unrelated but that's much more
+explicitly about maybe the relevant
+kinds of reasoning uh can can be useful
+as forms of supervision um people have
+found found similar kinds of linearly
+decodable State representations in
+non-linguistic tasks uh so there was
+this oel Pap paper that some of you may
+have seen that's reading off
+representations of the state of the
+board in a board game oel uh from uh its
+hidden representations uh and some very
+recent work from uh Charles jyn and
+Martin rard at MIT uh looking at models
+trained to uh evaluate programs and
+seeing whether there you can actually
+find sort of correlates of the state of
+the program execution
+uh as generating the program line by
+line and finding that you can um and
+finally you know one of the cool things
+is that we had this original uh whoops
+um yeah finding that uh information
+about entities's Dynamic state is
+localized to their mentions in documents
+uh in parallel uh there was this Rome
+paper finding that information about
+models sort of background knowledge
+about entities uh is localized to their
+mentions within documents and so this
+actually sort of motivated uh the more
+knowledge manipulation experiments in
+the second part of the talk but I think
+really just points to um
+there's uh does seem to be some
+uniformity in the way both information
+provided by training data and
+information provided uh as input uh get
+represented and get sort of integrated
+with each other um yeah so these are the
+same picture uh and finally there's a
+bunch of work on you know not just these
+kind of like Rel relational World models
+but other more interesting uh graded
+structures uh so work finding that you
+know for example like the
+three-dimensional color space is encoded
+pretty well in models that are just
+trained on text uh and even and I think
+Philip is going to talk more about this
+in the afternoon uh but that you can
+actually sort of find correspondences
+between uh representations of uh text
+and representations of uh images of the
+situations that are being described by
+uh that text in real sort of like
+continuous embeding spaces okay so um
+yeah and you know this goes for for
+other things you can find sort of maps
+of the US encoded and uh you know models
+representations of city names um we have
+uh started building a benchmark at MIT
+that's like really trying to make it
+possible to evaluate in a much much
+finer grained way uh what these State
+representations look like in situations
+that actually require sort of like
+physical reasoning spatial reasoning
+reasoning about the you know sort of
+like Dynamic properties of objects and
+materials and things like that um by you
+know just saying you know having
+sentences like the piano is in front of
+Ali Ali turns left uh is it more likely
+that the piano is now right of Ali or
+left of Ali in a way that really
+requires you to now simulate this like
+spatial situation and not just pile up
+uh syntactic relations between words as
+was being asked before um an interesting
+thing here is that uh and we have this
+in a bunch of different domains uh in
+sort of social domains it's pretty easy
+these spatial relation relation problems
+are actually quite hard uh these are all
+open models but the Stanford like big
+benchmarking people uh just ran you know
+all of of the llms uh on this data set I
+think that's going to be published
+soonish uh and this spatial relations
+domain is still really hard so you know
+again coming back to the picture is not
+as clean as we've made it out to be
+before even the best models that we have
+today uh this seems to be a modeling
+problem that that they struggle with and
+for which I don't think we expect there
+to be nice clean internal
+representations okay so to sort of sum
+up uh some evidence that language models
+for some tasks some of the time produce
+rudimentary representations of
+situations in World States uh we can
+read these things off uh you know in
+many cases linearly either by taking
+linear approximations to Model Behavior
+or by training supervised linear models
+uh with some hand annotated data and you
+know importantly these are not just
+correlational you can actually use them
+to intervene uh in representations in
+order to exert predictable control on
+generation sometimes even in cases where
+you can't get the same degree of control
+uh with textual input to these models um
+to sort of very briefly wrap up uh I
+want to come back to a question that was
+asked at the very beginning of the talk
+which is what do we even mean by World
+model uh and why is you know made this
+the right or is this the right language
+to talk about the kinds of
+representations uh that we've been
+pulling out uh right now um and in
+particular this is a paper from uh our
+colleagues in Max Tech Mark laabs at MIT
+that was saying you know you can find
+sort of time lines showing how
+historical events are oriented with
+respect to each other you can find
+things that look kind of like Maps uh
+you know showing how objects located in
+space are oriented with each uh with
+regard to each other uh this shows up
+even in much much much simpler models uh
+you know word DEC even sort of preural
+like LSA type things you can uh decode
+things that look like Maps uh from them
+uh and there you know this sparked a
+bunch of debate online about whether map
+is really a model at all and uh you know
+whether this is something that we
+actually want to think about as uh just
+a reflection that uh co-occurrent
+statistics in words
+um have some kind of interesting
+structure or whether we want to think
+about this as evidence that uh that
+models are actually build or language
+models are actually building World
+models um and you know so with regard to
+like what's the right kind of thing to
+call a model um I think it's useful to
+draw analogies to other uh sort of model
+building activities that uh you know we
+participate in in human societies and
+the kinds of things that we're willing
+to call models um so here's an example
+of uh uh of another map right of the
+solar system in this case uh it doesn't
+show us the entire state of the solar
+system uh it shows us the relative sizes
+of the planets up top uh in a way that
+you know doesn't correspond to their
+spatial locations at all it shows us the
+locations of the planets but not their
+sizes uh down at the bottom here but
+with some big bars because they there's
+range and you know these things are not
+actually ever or only very very very
+right lined up uh in long lines like
+this um and I think we want to think of
+maps as being you know and so what good
+is uh is a
+map you know in society right why do we
+create these things um and the reason is
+that if I have this thing then there's
+actually a very large set of questions
+that I can ask about the solar system uh
+that I don't have to pre-compute or
+write down in some sort of lookup table
+but that I can get out of this map with
+very little additional computation on my
+part as a user right if I want to know
+how many times could the Earth fit
+inside Jupiter's red spot I can answer
+this question with this map if I want to
+know you know how much farther from the
+Sun is Saturn than Mercury I can answer
+that with this map um there are many
+things that I can't answer right uh both
+stuff requiring modeling the dynamic
+state of the situation where are these
+things now where are they going to be 3
+weeks from now um what would happen you
+know sort of to the entire state of the
+Sol system if I were to pick up Jupiter
+and Mars and swap them today um but at
+the same time there's a lot here that
+sort of compressed uh representation
+about the state of the system a low
+dimensional representation of the state
+of the system that allows us to ask a
+bunch of important questions about it um
+incidentally I went for a run this
+morning and there is also a map of the
+solar system uh right here in Woods Hole
+on the little like rail trail that uh
+goes up toward Falmouth where they have
+these uh signs and the signs have
+planets to scale and at appropriate
+distances and so on um so this is maybe
+the simplest kind of model uh that we
+build uh that lets us answer just these
+sort of questions that you that
+basically have to do with static
+snapshots of systems uh and think of
+this as really analogous to uh
+everything that we were showing about
+model sort of linearly representing back
+background factual knowledge about the
+state of the world um here's another
+model of the solar system uh if you
+haven't seen one of these before it's
+called an a it's a little mechanical
+device there's a crank on it that I
+think is not actually pictured uh here
+that you can turn to sort of simulate
+the uh solar system forward in time in a
+way that will correctly preserve the
+relative locations of uh you know at
+least like the Earth the moon the sun
+and the inner planets here um uh and
+this model right which maybe is
+something that we're a little more uh
+willing in general to to call a model
+lets us answer a richer set of questions
+than the map right now we can answer for
+example counteract or sorry not
+counterfactual questions but questions
+about the dynamics of the system like
+you know when will the planets all next
+be in a straight line with each other or
+given that uh you know there's an
+eclipse today how far in the future is
+the next eclipse going to occur and
+things like that and so by adding a
+little bit of expressive power to the
+system we've given ourselves the ability
+to answer a richer set of questions uh
+but at the cost of making setting up the
+system uh more complicated right we have
+to now do a little bit of work on the
+outside turning the crank to get it into
+the right initial State um and just like
+the map there's a lot of questions about
+the state of the system uh that we can't
+or questions you know that we might like
+to ask about the system that we can't
+ask uh using this because it hardcodes a
+bunch of you know sort of contingent
+facts uh like the shape and size of the
+Earth's orbit right so if we imagine a
+sort of counterfactual world uh in which
+here I guess Earth and Mars were to swap
+places or the Earth and the moon were to
+swap places or um uh I don't know Mars
+had never existed at all something like
+that um we can't actually answer those
+questions with this system without sort
+of breaking it to Pieces recomputing
+what all of the planets orbits would
+have been uh and putting it back
+together to reflect those new orbits uh
+and so we can ask you know sort of
+conditional questions Dynamic questions
+but not arbitrary counterfactuals and if
+we want to go all the way to arbitrary
+counterfactuals then we need to do sort
+of arbitrary andbody simulation of the
+system uh using you know sort of all of
+the fancy techniques from Modern physics
+uh and again comes at uh now a
+significant cost both computationally uh
+in terms of how much you know it takes
+to run the system I can build the map in
+the Stone Age I can build the aary in
+like Renaissance Goldsmith's shop and
+this you can't really do until you've
+already invented semiconductors and all
+that um and maybe more importantly right
+this requires a lot more work to set up
+and to specify the initial conditions
+and to you know gives you a much more
+complicated language
+for uh that you need to use in order to
+ask whatever question question it is
+that you're trying to ask um and so I
+think when we talk about world models
+inside of language models or World
+models that are you know human mental
+models or or anything like this um it's
+really useful to think of the like
+property of being a model as not just a
+binary thing but something maybe a bit
+more graded uh where these you know
+models generally live on a spectrum uh
+of uh how complicated the questions they
+allow us to answer are uh what kinds of
+questions about the system being modeled
+we can or can't answer within a given
+model um and conversely uh for the
+questions that we can't answer how much
+work we have to do outside the system to
+get the system to actually uh produce
+the answers to those questions and so
+coming all the way back in the talk
+right to the question of why is it that
+um you know when we reach into the model
+and cause cnar Pai to become the CEO of
+Apple rather than Google why is it not
+the case that you know the
+representation of Google is being
+changed so that he's the CEO of Apple
+well I think that's because we're trying
+to do something that's you know morally
+the equivalent of like ripping out a
+piece of this map pasting it down
+somewhere else and expecting the rest of
+the system uh to be internally
+consistent in a way that it shouldn't
+certainly wouldn't actually be in the
+world uh and that when we have these
+more complicated questions like really
+counterfactually what would all of the
+things you know be that would be true in
+a world where sundai was the CEO of
+Apple uh you have to do a lot more work
+than you can do with a single linear
+transformation uh and we should
+therefore expect that we'll need those
+kinds of of editing tools to to be much
+more sophisticated than uh the ones that
+we have right now so you know to the
+extent that we want to place LMS uh in
+this sort of hierarchy of comp you know
+like model expressiveness or model
+complexity I think we should think of it
+as being something like this that
+there's somewhere between maps and ories
+simple information lookup are very very
+very simple forms of simulation uh
+during ordinary text generation uh and
+maybe starting to move up towards these
+more complicated questions only when you
+give them uh extra sort of computational
+power either via tools or via work on
+the scratch Pad like iron was talking
+about yesterday to sort of think out
+loud uh and do intermediate work um but
+I think this also gives us a kind of
+road map for what we uh want to do with
+these models in the future you know what
+kinds of research might make them better
+um and that's basically trying to bring
+all of these things into alignment with
+each other right we would like for it to
+be the case that even when they're in
+map mode the map doesn't contain any
+internal contradictions right we can
+imagine like a version of this map of
+the solar system where uh you know the
+bar describing
+uh or maybe the size of mercury was you
+know too large and it implied that it
+was going to run into Venus sometimes in
+a way that doesn't actually happen in
+the world um and these are the kinds of
+things that we expect to be able to read
+off uh statically and maybe even enforce
+statically from the outside uh that you
+know whatever representation we're
+working with it at least exhibits
+internal consistency or as much internal
+consistency as as we know how to compute
+um uh similarly you know and I think
+this shows up in both like the answer
+should be correct uh if the model
+believes some proposition P it should
+also believe everything that P entails
+uh and coming back to the linear
+decoding experiments that we were
+looking at before we would like these
+things to all be represented in the same
+way as much as possible even though they
+aren't right now uh for interpretability
+purposes and probably also because it
+will make models generalize better and
+have fewer weird edge cases and and
+sharp edges and things like that um and
+so I think there's a huge amount of
+interesting research being done uh
+trying to figure out how to enforce all
+of these properties at training time uh
+in a way that we're clearly not getting
+from the learning algorithms and and the
+model architectures that we have right
+now um yeah and with that I will wrap up
+uh as always all the credit here to the
+students who actually did this work so
+uh Belinda and Max who did the original
+probing stuff that I was talking about
+Belinda and Evan who did the sort of
+representation editing stuff later on
+Kevin and Steven who did the work on um
+sort of when truthfulness and uh probes
+and inqueries to the models disagree and
+then Evan arnab tall and Kevin looking
+at um the linearity of decoding as well
+as a bunch of Faculty Martin wattenberg
+yatan bellinkoff David ba Dylan
+headfield manell at Harvard techon uh
+Northeastern and MIT uh for making all
+of this work possible
