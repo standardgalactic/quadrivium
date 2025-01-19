@@ -5,7 +5,7 @@ set -Eeuo pipefail
 # Configuration Variables  #
 ############################
 
-CHUNK_LINES=100
+CHUNK_LINES=200  # Adjusted to 200 lines per chunk as requested
 MODEL_COMMAND=("ollama" "run" "vanilj/phi-4")  # Example summarization command
 PROGRESS_FILE="progress.log"
 SUMMARY_FILE="detailed-summary.txt"
@@ -57,7 +57,14 @@ process_files_in_directory() {
             # Split file into chunks
             split -l "$CHUNK_LINES" "$file" "${chunk_prefix}"
             log "Split $file into chunks of $CHUNK_LINES lines each."
-            
+
+            # File header in the summary file
+            {
+                echo "---------------"
+                echo "Summaries for file: $file_name"
+                echo "---------------"
+            } >> "$main_dir/$SUMMARY_FILE"
+
             # Process each chunk
             local chunk_files=("${temp_dir}/chunk"*)
             for chunk_file in "${chunk_files[@]}"; do
@@ -70,7 +77,7 @@ process_files_in_directory() {
                         echo "Summarize the following text:"
                         cat "$chunk_file"
                         echo "---------------"
-                    } | "${MODEL_COMMAND[@]}" >> "$main_dir/$SUMMARY_FILE"
+                    } | "${MODEL_COMMAND[@]}" | tee -a "$main_dir/$SUMMARY_FILE"
                 fi
             done
             
