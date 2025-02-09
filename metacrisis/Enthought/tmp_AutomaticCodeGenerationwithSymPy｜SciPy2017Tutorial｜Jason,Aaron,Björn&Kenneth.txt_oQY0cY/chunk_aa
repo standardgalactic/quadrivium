@@ -1,0 +1,200 @@
+Okay, so who are we? My name is Aaron Muir. I'm a researcher at the University of California
+of South Carolina, and I'm also a lead developer of SimPy. Jason Moore in the red shirt back
+there is a faculty, mechanical, and aerospace engineer at University of California Davis,
+and he's also a SimPy developer, and also a developer of a library called PiDyn. Bjorn
+Tolgren here in the green shirt is a Ph.D. student at KTH Royal Institute of Technology
+in Sweden, and also a SimPy contributor. And finally Kenny Lyons, I guess he's over back
+here in the red, Ph.D. student at University of California Davis. So this tutorial we're
+going to be learning about code generation with SimPy. Some basic SimPy knowledge is
+going to be assumed, although we are going to do a refresher. SimPy, if you don't know,
+it's a library for symbolic mathematics, so we just did a big release a couple days ago.
+If you did the installation correctly and your test script passes, that means you have
+it. So just a quick, what do we mean by code generation for this tutorial, or just code
+generation? And for our purposes, this means taking a SimPy expression and converting it
+to some other language, into code for some other language. So for example, here's a
+SimPy expression representing some mathematical formula, absolute value, sine of pi x, and
+this is the equivalent C code. And so code generation, basically you start with the left
+side, and you want to get the right hand, the right side here. You want to do that automatically.
+So SimPy supports quite a few languages. If you're targeting or want to target any of
+these languages, we have support, C, C++, Fortran, MATLAB Octave, Python, Via NumPy,
+SciPy, Julia, Mathematica, JavaScript, LVM, Rustiano, TensorFlow, and it's very easy
+to write extensions to these, or basically to extend to whatever language you want. So
+this is sort of how I think of code generation, the workflow. Basically you've got three
+steps, and the first step is you're using SimPy to sort of help you model your problem
+mathematically using symbolic capabilities. So you're basically using it to derive formulas
+that represent whatever it is you're trying to do. And then the code generation step is
+you want to take those formulas and convert them to something that can be numerically
+evaluated. And then at that point you use the thing that you code generation to actually
+solve your problem. And so code generation is this middle, this translation step from
+sort of the modeling stage to the actual solving of the problem. And at the other
+layer here, there's several different abstraction levels for SimPy code generation, depending
+on how much you want SimPy to do for you and how much you want to do yourself. And it's
+actually upside down. So at the bottom here, basically SimPy is going to create a Python
+callable. So if everything's in Python, you just take your SimPy expression, pass it to
+one of these functions. I think auto-rep should be in here too, which is what we're going
+to be showing you today. And it's going to do some magic, and then it's going to spit
+out a function, and that function is going to be a fast numeric version of your expression.
+On top of abstraction layer below that is you actually want to generate some code, a
+larger block of code, but maybe generate the whole function in some language, say in C.
+And this is going to be like the code gen module. And then the most basic level of abstraction
+is you're just generating the expression. And then this expression is going to go somewhere
+else in some other code that you've already written. So here are a few reasons why code
+generation is something that you might want to consider doing. First off, SimPy is a symbolic
+library. It's a very powerful library. It can deal with expressions in very high level
+way. It can do things symbolically like take derivatives, or it can solve equations, or
+take integrals, or do all sorts of things. By doing things automatically, you can avoid
+mistakes. So doing things naively, if you're just writing out your C code by hand, you're
+going to end up making a typo, a sign error somewhere. By doing things in this higher
+level way, you can avoid that because SimPy is basically deriving the formulas for you.
+You can deal with insanely large expressions. I don't know if we're going to show that
+today, but you can have expressions that are literally millions of lines of code would
+be literally impossible to do by hand because it's very large, but computers are very good
+with doing bookkeeping. Then the final is, which I also don't know if we're going to
+be talking about today, but just something to sort of think about. SimPy is a very smart
+library. It can sort of simplify expressions in ways that standard C compilers or Fortran
+compilers don't know how to do. It can do things like trigonometric simplification. It
+knows how to factor polynomials, things like this. Here's a quick outline for today. We're
+going to try to get through as much as we can. We're going to start with just a refresher
+for SimPy. We're going to go over some code printers. We're going to look at the easy
+way to do code generation, which is sort of this higher level abstraction I was talking
+about. Then we're going to go sort of lower abstractions and the harder way basically.
+Then we're going to look at doing some sithinization. We have bonus material this time. Don't be afraid
+to slow us down. Raise your hand. Jason, do you want to go over the sticky notes maybe
+at this point? We just passed each of you a blue and a red sticky note. We're going
+to use those during the exercises. You may be familiar with this from Salford Carpentry
+or other workshops. When we ask you to do an exercise, when you're done, you'll place
+a blue sticky note on your laptop so we know how many people are done. Then if you need
+help at any time, just put a red sticky note. One of the helpers, everybody raised their
+hand that's going to help today. The four presenters, we have Mark in the yellow shirt
+and Alan, I think. Are you going to help too? Alan in the corner? All of us will be here
+to give everybody a hand. Sartaj too. He's a SimPy dev. We'll put those red sticky notes
+up and we'll come around and help you out. All right. Let's jump in and find, is this
+the live version? Let's start with this intro to SimPy expressions notebook here. This is
+going to be a refresher. If you need me to slow down, just tell me to slow down. Quick
+introduction to SimPy. First step, if you're using SimPy in the notebook, you generally
+want to use this in the printing function. That's going to make it so that things print
+as LaTeX instead of as strings. It's going to be much easier to see what's going on with
+SimPy expressions. The most basic SimPy object are symbols. You create them with the symbols
+function and you assign them to Python variables. Here I'm creating symbols x, y, and z. Also,
+is the font size okay? Do we need to go up, down? I doubt we need to go down. Is that
+hopefully better? Okay, good. Here I've created three symbols x, y, and z. Now I can use these
+to create expressions, for example. If symbols is actually pretty smart as far as the LaTeX
+printing goes. For example, here I've created a symbol, symbol is alpha 1, omega underscore
+2. It recognizes that these are Greek letters. It recognizes that these numbers are subscripts
+on the symbols. Here's an example expression with SimPy. Did you just build it up naturally?
+Your first exercise now is here's a moderately complicated, hopefully not too complicated
+expression. You may recognize this function. If you don't recognize it, it comes from the
+normal distribution. Your exercise is simply to just create this expression in SimPy. When
+I don't have it here, but the square root function is sqrt. Go ahead and use the sticky
+notes when you're ready. I guess I'm just going to go over it now. The first thing is
+we already defined x, y, z up here. We have x already defined, but there's two other symbols
+in here that we don't have to find, the sigma and this mu. Pi is not going to be a symbol
+here because pi is a number. Pi is already defined by SimPy as this number, but we don't
+have sigma defined yet. Sigma and mu are symbols. Then I'm just going to basically just type it out
+as I see it. One over the square root of two times pi times sigma squared times, and then
+exponential is just exp. exp to the negative x minus mu squared over, and then I need parentheses
+here to group this denominator, two times sigma squared. You see SimPy has done some automatic
+simplification, but it's the same expression if you look closely. So are there any questions on this?
+Yes.
+Ah yeah, so the question is it didn't simplify this sigma squared, and the reason for that is that
+the square root of x squared is not equal to x in general. This is only true if x is
+positive number, and so we didn't tell SimPy anything here about sigma. So as far as SimPy,
+no, sigma is just some complex number, and it's only going to do these simplifications
+based on what it knows is true for all complex numbers. So if I knew, for instance, that these
+were positive, I can type positive equals true here in the symbols function. These are called
+assumptions. I don't think we're going to be using assumptions a whole lot today, but this is one way
+to get SimPy to do some of these simplifications, especially relating to this square root of x
+squared deal. And if I do that, now you can see it knows the square root of sigma squared is just sigma.
+So good question. Thank you for bringing that up.
+All right, so now I want to go over just some important things that can trip you up using SimPy.
+These trip up everybody. So I think that one of them already tripped somebody up.
+At least one person up in here, probably a few of you. So when SimPy evaluates an expression,
+basically Python just evaluates it, and SimPy has operator overloading. But when Python sees
+sort of this integer divided by integer here, this one over two here gets evaluated before
+SimPy ever gets kicked in. And what Python is going to do to this is going to create a floating
+point number. So you can see here we have x plus 0.5, which is sometimes that's fine for what you
+want. But often, SimPy works better if you use exact rational numbers instead of floating point
+numbers. And so the trick here is you just use the, you can use either one of these forms. You
+can use x plus this little s function. Basically, this is going to convert this one into a SimPy
+number, and then it knows that SimPy number divided by two gives a rational, or I can do x plus
+the rational number one half. And so now we get an exact number. And this is only an issue if
+you're dividing basically integer literals, because Python evaluation order basically kicks in.
+So if you have an issue where you're getting floats where you don't want them,
+you can just wrap your integers with this s function. Second gotcha, which hopefully you
+knew this before this previous exercise. But in Python, the carrot is not the power operator,
+and SimPy follows Python conventions. So carrot is actually XOR. This is a logic expression right
+here, which is not what you want. So you have to use this double star.
+And then the final gotcha. All SimPy expressions are immutable. So if you just remember that.
+So no function anywhere in SimPy is going to change the SimPy expression in place. It's going
+to always return a new expression. So right here, I've taken this thing x plus one, I've
+assigned it to the variable expert. And now I'm using this function subs to evaluate that at x
+equals two. And so that gives me three. But this does not change the original expression expert.
+I still have x plus two on here. So this subs is returning new thing here.
+Okay, are there any questions on what we've done so far?
+All right. So the next thing is floating point numbers. SimPy, in addition to doing symbolics,
+has the ability to evaluate numeric expressions, exact numeric symbolic expressions. It's a
+floating point number. So here's the exact expression for square root of two. And if I
+use the eval-f function, that's going to give me a float. And here, if I just do eval-f,
+I get a float. If you put a number here, like seven, that's going to give me a floating point
+number with seven digits. So, and SimPy has arbitrary precision. So I can put any number
+here I want. I can put 100. Get 100 digits of this.
+All right. So now your exercise is to compute 100 digits of pi.
+Okay. See a lot of blue sticky notes. Not intended to be a difficult exercise, by any means.
+So yeah, we just take pi and call it the eval-f method on it with 100 as its argument.
+And here are the first 100 digits of pi. And of course, if you want, you can play around with it.
+You can do 10,000 digits of pi. Eventually, it's going to start taking a little longer
+to compute all those digits. But there you go.
+What are we doing actually? Oh, okay. So the next thing to go over to, as a review, is the
+undefined functions. So up here, the symbols, these create these variables.
+But if you want to have something that actually depends on another variable,
+then you need to create a function. And this is important whenever you want something
+basically to have a derivative that depends on a variable, is typically where this ends up
+getting used, at least in terms of code generation. And so this is function.
+You call function and then the name of the function. And so that creates a function called f.
+This is an undefined function. And so now I can create expressions with f of x.
+And so now this gets used by the, we'll see here, it gets used by the derivative functionality.
+So to take symbolic derivatives, we use the diff function.
+And then diff, the syntax is you just do diff and then the variables that you want to differentiate.
+So here we have this expression sine x plus one times cosine y. We're going to take the
+derivative with respect to x and then the derivative with respect to y.
+And so, you know, if I do this stepwise, here's a derivative with respect to x.
+Here's a derivative of this now with respect to y. And this also works with undefined functions.
+So if you want to build an ODE, this is how you build an ODE. Basically,
+you take the derivative of an undefined function, which is going to be our next step, actually.
+So your exercise now is to basically write an equation for this, this wave equation.
+And remember here, this is sort of implicit in the way this is written. But this u here
+is not going to be a symbol because u depends on two variables. It depends on t and x.
+And then one final thing is if you want to write something with an equal sign here,
+you can use this eq function. So go ahead and do this exercise.
+All right. Well, so I'm going to go over it. So the first thing is we need to define this u
+function. So u is just function u. And then u is going to be a function of two variables.
+And I'm sort of free how to write that, but I'm just going to write it like this.
+And we can see already that t is not defined. We never define t. And we also notice up here
+that we didn't define c either. So I'm going to just define those. t and c are t and c.
+And so now I have a function of t and x. And so I'm going to create and use this eq
+object. And so the left hand side is the derivative of this with respect to t twice.
+And the right hand side is c squared times the derivative of u of tx with respect to x twice.
+And just to show you something here, you can either write t comma t or you can write
+you can just write the number after the variable for the number of times to take the derivative.
+Any questions? I'm going to leave that up there for just a little bit.
+I have a question. You could have been a function of t on the left and a function of x
+on the right. That's right. Still wouldn't have worked, but I'm assuming that we mess us up later.
+Well, yeah. So I mean, I can also, I mean, you need to be consistent.
+Sympi, this undefined function doesn't, Sympi doesn't know anything about it at this point.
+It doesn't know how many variables it has. It doesn't know, you know, what variables it's supposed
+to be with respect to. So yeah, I could have, I could have, I could have also written this whole
+thing as x comma t, if that makes more sense to you. No, even worse, like only a function of x
+on the left or only a function of t on the left. Oh, okay. Well, yeah. So that would be wrong.
+That would actually, that's not what this equation means. And you can see here, it's,
+so let me, let me actually show this.
+So if you notice the difference here, Sympi is even printing these differently.
+This one is printing to D. This one's printing a partial. So this one is, this one here is a
+partial differential equation. This one is some weird ODE where we've used a different variable
+on the left-hand side and the right-hand side. But this is not the, this is not the same thing
+as this. So, you know, this is, this is what you get on Wikipedia. And, you know, they tend to
+leave out the, of t and comma x everywhere because it gets tedious when you're writing it down. But
+Sympi needs to know that what variables it depends on. And yeah, we can write things that
+don't really make sense physically, but they make sense mathematically. You know, I can write
+you know, I can pretend like it's just one variable here. I can get my variables backwards.
+So you need, you need to keep things straight. One thing that helps if you're writing
+differential equations, let me actually cut this. Let me delete this. So one thing you can do

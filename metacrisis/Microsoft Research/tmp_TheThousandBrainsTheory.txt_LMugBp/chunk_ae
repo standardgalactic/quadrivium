@@ -1,0 +1,200 @@
+inputs are coming into the neuron.
+And in a single neuron, the dendritic tree is chopped up into tiny little segments, and
+within each segment, as few as 8 to 20 synapses can recognize a pattern.
+And this is remarkable.
+If you consider that thousands of neurons are sending input into it, and this activity
+is extremely noisy, how can you possibly recognize patterns robustly using such a tiny fraction
+of the available connection?
+So this is something that was puzzling us for a while, and we think we understand some
+of the combinatorics and math behind this now.
+So I'll explain that here.
+So here's kind of an abstract view of that, and I'm going to consider binary sparse vector
+matching.
+So here's kind of a stylized dendrite, and here's a set of inputs that are feeding into
+this dendrite.
+You can represent the connections on the dendrite as a sparse binary vector with n components
+in it, and a 1 here will correspond to an actual connection with a neuron here.
+And these connections are learned over time.
+And then you can also represent the input as a sparse binary vector with n dimensions
+to it, with a 1 being an active unit there.
+OK?
+What we care about here is, when are there matches, and what are the errors that can
+happen when you have matching?
+So if you look at the dot product between these two, it counts the overlap between them,
+and if the overlap is greater than some threshold, we say it's recognized the pattern.
+And we can sort of investigate that simple operation in this context and see what it
+looks like.
+So here's a picture of the space of possible vectors, and it looks like it turns out the
+combinatorics of sparse vectors is really interesting as it relates to robustness and
+other properties.
+So here the gray circle here represents all possible vectors, and the white circles represent
+individual, let's say, dendritic weights or each dendritic segments.
+So if you look at x1, for example, you might want to match patterns against that.
+Now there's a parameter theta, which controls how precise this match has to be.
+And the lower the theta, the more noise you can tolerate.
+So if theta is really small, you can tolerate all sorts of changes to the vector, and you
+will still match.
+The problem, of course, is that as you do that, the risk of false positives increases.
+So as you decrease theta, the volume of the set of vectors that match this white circle
+increases, but the space is fixed, so you're going to have much higher chance of matching
+some other pattern that was potentially corrupted.
+So we can count this, and we can figure out exactly what this probability is.
+So for completely uniform vectors, we can calculate exactly the ratio of the white sphere to the
+gray sphere.
+So the numerator counts all of the patterns that will match a candidate vector, and the
+denominator is the size of the whole space.
+And I'm not going to walk you through the derivation of this, but what's really interesting
+here is that as you increase the dimensionality, the size of the space grows much, much faster
+than the size of these white circles.
+And so the ratio of these two drops very rapidly to zero.
+And what this means is that you can maintain extremely robust, noisy matches with a fairly
+low theta with a very small chance of false positives.
+So it's a pretty remarkable property of these sparse representations.
+So this graph shows a simulated version of this.
+So here I have, let's say, a dendrite with 24 synapses on it, theta of 12, so you can
+tolerate roughly 50% noise in here, and you're looking at inputs with different varying levels
+of activity.
+And what this graph shows is that the chance of false positives decreases exponentially
+with the dimensionality.
+So this is this ratio that I was talking about.
+And as long as the inputs are sparse, you get extremely low error rates.
+So here, if the activity has 128 inputs and you roughly have 2,000 dimensions, your error
+rate is down to the 10 to the minus 8, so pretty low.
+The other interesting thing to note is this horizontal dotted line there.
+If the activity coming in is dense, so in this case about half the number of units,
+the error does not decrease.
+The combinatorics are not in your favor in that case.
+So the error is more or less flat.
+The dimensionality doesn't impact it.
+So as long as things are sparse and high-dimensional, you get into this really nice regime where
+things are extremely robust.
+And we wanted to see if this kind of property would hold in deep networks as well.
+And of course, with deep networks, you don't work with binary vectors.
+You work with scalar-valued vectors, so we wanted to see if the same property would
+hold there.
+And it turns out it does.
+So this is a similar simulation except with scalar vectors.
+And the combinatorics that I alluded to still work for scalar vectors.
+And a dot product, as long as any of the components are zero, it's not going to affect the match.
+So those basic combinatorics are still in play.
+However, with scalar vectors, the values, the magnitude of the values are important.
+And so in order to get this nice regime, normalization is important.
+You have to make sure that both of your vectors are roughly in the same range.
+And as long as you are careful about that, you get the same basic properties.
+It's not quite as nice error rates as in the binary case, but you still get error rates
+that decrease exponentially with dimensionality.
+Yeah?
+So is this the function's method of independent analysis for when you've got ready to match
+the company?
+Yeah.
+So here, I'm specifically focused on dot products, but you could imagine other functions
+would work.
+Because you want to ignore the zeros, if either one is zero.
+But in real life, how would you do something that's consistent with the above and not the
+same?
+Yeah.
+So this relies on a uniform distribution of vectors.
+And reality is not going to be all that.
+So the less uniform it is, the worse these properties get.
+And so I kind of flip it around and say it's kind of the job of the learning algorithm
+and the job of the system to try to enforce uniform entropy or maximize entropy as much
+as possible.
+Yeah.
+The brain does that.
+Yeah.
+Because of the connection.
+Yeah.
+The way the inhibition works in the brain is you don't want the same cells to be active
+over and over again.
+You want an uniform distribution of activity, even if it's very small.
+And it's an important point.
+And it's hard to measure exactly in the brain, but the correlations in general in the brain
+are extremely low.
+Okay.
+So how can we put this into deep learning systems?
+So what I've done is created a differentiable sparse layer.
+So on the left, I'm showing a vanilla hidden layer in a neural network.
+So you have some input from the layer below.
+You have a linear weighted sum of those inputs followed by a ReLU or some other nonlinearity.
+And the sparse layer that I've created is very similar to that.
+The main differences are as follows.
+So first of all, the weight matrix, instead of being dense, is sparse.
+So most of the weights are actually zero and they're maintained as zero throughout.
+So that's if those connections just didn't exist.
+The second thing is there's a, the ReLU is replaced by a K winners layer.
+And what this does is just maintain the outputs of the top K units and the rest are set to
+zero.
+So with ReLU, you just maintain anything above zero.
+Here we're maintaining only the top K units.
+And you can treat the gradient exactly as you do with ReLU.
+It's one for the ones that are winning and zero for everything else.
+The one problem with that is very easy in this formulation to get a few units that win
+out and stay strong.
+And so then you don't get this kind of uniform distribution that you want.
+So what we've included is a boosting term that favors units with low activation frequency.
+So there's some target level of activity that's determined by the sparsity of your layer.
+And if some units are below that average, if their average activation is below that,
+you boost their chance of winning in the sorting.
+But the output is not affected by the boosting term.
+It's just which ones are chosen as the winners.
+And this, again, helps maximize the overall entropy of this.
+And we've shown this in some past papers.
+So it's a very simple construction.
+You have sparse weights and sparse activations.
+You can also create convolutional layers that are using the same mechanism.
+In the results that show you, I did not use sparse weights for the convolutions because
+the filter sizes are pretty small.
+But in principle, you could do the exact same thing there.
+So we've tried this on two different data sets on MNIST and on Google speech commands.
+I'll show those results here.
+So here I'm showing one and two layer dense networks and one and two layer sparse networks,
+the basic test scores.
+For MNIST, state-of-the-art test set accuracy, if you don't use data augmentation, is between
+98.3 and 99.4.
+So both of them are in that range.
+The dense networks are a little bit better, as you can see.
+But what's really interesting is when you start testing with noisy data sets, and this
+plot shows accuracy as you increase the level of noise and the input.
+You can see that the sparse networks do dramatically better than the dense networks here.
+And here's some examples of noisy versions of MNIST images and the dense and sparse results.
+So here's images with 10% noise, and they're still about the same.
+Here you have 30% noise and the inputs, and you can see that the sparse network still
+does really well, and the dense one doesn't.
+And here is with 50% noise.
+So that was encouraging.
+We want to try it on some harder data sets as well.
+So I looked at the Google speech commands data set.
+So this is something that Google released a couple of years ago.
+There's 65,000 utterances of one-word phrases.
+This is harder than MNIST, and state-of-the-art is around 95 to 97.5% for 10 categories.
+And again, I tested accuracy with noisy sounds as well.
+And then as before, so I have two different types of two-layer dense networks and then
+two different sparse networks.
+The basic test set accuracies are about the same for dense and sparse, in this case.
+But the noise score, and here you can think of this as an area under the curve.
+It's sort of the total number of correct classifications under all the noise levels.
+You can see, again, that the sparse networks do significantly better than the dense networks,
+as we kind of expected from the math.
+It's interesting that this super sparse network is one where only 10% of the weights are non-zero
+in the upper layers.
+And it's remarkable that it actually even gets reasonable test scores here.
+Yeah.
+So this is really fascinating, because in some neural architectures, automatic architecture
+search methods we have been storing here at MSR, we are finding that if you include
+sparse city as part of the search itself, so that you do well on regularization inside
+your search procedure, you can come up with much more efficient models.
+But we have that sparse city at the level of connection.
+For example, take dense network, everything is connected to everything, but you can use
+sparse city, you don't even need 2% of the connections, and it makes for a much more
+efficient network.
+And all the connections make the tensors exponentially bigger.
+So would you have any comments on what happened at the connections level, at least empirically,
+we are finding that, but added with, because you have these interesting layers which are
+sparse within them.
+Exactly, yeah.
+So in order to really get the properties, both vectors have to be sparse.
+So the weight vectors as well as the input vectors have to be sparse to really get the
+robustness properties.
+And I don't know if you were looking at robustness, you may have been just looking at test set
+accuracy.
+There it's either one will work, but if really to get the noise robustness properties, you

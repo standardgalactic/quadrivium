@@ -1,0 +1,200 @@
+these state variables in a state vector that's a matrix of 14 by one matrix. And the right-hand
+side is going to be a 14 by one matrix of these expressions. So we call it RHS of ODE's, right-hand
+side of ODE's. So we can start by importing the ODE's. This is exactly the same stuff that Jason
+showed earlier. Then we just print the first row of the right-hand side matrix just to refresh on
+what it looks like. So it's these polynomial expressions in the state variables. So now we can
+use Sympy's code gen function, which is under the Sympy Utilities Code Gen namespace, to output C
+source and header files that compute the right-hand side of the ODE's, numerically, given the current
+value of all the state variables. So we'll import that, and I'll just go ahead and uncomment this
+so you can see the doc string. So, yeah, you can see it takes a, what's this called, a named
+expression. This is just a tuple or a list of tuples giving a name and an expression for each
+thing you want to evaluate. It can take multiple expressions where we're just going to use one.
+It takes a language. You can pass some other stuff to it. I don't think we use much else
+right now. So we just have the one expression we're interested in computing. That's the right-hand
+side of the ODE's. It's actually a matrix of expressions, but that's equivalent to just being
+one expression or one kind of Sympy object, I guess. And what we want code gen to do is generate a
+C function that takes the current values of the state variables and computes the derivatives.
+And so I guess zooming in means you can't really see everything, but
+so you have what code gen will return. A list of tuples, it's the C file name,
+the C source code as a string, the header file name, and the header source as a string.
+Okay, so if you run that, we can go ahead and print the C source code, and I'm going to zoom out a
+bit. That's okay. All right, so the comments get a little messed up, but
+so it prints this little banner comment up at the top. It prints out the include statement
+so you're going to need, so it includes the header file that it generated and math.h,
+so it can make use of pow and sign and things like that. And then it generates this function,
+and the formatting is a little bit hard to tell what's going on, but this is the function
+signature right here. So it's void, it doesn't return anything. It's called C ODE's because
+that's the name that we gave right here. And then it takes the state variables, y0 through y13,
+and it takes in the output as a pointer. So a lot of you said that you knew C,
+so those of you who know C, this is not a super complicated use of pointers, but those of you
+that don't, the only thing I'm going to mention is that in C it's idiomatic to
+pass in, to pre-allocate some memory as an array, and then pass in the location of that memory
+and the number of elements it holds instead of passing the array itself. And so when you do that,
+it just takes the memory location, fills in the values because it knows the type of thing that
+it's holding, and then you don't actually return anything, the memory is now modified,
+and so the output of the function, it doesn't need to be returned. So that's all you need to
+know about pointers for right now. And so you can see that it generated all the code. There's a
+couple of things to note here, though. It takes in each of the state variables independently
+or individually, which isn't ideal, and it also takes in the state variables in the wrong order.
+So when we called the code gen function, we didn't tell it that we have this matrix of state
+variables and what order they're in. It just took the right hand side of the ODEs, and so it
+alphabetized the state variables. In that case, y1, y10, rather than y2, comes next. So that's not
+ideal. It also gave us this kind of automatically generated name for the output, and so we'll deal
+with that too. So starting with just the taking in the state variables individually, and this will
+actually end up taking care of the ordering problem as well, we can use this matrix symbol thing we
+saw before, so we can, instead of using the state's matrix of individual symbols, now we have a
+matrix symbol where we can index into it the individual elements. So what we need to do then
+is make use of this matrix symbol inside of our ODEs expressions, and Jason kind of glossed over,
+I don't think he actually showed this how to do this in the previous notebook. He did it by
+subclassing the printer. There's another way to do it. All we want to do is take a map of these
+symbols, y0, y1, etc., and map those to these things right here, y00, y10, etc. So this corresponds
+to the symbols that are in our state's variable. This corresponds to the 0th element of our y
+matrix symbol. So we want to map those, and so you can create this state array map,
+and it does this, so it's just a dictionary that maps y0 to y00, and then we need to replace the
+occurrence of y0 in our right-hand side expressions with these, with these. So you can use this
+extra place function, and it takes a map just like what we just generated, and so what you can see
+is when we run that, the first row of our ODE matrix, it has now y00 squared instead of y0
+squared. So the pretty printing actually kind of gets rid of what's actually happening, but now
+this is an indexed variable, a matrix symbol that takes an index rather than a symbol y0.
+So you can now use this RHS of ODE's end instead of RHS of ODE's to generate code, and you can see
+what happens. So you can just take this little template and figure out what arguments it needs
+to take in order to generate the code, and you can look up at the above example to see an idea,
+and you add another solution. I just put some white space above the solution, so if you don't
+want a sheet, you can avoid scrolling down. So go ahead and take a couple minutes to see if you
+can generate the code and print it out and see what it looks like. Those people got it figured
+out. So if you didn't, you can just scroll down and see the solution. We just pass in this RHS
+of ODE's end instead of RHS of ODE's, and then see what it prints out. So now the signature of our
+function is much shorter and quite a bit cleaner. Instead of having individual state variables,
+we have this pointer to, well, pointer to double, which is representing an array of our state
+variables, and that's what we want. We're going to pass in an array of our state variables rather
+than the individual ones, which will be nicer when we talk about ODE end later.
+So it still has this issue of kind of this ugly variable name. We can actually change this,
+and I'll show you how to do that. So, yeah, so you can make another matrix symbol dy,
+and this is going to represent the left-hand side of our equations, and so it's basically the same
+thing. We just generate a matrix symbol that's the same shape as y, and what we're going to do now
+is we're going to form an equality object that equates the left-hand side, this dy, with the
+right-hand side, and you can use the indexed version of the right-hand side of the ODE's.
+You form an equation, and then you can use that equation rather than just the right-hand side
+expressions, and generate code and see what comes out of that. So take a couple minutes to
+see what happens there. It looks like most people are getting there. So in this case,
+you form the equality, you just put the left-hand side, and then the right-hand side is the second
+argument of the EQ function, and then just pass this ODE EQ instead of the right-hand side,
+and it will print out. In this case, we're just going to print the header. I think I forgot to
+mention that, but this will just print out just the header source so you can just see the signature
+rather than all the generated code. And now we get a nice clean function signature. It's called
+C-E-O-D-E's. It takes a pointer, which represents an array of our state variables, and it takes a
+pointer to an array that represents the values we want to fill in, which represent the derivatives
+of our state variables. So I kind of already explained some of that. Okay, so now just so
+we can actually compile this code and use it later on in the tutorial, I'm actually going to use the
+two files keyword argument of CodeGen and just run the exact same thing. In this case, it doesn't
+return the source code as a string. It just writes it to the file system. You can just write that,
+and you should be able to see in your, if you navigate to the notebooks folder, you should be
+able to see the C-O-D-E's, C and H files. Okay, so now we've got some actual source code written to
+the file system. The question is, how do we get this into a Python extension module so we can
+call it from ODE int? So now we're going to work on wrapping generated code with Scython.
+So you basically write a script, a Scython script that does two things. It just reiterates the
+function signature that's found in the C source code, and then it implements a Python interface to
+that C function. And so we'll see an example of wrapping the C-O-D-E's function in order to be able
+to call it from Python. The build system of Scython is able to take the wrapper source code
+and the C library source code, compile and link them, and then generate an extension module that
+has functions in it that you can call. This process is a little different depending on how exactly
+you want to use things. In this case, we're going to use this Scython PYX import to do
+everything for us. And in that case, it's going to write the contents of the cell to a file that
+has the name that we specify with the PYX extension. That indicates that it's Scython source code.
+It looks for a mod name, just the name of the thing we generated dot PYX BLD,
+Pyrex build file, for instructions on how to build everything. So if we don't tell it like where the
+files are that we want to link with our extension module, it won't know how to find them. So we
+just basically need to tell it where that is. And then it will build everything into extension
+module, and then it's going to import everything that we declare into our namespace so we can
+just call it like normal Python functions. So it does a lot of stuff in the background, but it
+does need to be coached on how to actually do the compilation process. But this file that we're
+going to have to write is pretty similar to what you would put into a setup.py file. If you're
+going to write Scython code that wraps C code, you would do a similar thing there, and I'll kind
+of show you how that works. So in the end, this Scython Pyrex import works similarly to the Scython
+magic, but everything's a little more complicated now because we need to tell it where the C library
+is. So in either case, we need to tell setup tools slash Scython. The name of the extension
+module we want to make the location of the Scython and the C source code, and the location of the
+headers needed during compilation. And so this will include the header of the generated code that
+we made, and NumPy headers. We're going to use NumPy within our Scython source, and that's one
+of the cool things about Scython, actually, is it uses NumPy fairly well. And so we'll tell it
+where NumPy's headers are, so we can use NumPy's C API. And so we're going to call our extension
+module SciODEs. And so here we'll write our build file to tell it how to build everything. So I'll
+just break this down. It's not super complicated. And again, it looks a lot like what you would put
+into a setup.py file if you're packaging this stuff and you want to ship it to someone. So
+you can import setup tools.extension. There's an extension class. That means extension module.
+That's what we want to make. So we're going to tell it the module name. We're going to tell
+the sources. And so the sources are just going to be the Scython source that we have,
+and then the CODE's file that we had. So this is just telling it what are the things we need to
+actually build to get this extension module to work. And then the include directories are going to
+be the current directory because that's where we wrote the CODE's .h file and the NumPy's headers
+you can get with this get include function. Okay, so when you run this cell, it will write the
+contents. It's got this write file magic that will just write the contents to a file that's
+called SciODEs.py rex build. And so you can look at that in the directory if you want.
+So finally we can write our wrapper code. And the first thing we do is specify the
+we just replicate the function signature from the header. So this is literally just copied and
+pasted from the header file we generated. And this just says that this is where this
+function is located. And then here's our wrapper. And this is just our Python interface to the C
+function. And this is, by the way, this is all Scython source code basically, right? So
+it's going to write this file SciODEs.pyx and then the SciODEs.pyx build file. We'll tell
+it how to build everything. So the wrapper, we're going to make this wrapper conform to the ODE int
+interface. And if you remember from, I think Jorn talked about it, it takes the array of the
+state variables at the current time and a scalar time. And so this syntax looks a little ugly,
+but I'll break it down. So we get the y is going to be a NumPy array. Its type is double.
+So that matches with the C code. It takes an array double. And then it has, it's a one-dimensional
+array. And it's called y. And then it takes a double t. Okay. And then, like I said, the pointer
+thing is you just preallocate memory. And then you pass the C function where that memory is located
+rather than passing in the thing itself. And so we preallocate our dy. This is going to hold our
+result. And it's the same shape and everything as y. So we can declare it as an empty array
+of the same size as y. And also you can give it the d type.
+So now the final thing is we call the C function and then we return its result. So we call CODE's.
+We, this is a little bit, this might be a little confusing, but basically we
+grab a pointer to our array by getting the data attribute. So NumPy arrays all have the data
+attribute that is basically a pointer to the raw memory of the array rather than all the array
+itself. And then we just cast it. This is how you cast in Scython. Cast it to a double pointer
+rather than by default. This is a pointer to character, HR. So we do that for both of these.
+And I guess it's not super important exactly what's going on here. If you are not familiar with C,
+you can treat this as a recipe and it should work. So if you run that, this should hopefully
+build in the background and give you a Scy ODE's function that you can now call.
+So your next exercise is just to use NumPy's random dot random, generate some random numbers
+that you can put into your Scy ODE's function and see if it returns something reasonable.
+Let's go ahead and try that. I think we'll try to move on. This is towards the end of this section
+and then we'll start a new thing. So this won't cascade to problems later. If you run it, you
+should now have this Scy ODE's function. So you can generate some random vowels. The shape of this
+should just be 14 by nothing. So it's a one-dimensional array of size 14. And then you can call the
+Scy ODE's function with the random values. And then you need to add in the time value. You can
+use any time value because the equations don't actually make use of it. If you run that, you
+should get some numbers. They also probably be different than mine. So now our goal was basically
+to now be able to use this Scythonized function within ODE int. So now we have this function
+that takes the interface that ODE int expects. And so we can use it like we've already seen
+how to use ODE int. So we'll just go ahead and run it. I've added a couple of just utility functions
+in our package that comes with the tutorial. There's a function that just generates some
+initial conditions that are reasonable for the system and then just plots it in a kind of reasonable
+way. So we can make some initial conditions and then just run ODE int, calling the Scy ODE's function,
+give it the initial values and the time values we want, and then plot it. And we should get something
+like that. Okay. So just to kind of recap what just happened, we took a symbolic expression
+which is a matrix of ODE's. We use the CodeGen function to generate C code that evaluates the
+right-hand side of those ODE's. We played around a little bit with matrix symbols and stuff like
+that just to get the kind of function signature to look nice. But otherwise, it's just running CodeGen
+to generate C code. And then we wrote a Scython wrapper around that C code. And so everything
+that we just did is sort of just a recipe. You can use that for lots of different problems
+that you might want to use it for with ODE int or really anything, any kind of numerical
+solver or whatever. The Scython wrapper won't change too much, but yeah, question.
+You would have to redo it for whatever system you want because it took
+the symbolic expressions and generated C code. It's like hard-coded C code that evaluates
+that specific system. So you'd rerun that. The Scython wrapper could basically be reused,
+but you'd have to recompile with the new C code that you generate.
+Yeah, is that it? Answer the question. Any other questions about what we just did?
+Okay, cool. So now we'll see how to avoid doing all that and use AutoRap. So AutoRap,
+as the name implies, automatically generates a Scython wrapper for us. And there are some
+advantages and some disadvantages to this. But this is basically another kind of layer
+of abstraction on top of everything. So we started out with just taking a SimPy expression,
+generating a little snippet of code using the code printers. We added on top of that the code gen
+stuff, which takes that little snippet, puts it into a function and a file. And now we're going to
+add a little layer on top of that that takes the file, writes a Scython wrapper,
+compiles it all, and gives you back a function that you can call. Okay, so we can take
+an import AutoRap. It's under SimPy Utilities to AutoRap. You can look at the doc string here.
+Its interface is sort of similar to code gen, but slightly different. In this case,
+it just takes the one expression. It also has this extra back end keyword. Okay, in this case,
+by default, it uses F2Py. So we're going to actually use the Scython back end instead.
+So we'll have to specify that. The language argument is similar, but it can actually be
+inferred if we're using the Scython back end where it's implied that we're going to be using C code

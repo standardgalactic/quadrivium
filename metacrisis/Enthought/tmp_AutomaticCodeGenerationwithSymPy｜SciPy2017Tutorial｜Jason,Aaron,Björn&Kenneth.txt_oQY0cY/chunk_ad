@@ -1,0 +1,200 @@
+Yeah, I can show you how to get the solution, so if you just delete the contents of this cell,
+and uncomment that magic command, change exercise to load, and evaluate the cell,
+you get the solution here, so it just says exercise in the comment.
+All right, I think most people are getting there, so what we were looking for here was,
+as you saw in Irene's introductory notebook, you can run the Jacobian method on a matrix
+to get its Jacobian, and if you look at the documentation of the ODE int function,
+you see that this D fun argument, it requires the exact same signature as the funk argument,
+so again, it's just the y comma t plus k signature again,
+and running the integration with this function given as D fun, we see that it did not need to
+evaluate the Jacobian quite as many times as when it was not available. The difference here is quite
+small, but that's made it because this is a very small problem, it's only three variables,
+and even on this small problem, you can actually see a small impact on the total running time of
+the integration, it's slightly faster giving the analytic Jacobian, but as the problem grows bigger,
+this effect grows quite rapidly, so are there any questions at this point?
+All right, so we would appreciate if you just write some feedback on the sticky notes,
+and some negative feedback on the red one, and some positive on the blue one, was that it?
+Yeah, all right, and then we'll take a five minute tour, ten minute break.
+Okay, so we'll be back here five past. Okay, I think it's five after according to my clock,
+so we could go ahead and get started. So I'm Jason, as Aaron mentioned before, and we're going to
+move into the third section, the third hour. The title is the Hardaway Seaco Generation Custom
+Printers and CSE, which stands for Common Sub-Expression Elimination. So Bjorn just showed you a high level
+look, use of the Code Generation Facilities in Senpai, and now we're going to start to dig into
+that and sort of expose how some of that works under the hood, how you can manipulate and change
+how it behaves, and that'll lead into the final lesson too that Kenny will deliver
+that'll show you how to further make use of these things. So if you open up the Hardaway Seaco Generation
+Notebook, you can read through some of this intro here, but the main learning objectives that we're
+going to tackle during this next hour, we're going to use a Code Printer class to convert a Senpai
+expression into Compilable C code, so we're going to start looking specifically. Font size up?
+Oh, every notebook you got to do it. Is that good? Thank you. The first one is, okay,
+we're going to generate C code, and we're going to generate more complex C code. Secondly, we're
+going to be working with arrays in C, so we're going to transform various Senpai expressions into
+Array Compatible Code. We're going to learn how to subclass the different printers in Senpai to
+have them behave differently. We've had a few questions already about, well, what if you wanted
+to print something differently than what the defaults are, so we'll show you how to change that.
+And then finally, we're going to introduce Common Subexpression Elimination, which is a
+pre-optimization that you can potentially use to speed up your computations.
+So those are the main things. We'll go ahead and import Senpai and turn on the pre-printing.
+Which notebook this is? How do I get back to that? Yes, seven the hard way, and you can link to it
+from the index right here. And the title is 707 the hard way. Got it? Anybody else?
+Okay, so I've initialized some things. So Bjorn just introduced you all to these
+chemical kinetic problems, and he gave a couple of textbook examples. He works on bigger problems,
+harder things to solve, more complex sets of chemical reactions, and in particular,
+he is going to, I'm going to use one of his sort of research level sets of ordinary differential
+equations that models how water is exposed to ionizing radiation, and you might find this in
+research about nuclear reactors and such. I don't know a bunch of details about that, so I'm going
+not talk that, but if you want to ask, we'll get Bjorn to answer more detailed questions. But
+the gist of it is that we still have a set of ordinary differential equations. In our case,
+now we're going to have 14 states, and I'm already screwing things up.
+Okay, back here. We have a function that just loads in these symbolic
+right-hand side of the ordinary differential equations, the f of yt, and then the value states,
+which is y of t. So as a first exercise, have a look at these. Investigate maybe what types they
+are, what the expressions look like, you know, how complex are the mathematics. Spend a couple
+of minutes doing that, and you can put up your blue sticky notes when you're done, and you're red
+if you need help. In one other note, so I have a little bit of different solution, if you want to
+see the solution, you can double click this cell, and it'll reveal an answer. May not be the only
+answer, but an answer to that. But go ahead and give it a try first. Okay, what did you all learn?
+What do we see? Anybody like to volunteer?
+What kind of equations do we have?
+Polinomials. So if I, nonlinear polynomials,
+so if I just print this to the screen, it'll actually render, and I have a vector of expressions
+that are multivariate polynomials in these 14 different state variables. So these equations
+look a little nastier than before, being that it's more of a non-toy problem. But this is also
+stored in a matrix, and then you can check the shape 14 by 1, and then our state vector
+is also a 14 by 1 of the various symbols in there. Okay, so you've learned about the Jacobian
+now in the two previous notebooks, so go ahead and compute the Jacobian of this
+function of the states, and then take a look at that too and see what you get, and if it's what's
+expected. And you could take down your blue sticky notes, and then put them back up when you
+got it.
+So it looks like about half of the people got, got something. Put your blue note up if you've
+got it.
+So what do people find here? So you can use the Jacobian method as we have before.
+What is, what do we end up with?
+You already answered. An awful matrix. That's what I like to hear. So we've got a,
+now a large matrix, and if I look at the shape which Sartaj informed us of,
+14 by 14, and I'm seeing one column right now, and I have a bunch of linear expressions in the
+states, and I can, you can do this on your own screen too, scroll through and just sort of see,
+we've got a bunch going on there. 196 entries and full of them are zero, it seems, but most of them
+have, have some small expressions in the linear expressions in the states. So I think, you know,
+hopefully these two examples here should give you some idea that when you're, have a non-toy problem,
+this is a little unwieldy to handle by hand and try to type yourself. So this is
+very, particularly very useful, and we can work with these and start to generate code from them
+and, and then be able to evaluate them numerically. So let's talk a little bit about C code now. So
+we're going to start printing C code, and I think we had some questions earlier. Well, how do I
+include libraries? How do I have more than just printing a single line of code? And we're going
+to sort of give some idea now of how you might make a compilable piece of C code that was generated
+by the expressions that we just saw. So here, I have a template for a C program. We include
+both the math library, which we're going to use a lot of the math functions, and that, and the
+C code printer automatically assumes that we'll be using those. And I've also included the
+standard input output library here too, so that we can print out some results to the screen.
+If you recall, how many people are comfortable writing C programs? Raise your hand. Okay, good. So
+at least half, maybe a little more. I'll give a little refresher here. And
+in general, we need a, there's always has to be a main function, and the function looks like this.
+There's a return type on the left. And then within the curly braces is what that function does.
+So our main function, when we run this C, this program after it's compiled, it will execute
+the lines in this function. The first thing that I do is I introduce some variables, okay,
+and we're going to work with arrays sort of explicitly. And I'm going to avoid talking about
+pointers and things, but just sort of talk about this in the context of an array variable.
+Everything in C has a type, right? So these are double precision arrays. This is the name of the
+variable. And then this value here tells me that it is a 14 entries long, 14 double precision values.
+And then I assign some default values to the states, right? Just some example numbers here,
+one through 14. With that command, everything has to end with a semicolon. And then here,
+I also have to introduce two arrays to hold the results of our computations.
+And these are essentially empty, of sorts, when I create them if I don't initialize them.
+But when I evaluate the right hand side function, that's a 14 by one, so we want 14 entries.
+And then we're also going to map the 14 by 14 Jacobian to a
+1D array where all the rows are stacked of 196 entries, okay? So we're going to
+just use two simple 1D arrays to store the results of that. We're then going to call a
+function that we're going to create, and that's evaluating the ordinary differential equations.
+It's going to take whatever the state values are, which we predefined. And then it's going to pass in
+to these two empty arrays that we're going to populate inside the function with the values that
+we compute. The bit down here is less interesting, but all we're doing is going to print the results
+after we've done that computation. So I'm not going to go over that. It's just some basic printing code.
+And then if we look up above, I have this function prototype sort of set up for evaluate ODE's.
+Notice that it's going to return nothing and that it's going to take these three things.
+First is the state value vector, our array. I have a constant declaration here because we're
+not going to manipulate that. We're going to leave it constant inside the function,
+and then it's going to take in these two double precision arrays that we will manipulate inside
+the function. And our job is to do that manipulation. So we need to fill in right here how to populate
+the values, given the state values, how to populate the values of the Jacobian and the right hand
+side of the ODE's. So we're going to generate some code that's going to go in that bit there.
+So Aaron showed you the C code function. There's a class that is operating behind the scenes any
+time you call those kind of functions, and we call these printer classes. So we have a variety
+of printer classes from printing to latex, from printing to the different codes that you saw,
+pretty printing, et cetera. But we're going to load in explicitly the C99 code printer here.
+And all you have to do is initialize it with no arguments if you don't want to provide any.
+And then how do you use it? Well, all the printers have a method called do-print,
+and if I pass a Sympi object, in our case this matrix, to that do-print method and print it,
+it's going to try to print it. Interestingly enough here it says this is not supported in C,
+this immutable dense matrix that we have, and it just gives us the sort of Sympi representation.
+So why is that? This next bit here explains that some, or hopefully all.
+In C we have to make assignments. So I want to, I can't just print necessarily the right hand side,
+which are just these arbitrary expressions without assigning them to a variable. It doesn't
+really mean anything useful unless you assign the results of those expressions to a variable.
+So I already explained how you sort of instantiate an array, and then you can, I showed you how to
+populate it like, double clicking is not a good idea on these, how to populate an array like so,
+but you can also index into each item of the array and then pass in, in our case,
+a double precision value or a computation that would produce one of those. So we need to ensure
+that Sympi code printing prints this left hand side of the equal sign in addition to the right
+hand side. So there's a, we introduced the matrix symbol, and the matrix symbol is,
+is how we sort of provide what the left hand side of all those assignments are going to be.
+So we're going to create a matrix symbol called RHS result, which is the variable name that I'm,
+that I want, of the correct shape, which matches what our right hand side is going to be.
+So I can create that matrix symbol, have a look at it, notice that it indexes into a 2D array
+by default when you print it. But if I pass in that matrix symbol now to a keyword argument
+to the do print method called assign to, it's going to do the right thing. And notice that
+I get the first index and I assign that first expression to it. So I have the left hand and
+right hand sign of this assignment in the printer. And we can scroll through and see all 14
+of those array assignments. So this is a valid C code now that has these expressions assigned
+to the entries of that array. Okay. So with that new knowledge, print out some
+valid C code for the Jacobian matrix. You can take about five minutes for that.
+And take down your sticky notes, which I think they're all, they're all down and
+give us your blue one when you're, when you're ready, when you're done.
+Okay. I think that's most everybody. So you can do the same thing that we did above.
+We basically want to print the Jacobian now. And in differently, slightly differently,
+we want a matrix symbol. I think I've got S Y M matrix symbol.
+And I called that, I think Jack result. Maybe I should put this on a separate line so it all fits.
+And we can pass in the shape one, one quick way to do that is
+you can do that with Python to sort of expand that tuple. And then we'll call that Jack result.
+So if I create that matrix symbol, and then pass in this,
+and I have enough parentheses, and then I print, we will get a 196. And notice that it takes care
+of this indexing already. The default is that matrices, 2D matrices get mapped to 1D arrays in the,
+in the code generator, and we get all, all of those values there. So you can print
+the Jacobian quite easily. Any questions at this point?
+Okay, let's move on. So what if you want to change the behavior of the printer?
+It's often useful change, maybe you want to change variable names, maybe you want to
+have a, use a special function that you need, or use a library function, and you want to change how
+the default printing happens in these, in these printers. All of the code printers have these
+methods that start with underscore print. Now if I do underscore print underscore and I hit tab,
+notice that I get all kinds of different things. All of these things are all the different objects
+in SMPI that you might want to print. So in general, all the printers have a method defined on them
+that tells the printer how to print that particular object. Here's some matrices, how to print the
+how to print the infinity symbol, how to print an integer, right, how to print a list,
+how to print matrix elements, matrix symbols, etc, etc. So if I sort of use those,
+or look at those, let's just look at matrix symbols since we were using those.
+And I double-question mark, I could look at the source code. And for some reason that
+I printed them, I would just print the name. I guess it calls, is it called symbol?
+Let's look at symbol because I'm going to, should have used the example I already had.
+Some of these may or may not be. So if I open up print symbol, which is just a basic SMPI symbol,
+we notice that that method takes the instance of the object and then some kind of expression
+comes in. In this case, it would be a symbol object that would be coming in. And then inside
+that function, you basically need to look at that symbol or expression that comes in
+and do what you want to do and return ultimately a string that gives a representation of the
+printing. So if I were to return like a latex printer, I might have dollar signs wrapped around
+whatever my latex expression would be, et cetera. Question.
+In this case, the C, I'm probably going to get this wrong, but the C89 is a subset of C99. So
+when C99 came along, there's new things that were added to the language. So a lot of times we can
+just use the C89 printer. So we have a hierarchy of classes that cascade. There's a code printer,
+a C code printer, I'm sorry, a code printer that subclasses from a printer and then a C89
+printer that subclasses from the code printer and a C99 that subclasses from the C89, probably.
+This function is actually defined as C89. It's a subclass of C89.
+So they may not be always as super clear, and maybe I should have picked one that was simpler,
+but the gist is is that inside of that, you get the expression, you do something,
+you look at that expression and then you return a string from there. So let's just play with that.
+I think it'll be easier once we play with it a bit. Say I want to make a custom symbol printer.
+So here I have my code printer, which is a new class name, and I'm going to subclass
+the C99 code printer. And I just want to change how the symbol prints. And in this case, I will
+define a new method, just like we saw, the print symbol method. And then anytime it finds a symbol,
+it's going to do what I say here. And in this case, I am going to return
+self dot underscore print, no matter what symbol you pass in, I'll always print
+me. All right, so I just give it a string, a return of string. And it's in another key

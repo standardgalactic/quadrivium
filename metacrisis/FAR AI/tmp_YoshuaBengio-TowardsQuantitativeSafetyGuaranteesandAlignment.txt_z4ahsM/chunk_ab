@@ -1,0 +1,200 @@
+It's easy here because there are only two theories. What if you have an exponential number of theories?
+So, that's the sort of question I want to think about. How do we keep track of an
+exponentially large number of theories that could explain the data? Okay. If we could,
+we could start getting some kinds of quantitative guarantees. And there are many variants,
+but I'm going to explain just like a really simple scheme, which could be improved. But like,
+for example, if I had a neural net that computes a Bayesian posterior, that is the probability of
+something bad happening, given a particular context X and given an action that we propose to do,
+and given all the data that the AI has seen. So, that's just a Bayesian posterior because we put
+the D there explicitly. And yeah, and if that quality is above a threshold, you simply decide to
+not do the action. So, that's a very simple kind of quantitative guarantee. Now, there are a number
+of issues. How are we going to estimate these things efficiently? And also, because our estimates
+are going to be imperfect, how do we deal with that? Okay. So, let's dig a little bit into this.
+Let's see what are the actors in the theater here. So, we have a very complicated random variable here,
+theta, which is not the usual parameter, theta for theory. It works. So, theory is a theory of
+how the world works, including an explanation for each and every data point that you've seen up to
+now. So, in other words, it has both general statements about the world and specific statements
+about individual examples, which we usually call latent variables. But in the Bayesian world,
+everything is a latent variable, including the parameters. So, theta here, just to simplify
+the notation, includes all of these things. So, what are the things we're trying to do in order to
+get to the Bayesian posterior we're talking about? Well, there are really two things we need to do.
+One is the first equation there, d's dataset. So, we need to be able to sample or represent
+the distribution over all the possible theories given the data. And we know how to compute that
+up to a normalization constant. That's the prior p of theta, which is something that's going to be
+easy to compute, times a likelihood. So, given the theory, which, by the way, contains a full
+explanation of every data point in d, what's the likelihood of the data, which is going to be easy
+to compute, but still not cheap, because we have to go through the whole dataset. So, it's not
+exponential, but we want to reduce it. So, here, the problem isn't so much that we don't know how
+to compute the normalizing constant. It's that we don't know how to sample from this, because in
+order to answer the second question, which is, given a context or a question x, what is the answer
+y, we need to sum over all the theories weighted by this posterior, or similar posterior.
+And so, for each theory, theta, we would know how to answer the question, but now we've got this
+exponentially large number of theories. So, this is the problem of marginalization. And
+sampling and marginalization are the two hard problems of probabilistic inference. They're
+both intractable, and we need to typically do both in order to answer questions. There are some
+specific questions where we could get the answer directly from the Bayesian posterior on theta,
+but in general, we won't be able to do that. And so, how are we going to do that? That's what
+I want to talk about. So, we could do MCMC, because if you know anything about MCMC, this is what
+it's meant to do. We are given an unnormalized probability function, and we want to sample
+proportionally to that. And we can use those samples and compute some averages, which approximate
+an expectation over these things. That's the second line. So, if we could do MCMC,
+we could approximate these things, but there are some problems. So, the way MCMC works is you
+make a lot, lot of small random moves that tend to prefer more probable configurations. So, in
+general, you will kind of hover around a mode, and with some probability, you might slowly go to
+another mode, but the slowly can get really bad. If the modes are far from each other and they
+occupy a small volume, then it might take forever for that to happen. And that's the so-called
+mixing problem. But, if you have a machine learning mind, and you look at the picture on the top right,
+it should be obvious that there's a solution using machine learning.
+Let's say we have visited the three modes corresponding to the three bumps I've drawn.
+Would a neural net guess that there might be a fourth one at the intersection that we haven't
+visited there with the question mark? And the answer is yes, actually. Actually, you just need
+three modes, and you get the fourth one here. But, in general, you visited some modes, and instead of
+finding a kind of random walk that discovers other modes, you want to exploit the structure that
+hopefully exists in how the modes are placed in order to guess, not necessarily perfectly,
+but with a higher probability that's high enough that, you know, if you guess a reasonable number
+of times, you're going to find a lot of these missing modes. So, that's the approach that my
+group has been exploring for the last two and a half years, and I'm going to explain a bit more.
+If we can do that sort of thing, we're going to have to train neural nets that can do that kind
+of generalization, that propose theories that have a high posterior probability. So, the modes you
+should think here are in the space of theories, and the probability here is the posterior probability,
+the Bayesian posterior probability, the probability that they are the right explanation for everything
+you've seen in your life. Okay. If we could do that, we would get the opposite of what I was
+talking about before, which was, you know, with RL, if we don't do it right, we may end up in a
+scenario where the more compute we put in the machine, the less safety we end up with. Here,
+it will be the other way around because the more compute we put in, we train a bigger neural net.
+If we have theorems that tell us that when the training loss of the neural net goes to zero,
+we recover the Bayesian posterior, then we have a sort of guarantee that more compute equals more
+safety. So, how could we do that? You know, one of the big lessons of machine learning in the last
+few years is that we can learn really, really complicated distributions with big, big neural
+nets. So, the question is, can we just change the objective function so that what they learn
+are these Bayesian procedures rather than to predict the next word in a kind of supervised way?
+Let's see. So, that's the idea of amortized predictors. If you know about variational order
+encoders, they were probably one of the first, if not the first machine learning method in that
+direction. And the idea is, instead of paying the compute at runtime, like MCMC, if you ask me a
+question, I'm going to do a lot of sampling to come up with an answer that has the right distribution.
+Instead, I'm going to pay a lot upfront, that's the amortization part, to train the neural net,
+and then I'm going to just sample from the neural net very quickly. It's just like one
+pass through the neural net. I'm going to get samples. So, that's amortization. And there are
+subtle advantages to doing this besides the fact that we are paying upfront.
+Well, first, the worst case scenario where there is no structure in the modes
+is going to be as bad as MCMC, right? Because then if there is no structure, then there is no
+generalization and using a neural net is not going to help us compared to MCMC. But if there is
+structure, we could gain a lot. In fact, we can gain not just in the sampling, but also in the
+marginalization. Let me go back to my little cartoon here. Let's say that instead of these
+four modes, there was an exponential number of them, just make it higher dimension.
+Sampling those in order to compute an average, if there's an exponential number of modes,
+is also going to be a problem because I'm not going to have a chance to average over an
+exponential number of things. So, what could you do? Well, you could also use these amortization
+methods like basically like supervised learning in neural nets in order to approximate the
+marginalization problem. In other words, to approximate the kind of sum on the second line.
+So, instead of doing the sum on the second line through a Monte Carlo averaging process,
+we can train a neural net so that it directly samples y given x.
+Right? So, we're going to use neural nets to do the first line in the sense that it's going to
+give us a sampler for theories. And we're going to use a different neural net, or maybe you can
+share some things, but fundamentally a different neural net that produces answers to questions.
+And we can train that neural net with single samples of theta at a time. I'm going to kind of
+give you clues for, you know, how we can do that. We don't need to run any big sum here because
+that's not going to fly. Before I explain how we might do that, let me just go back to the safety
+question and some of the challenges here. So, I've said that we might be able to train neural
+nets to sample modes of that posterior distribution. Good. But there is no guarantee that we're going
+to cover all the modes. And remember, these modes correspond to theories about how the world works.
+So, if somehow our neural net doesn't represent all the modes, we might miss the right one.
+And then we might still have a system that is confidently wrong. So, how could we have a
+safety guarantee if there's a possibility that the system says with high probability it's all fine,
+but we still all die, right? Okay. So, what can we do? It looks like it's intractable because
+there are a number of possible places to look at in training our neural net is exponentially large.
+So, what I'm proposing is to get a safety guarantee that's a slightly lower quality.
+We're going to try to get not worse than any human. So, if there is a human who has a theory
+about the world or some partial aspects of how the world works that is right, we're going to
+consider that. We're going to consider all of those theories, okay, if different humans have
+different theories. Now, this is like a big AI here and it can model all the theories that all
+humans have come up with to explain all kinds of things in the world. So, we just need to make sure
+that of all the possible modes that we want to consider when we train our neural net, we need
+to cover all of those corresponding to theories that humans have generated, you know, that are
+readable in papers and stuff. And then what we get is a guarantee that may not be perfect,
+but at least it says, well, no human would find that particular action outrageously dangerous.
+So, it's, you know, it could still be very dangerous, but humans would not see it and not
+see it coming either. So, that's the kind of guarantees I think we can get. All right, so let's
+go back to the question of how we might approximate Bayesian posteriors and both in the sense of
+sampling and in the sense of marginalization. So, let me tell you about these generative flow
+networks which we've been developing that I mentioned and they are, if you want, at the
+intersection of variational inference and reinforcement learning. So, they learn a policy
+like in RL and they're close to maximum entropy RL, if you know about that. They're also close to
+high-kill variational inference jargon, but anyways, what they do is you give them a reward
+function. So, the reward function is like a black box that the system can call during training.
+So, for example, the black box could be the likelihood times prior. And that's like a reward.
+We want to sample theories that have, that are both reasonable or under the prior. For example,
+they're not like humongous theories and explain well a billion data points. So, that's the reward.
+And the theorems we have with G-flownets tell us that there is an objective function that
+has the property that if we minimize it completely to a global minimum, then the policy that we
+learn with our little neural net will generate theories with probability proportional to the
+reward function. So, if we pick the reward function to be the prior times of likelihood by base
+theorem, then the neural net generates from the posterior. I'm going to make a stop here because
+this is an important slide. Any question up to now on the technical stuff? Yes, over there.
+So, I'm going to go back to one of your earlier slides about RL. Yes. I'm curious. So, how likely
+is it in your opinion that when you use RL, you get something which maximizes reward,
+like an agent that does that? Right now, I would say not. Right. But I don't know about
+Q-star or whatever will come next year or three years from now or in five years from now. I don't
+know. Yeah. I think it was on the previous slide. Oh, sorry. Yeah. So, or there's also a citation
+of Cohen's work and I just wanted to note some confusion on this. Okay. Why maximizing reward
+is seen as so dangerous, especially with Cohen's results, which I think assumed... Especially with
+what? Michael Cohen's results. Yes. So, those results assume that you find a policy which is
+optimizing some time discounted sum of return. Okay. Okay. And then it's like, well, it's going to be
+this dangerous reward maximizer. But if you don't have that assumption, then these concerns about
+RL, these concerns about... Okay. You mean because of the discount? It's a discount? I don't understand.
+If you don't assume that the network already cares about a reward function, then their theorems
+don't apply. And I'm wondering if that's... But that's the whole point of maximizing,
+is because you have something to maximize, right? Yes. But I don't think that RL does that. You
+don't think that RL maximizes rewards? No. Well, I don't understand. Maybe we can take it offline.
+Yes. Thanks. All right. So, I think I'm completing the wrong direction here.
+Follow the gradient. All right. So, here we are trying to figure out how to sample from the
+Bayesian posterior. And let me tell you more about these G flow nets. Okay. Let me explain a very
+simple principle that shows how you can get both marginalization and sampling for the price of one.
+Let's consider the reward function R of x, y. So, x is the question. And y is some quantity
+we want to marginalize over. Like, in our case, these would be the theories, for example.
+So, we want to compute S of x is the sum of R of x, y. And we can't do that sum explicitly,
+because it has an exponential number of terms. So, S for sum is a normalizing constant, right?
+And if we wanted to sample, you know, think about important sampling, you'd like to sample
+proportionally to R. Let's say R is positive. Okay. Just make things easy. You would like to
+sample proportionally to R. So, that means you'd like your sampler pi of y given x to be R of x,
+y divided by S of x. It's a distribution over y given x that gives more probability to things that
+have a larger R. If you're going to sample things, you want to sample the big things, right?
+Okay. So, we would like to have that sampler. So, these are the two things we want. We want this
+sampler, which is the normalization of R of x, y. And we want the sum, the marginalization. These
+are the two things I was talking about in a very kind of abstract way. Okay. Take the second line
+and just move the S to the left-hand side. So, now, you get a constraint. You'd like that for every
+x, y. The probability of y given x, according to my sampler, times the normalizing function S of x
+is equal to R of x, y. So, it's interesting that it's very easy to prove that if you make that
+constraint satisfied because the pi sums to one, you recover both of the first two lines.
+All right. So, there's this one constraint, the sampler times the normalization equals the
+unnormalized function, that if we can satisfy this for every x, y, we're good. And we recover
+what we want. So, we're going to have estimators, the pi hat and S hat. And we take the log of the
+left-hand side and the log of the right-hand side, take the square difference and make that a loss
+for x, y. And then, you can show that if you sample x, y's according to any distribution
+that has full support. In other words, you basically, with some probability, you can try any x, y.
+That defines a loss and its expectation. And the minimizing the expectation of the loss here
+gives you what you want. When it's zero, the constraints are satisfied and you recover the
+sampler and the marginalizer. And what's nice is that you have a lot of freedom in how you choose
+that the x, y pairs. You can choose any distribution here. It doesn't have to be pi of x, y given x.
+So, in RL terms, this is an off-policy scheme. We can use a different policy to choose the
+configurations on which we're going to train. A policy that you could call the exploration
+policy, if you think in RL terms, doesn't have to be the same as my current model of how things are,
+the sampler pi of y given x. And that's very useful because if you are forced, like in other schemes,
+so there's just standard variational methods with the KL divergence, if you're forced to use the
+current sampler, and the current sampler has missing modes, in other words, there are places,
+theories that it's not aware of, it doesn't see them as important. It never visits them,
+and so it never gets a gradient that tells it, oh, we should go there. But you might have other
+exploration schemes. For example, a very simple exploration scheme that we currently use is what's
+we call the tempered scheme. So we take the current policy and we just increase its temperature,
+so it's more exploratory. But you can use pretty much all of the tricks in the book in RL exploration.
+Okay, so that's if x and y are simple objects that you can directly sample from, but theories
+are complicated objects. For example, a causal graph is a kind of theory that is very structured,
+it's a data structure, and the way to construct complicated data structures is through a sequence
+of steps, right? It's hard to generate in one like forward pass, say a whole tree or graph or something
+or a mathematical proof or a body of theorems or something. But if you can do it step by step,
+just like humans do it with our conscious cognition, you can. And so you can adapt the math that I
+showed in previous slide to the case where we're going to generate the objects like y through a
+trajectory sequence of steps. And you may be in the situation where there are many trajectories
+that could lead to the same theory. I can construct my theory from various angles,
+so long as I get the same theory, that's good. I'm not going to go through that math, but just
+tell you that we can now do the same trick and we still get a sampler and we still get a marginalizer.

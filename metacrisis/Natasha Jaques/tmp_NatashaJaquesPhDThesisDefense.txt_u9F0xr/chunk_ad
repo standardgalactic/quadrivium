@@ -1,0 +1,200 @@
+And it's a very difficult problem that has only
+been explored a little bit.
+But I'll explain why it's tough.
+So off-policy learning is really hard for deep reinforcement
+learning.
+So most deep reinforcement learning algorithms
+are going to fail to learn if the data that they're trained on
+is not heavily correlated with the current policy.
+And secondly, even supposedly off-policy algorithms
+like Q-learning are going to fail to learn when they can't
+explore in the environment.
+So why is that?
+Well, let's look at the Q-learning optimization function.
+So what it's trying to do is it's
+trying to bootstrap an estimate of the total reward it
+can expect from taking an action in a certain state
+by looking at the reward it observed
+and then estimating the maximum expected future reward it
+can get in the next state.
+And if there's some part of the state space for which you
+don't have good data, so you have really noisy estimates,
+you don't have a lot of data, so these
+are kind of garbage estimates, what do you think
+is going to happen if you take the max
+over those noisy estimates?
+It will go to a region where, because within noise,
+they're very high outliers.
+Yes, exactly.
+So the noise leads to a high outlier.
+It's not the real estimate.
+Here's the real estimate.
+Noise is making it higher.
+You take the max, it's going to persistently overestimate
+the value in that region of the state space.
+So it's exactly what you said.
+So queue learning is optimistic in the face of uncertainty.
+If it hasn't seen a lot about this region,
+it thinks it's probably good.
+And that's actually amazing if you're doing normal RL
+and you're able to explore.
+Because you have some bad estimates
+for some part of the state space, you're optimistic,
+you go there, you explore, you refine your estimates.
+So nice for normal queue learning
+has this built-in exploration bias.
+But it's terrible if you're learning
+from a static batch of data, because you
+don't have data for this part of the state space
+and it wants to go over there and you have no data there
+to learn a good policy.
+So it's just going to drive itself out of the batch data for
+which you're able to learn.
+And so we'll see that happening if we just
+do this batch queue learning kind of naively.
+So in the next few slides, I'll describe a couple of baselines
+to do batch queue learning and then we'll see how well they do.
+So firstly, we have to absolutely have all of our baselines
+at least pre-trained on some conversation data.
+So we want to take a pre-trained language model.
+And the reason we have to do that is our action space
+is 20,000 dimensional.
+We're never going to learn how to talk from scratch
+just by talking to humans or humans aren't patient enough
+to teach us that.
+So we take a bunch of known conversational dialogues,
+we pre-train a model, and then we fine-tune with reinforcement
+learning.
+The second thing we do is try to alleviate that overestimation
+bias with that max operator.
+So something that's been proposed in the literature
+is to do clipped double queue learning.
+So basically, you have two different independent networks
+that you use to estimate the total expected future reward,
+take the max with both of them, and then you take the min
+of their two estimates.
+But I think this is a bit clumsy, and it's also really
+expensive.
+Having two totally different networks is difficult.
+And how do you make them independent
+if you're initializing with a pre-trained network?
+So what we choose to do is to use dropout
+on our target queue network.
+So there is this finding in the literature
+that if you run multiple forward passes of a neural network
+trained with dropout, you actually
+get a Bayesian estimate of the uncertainty
+and the value the network is estimating.
+So we just take the lower bound of that
+to try to alleviate this overestimation.
+So those are our baselines that we came up with.
+We also adapted a baseline from the literature that
+was called batch constrained queue learning.
+What it does is it learns a generative model of the batch,
+p of a given s given the batch data,
+and then the RL algorithm is only allowed to act
+by sampling from that model.
+And the intuition there is it's not
+allowed to stray too far from the batch data.
+So those are our baselines.
+Can you guess how well they did?
+I guess I wouldn't be asking if it was that great, right?
+So here's an example of a conversation
+with this batch queue learning.
+And you see that it's not only, as we predicted,
+exploiting the trivially exploitable rewards.
+It's asking a question every single time.
+But it's also spamming the maximum number of tokens
+that it's allowed to spam, because that just gets more reward.
+I just said more things.
+Good.
+But the other issue is that it's saying pretty unrealistic
+stuff.
+So where did you say to me?
+Is not a real sentence that should
+have been seen in the training data.
+So it's gone off into space, basically, as you were saying.
+So we see that it's diverged away
+from realistic natural language.
+So how can we fix this?
+Well, our idea is we want to bake in an understanding
+of what is realistic language directly into the RL policy.
+So what we're trying to do here is not only
+solve, optimize for the normal, total expected reward
+over the trajectory, as we would do in RL.
+But we want to minimize the divergence of our RL policy
+from our pre-trained language model.
+So that language model is saying,
+what's realistic looking language?
+Hopefully it knows that where did you say to me
+is not a high probability sentence.
+So we want to make sure that our RL model can't stray too
+far from that.
+And if we look at the formula for the KL divergence,
+we can see that this amounts to just adding two simple terms
+to our Q action value function.
+So we add the log probability under the prior.
+So this is our language model.
+It says, how probable is a given word given
+the sentence context?
+So it says, what's realistic language?
+Don't get too far away from that.
+We also subtract the probability under the RL policy itself.
+And that actually just amounts to doing
+entropy regularization.
+So that means your policy needs to be as stochastic as
+possible while still optimizing for the rewards.
+Well, why do we care about that?
+In dialogue, we don't want to collapse down
+to a single conversation.
+We want to have a lot of variety in the things
+that we're saying.
+And there's different ways to solve an entropy regularized
+Q function.
+So one is to replace that hard max with a log sum x.
+So that actually also helps alleviate the overestimation.
+So these are the models we're testing, this KL control Q
+version, KL control psi.
+And then we also test a version of the psi
+with making a better language model
+by averaging several language models together.
+So let's check out how well this worked.
+So we conducted a human evaluation
+where we compared our baseline batch Q learning models
+to these KL control models on human ratings of quality,
+et cetera, as well as the votes that the models received
+in the interface for their various utterances,
+and the total reward they elicited from humans.
+So how much did the human express positive sentiment?
+How long did they continue speaking this type of reward?
+And we see that while these techniques we're proposing
+do help, they improve over the baseline.
+We have this Monte Carlo averaging helps.
+The biggest difference comes from the KL control methods.
+So they actually significantly outperform the baseline.
+And we see big differences in terms
+of not only the ratings, but the votes, and the reward
+they elicit from humans.
+We can see why this is happening.
+So this is the KL divergence of our RL models
+from our original language prior.
+So remember, we initialize the RL models
+with the weights of the language prior.
+So they start the same.
+But as you continue training, we see
+that those batch Q models diverge away from the prior.
+So they diverge from realistic language,
+and they're trivially exploiting those rewards.
+And we think this leads to very unrealistic estimates
+for our baseline.
+So when you sample from that prior,
+and then you try to assess the values in Q learning,
+it becomes less and less realistic,
+and it doesn't perform well.
+But in contrast, the KL control models
+are able to alleviate that effect
+and stay close to realistic looking language.
+So here's how it actually turned out.
+So you can actually go chat with these bots yourself.
+They're still deployed live.
+And we can see that the KL control model is

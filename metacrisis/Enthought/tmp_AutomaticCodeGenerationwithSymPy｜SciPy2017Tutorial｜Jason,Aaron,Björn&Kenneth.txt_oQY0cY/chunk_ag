@@ -1,0 +1,116 @@
+as the language. So we won't actually be using the language keyword argument. It takes a few other
+arguments that we will hopefully get to see toward the end. But anyway, we can use AutoRap.
+And what AutoRap is going to do is going to take, like I said, is going to take the expressions,
+generate C code, generate Scython wrapper around that C code, compile it all into a Python extension
+module, and then give us back a function, a binary function that is just a Python callable. We can
+call it with arguments and it comes back with results. So it's pretty cool. It does everything we
+just did for us. And so you can call it like this. We're going to give it the ODE EQ so that the
+function interface is the same as the one we just used with CodeGen. Give it the back end
+with Scython. And then it also takes a temporary directory. And I'm just going to put everything
+in this AutoRap temp. I'm actually going to, I think I have some leftover stuff. So I'm just
+going to get rid of my old ones. There. Okay. So if we run that cell, what is it doing?
+Okay. Run that cell. It will do everything in the background for us. You can go,
+actually, this is the next exercise. So now you can use this notebook tab, the main notebooks tab,
+go into the directory we just created, which is called AutoRapTemp, and look at some of the files
+that are in there and see if you can kind of map the files that it generated to what we just did
+with CodeGen manually. So just take a couple minutes and kind of look through what it did.
+You might also be interested in seeing how it did the Scython compilation stuff. It's slightly
+different than how we did it with the Pyrex build file. So you can take a look at that too.
+We got about 10 minutes. So I'm going to run through a couple of the extra things
+rather than making them like full exercises so we can get to the last part, which is pretty neat too.
+So if you go into the notebook cell, you can see this AutoRapTemp directory.
+And it created a bunch of files. So the first one we can look at is the wrapper module. This is
+the Scython wrapper that we wrote manually. It's a bit different than the one we wrote.
+One thing you'll notice is that it creates two-dimensional arrays.
+This is because we're passing in matrix symbols that is a 14 by 1 matrix symbol y
+and a 14 by 1 matrix symbol dy. So that'll be sort of an issue when we want to use ODE in
+because it expects to be able to pass in a one-dimensional array of state variables and
+it expects to get back a one-dimensional array of derivatives. So we'll have to deal with that.
+It also generated the wrapped code. This looks basically identical to the CodeGen
+generated code except it uses an automatic name rather than the one we gave it when we used CodeGen.
+It also generated the header file. And then it has this, I guess I don't really need to
+look at this, but this is the Scythonized code. This is what Scython generates when it takes
+the Scython source code and generates the extension module code. You can take a look at it if you
+want. There's quite a lot of code there. And then the setup.py file, I mentioned this earlier.
+It uses this setup tools extension or alternatively distutils extension class to generate
+an extension module until Scython or the build tools where to find the source code that it
+generated and the Scython source code. And it also uses the include numpy include or the numpy
+header files. So it works pretty similarly to the manual like pyrex build file that we generated
+or recreated. But this would be useful if you're actually going to package your Scython or your
+wrapped Scython code into a module that you can install with Python setup.py install and things
+like that. Okay. So I just explained a bit of that here. The next thing I'll do is I kind of
+already pointed this out, but we can't pass in a one dimensional array of state variables. So I,
+in this case, I had to make the shape 14 by one so we can get outputs. And then the output is
+two dimensional array. So that's not ideal for using with OD int. So our solution for that
+is going to be to just write a little Python wrapper around our auto wrapped C code.
+And all it's going to do is just take, take in the one dimensional array of state variables,
+add an extra dimension so we can pass it into our auto ODs function and then
+squeeze the result so that it's one dimensional again when it comes out. So you can run that.
+And then we can now put in a one dimensional vector and get out a one dimensional vector.
+Also notice our wrapper, we included this time value or time variable in the signature
+because auto wrap didn't add that. We could actually add that with auto wrap. I didn't show that,
+but you can actually specify additional arguments if you want to. It's just a keyword argument to
+the autogen function. And then finally, we can, you know, use auto wrap to generate a function
+that evaluates the Jacobian like we have been doing. And I'll kind of skip this also. Got about
+five, seven minutes. So all we're going to do is compute the Jacobian analytically, call auto wrap
+with the Jacobian as our expression. Everything else is the same. And then write a wrapper around
+it again because it's going to take in, it expects a two dimensional array input. So we're just going
+to add an extra dimension to that. The Jacobian is actually a two dimensional entity, so you don't
+need to change the output at all. And then we can just call it with some random values and make
+sure that the shape is correct. It should be 14 by 14. Okay. And finally, we can use our auto
+ODE's wrapper, the function we made, the wrap, the auto wrapped ODE evaluator, and the Jacobian
+as the D fun. And then generate our plot. It should look similar to what we had before.
+Okay. Any questions about this before I kind of just get to the last part and touch on
+another cool thing about auto wrap? No? Okay. So the last thing we can do is,
+this is actually a very recent feature of SimPy. Auto wrap accepts a custom
+code gen object. And a code gen object is one layer on top of the code printer. So the code
+gen object is responsible for taking the code printer that generates the snippets of expression
+evaluation code and wrapping it into a function and a file. And so the code gen object actually
+takes a custom printer. And we already saw we can implement some custom printing by subclassing
+or, yeah, subclassing a printer and overriding some of its methods to do something. And so
+we're going to use this to actually use a external library. So say we have some library,
+in this case, I'm going to look at the Fast Approx library. This is just a headers library.
+You can go on GitHub and download it. It's already downloaded into the package that we provided.
+But it's just some header files that basically approximate things like power and exponentials.
+I think it's got sinusoids to logarithms. And it just does that with limited precision with respect
+to like math.h. And so I forgot to evaluate this. So this library provides a fast pal function.
+And so the point of this is just to see how we can take an external library
+and use its functions in place of what auto-rap does by default. So auto-rap, if you noticed,
+in the generated code, any of these should be fine. Wrapped code. You see that it,
+that's for the Jacobian. The other one. Wrapped code, zero. You see that it has this pal.
+We're going to replace that with fast pal. And so in order to do that, we're going to have to
+replace how the printer generates the string pal of the base to the exponent.
+And we're also going to have to include the header file that specifies where the fast pal function.
+So we can, I guess we can try to do this as an exercise. It's the last thing. So
+you can take the last few minutes and try to generate a custom printer that will use fast
+pal instead of pal and then instantiate it and then try to print out x cubed and see if it uses
+fast pal and see if it works basically. And then after that, if you get it to work or you don't,
+you can run it and see how it generates the code. So go ahead and spend the last couple minutes trying
+to do that. Okay, never mind. We'll just go ahead and run it. Just so you can see how it works.
+So it's not too bad. All you do is the expression that gets passed into the pal function has a base
+and an exp attribute. And then we can replace instead of pal, we're just going to return
+fast pal with these two things. And instantiate the custom printer, generate an expression x cubed.
+You can see it just prints out as fast pal x three instead of pal x three.
+Okay. And so now we're going to create a code gen. This corresponds basically directly to the
+code printer C 99 code gen. We'll take a code printer and wrap what it generates into a function.
+And then the last thing is we need to add the preprocessor statement that says we need to include
+fast pal.h. If you're not super familiar with C, this is just equivalent to like include math.h
+to give the pal function. Now we're going to use fast pal instead of pal. And so we append
+the preprocessor statement to our code gen object. And then the last thing I promise is specifying
+where this fast procs library is. And so we've put this into a sub folder of our sci-pi 2017
+code gen package. So we can find that by just looking for the code gen vendor in it. And then
+looking for the fast procs directory under that. So you can run that. And finally,
+we use ODEQ. This is the equation that has our dy is equal to our right hand side of the ODE's.
+We use passing our custom code gen. And then we just need to tell it that there's an additional
+include directory. And that should run, I hope. And now you can look at the the code that it
+generated. It should have fast pal instead of pal. And now you can run it. It turns out that the
+limited precision of the fast pal function makes our integration blow up. So you can check that out
+if you want. You can see that if we use our fast pal implementation, the normal math.h pal, you can
+see that there's it's pretty different actually. So when you just evaluate it with some random values,
+you get like pretty pretty big differences between the outputs. So that's why it blew up.
+But anyway, the point was you can use an external library, subclass your printer,
+and pass that into auto wrap. So you can use external libraries and auto wrapped code.
+And it should all just work in quotes. All right, I think that's it for me.
+So we can conclude, I guess. If you want to write some feedback, good feedback on the blue,
+negative feedback on the red, and just pass them up to the top, we'd appreciate that.
+And I don't know if we have anything else to say.
