@@ -1,0 +1,100 @@
+7There is a full list on https://keras.io/optimizers/.
+8Where we have more than two classes. Note that in binary classification were we have two classes,
+say A and B, we actually do a classification (with, for e.g. the logistic function in the output layer)
+in only one of them and get a probability score pA. The probability score of B is then calculated as
+1 − pA.
+
+7.6
+Using a Recurrent Neural Network for Predicting Following Words
+147
+code should be changed to reflect the appropriate file encoding. Note that most text
+editors today distinguish ‘file encoding’ (actual encoding of the file) from ‘encoding’
+(the encoding used to display text for that file in the editor). This approach will work
+for files that are about 70% the size of the available RAM on the computer you are
+using. Since we are talking about plain text files, having an 16GB machine and a
+10GB file will work out well, and 10GB is a lot of plain text (just for comparison, the
+whole English Wikipedia with metadata and page history in plain text has a size of
+14GB). For larger datasets, we would take a different approach, namely to separate
+the big file into chunks and consider them batches, and feed them one by one, but
+the details of such big data processing are beyond the scope of this book.
+Notice that when Python opens and reads a file, it returns it line by line, so we
+are actually accumulating these lines in a list called clean_text_chunks. We
+then glue all of these together in one big string called clean_text, and then cut
+them into individual words and store it in the list called text_as_list, and this
+is what the whole function create_tesla_text_from_file(textfile=
+"tesla.txt") returns. The part (textfile="tesla.txt") means that the
+function create_tesla_text_from_file() expects an argument (which is
+refered to as textfile) but we have provided a default value "tesla.txt". This
+means that if we give a file name, it will use that, otherwise it will se "tesla.txt".
+The final line text_as_list = create_tesla_text_from_file()
+calls the function (with the default file name), and stores what the function has
+returned in the variable text_as_list. Now, we have all of our text in a list,
+where each individual element is a word. Notice that there may be repetitions of
+words here, and that is perfectly fine, as this will be handled by the next part of the
+code:
+distinct_words = set(text_as_list)
+number_of_words = len(distinct_words)
+word2index = dict((w, i) for i, w in enumerate(distinct_words))
+index2word = dict((i, w) for i, w in enumerate(distinct_words))
+The number_of_words simply counts the number of words in the text. The
+word2index creates a dictionary with unique words as keys and their position in
+the text as values, and index2word does the exact opposite, creates a dictionary
+where positions are keys and words are values. Next, we have the following:
+def create_word_indices_for_text(text_as_list):
+input_words = []
+label_word = []
+for i in range(0,len(text_as_list) - context):
+input_words.append((text_as_list[i:i+context]))
+label_word.append((text_as_list[i+context]))
+return input_words, label_word
+input_words,label_word = create_word_indices_for_text(text_as_list)
+Now, it gets interesting. This is a function which creates a list of input words and
+a list of label words from the original text, which has to be in the form of a list of
+
+148
+7
+Recurrent Neural Networks
+individual words. Let us explain a bit of the idea. Suppose we have a tiny text ‘why
+would anyone ever eat anything besides breakfast food?’. Then we want to make an
+‘input’/‘label’ structure for predicting the next word, and we do this by decomposing
+this sentence into an array:
+Input word 1 Input word 2 Input word 3 Label word
+why
+would
+anyone
+ever
+would
+anyone
+ever
+eat
+anyone
+ever
+eat
+anything
+ever
+eat
+anything
+besides
+eat
+anything
+besides
+breakfast
+anything
+besides
+breakfast
+food?
+Note that we have used three input words and declared the next one the label,
+and then shifted for one word and repeated the process. How many input words we
+use is actually defined by the hyperparameter context, and can be changed. The
+function create_word_indices_for_text(text_as_list) takes a text
+in the form of the list, creates the input words list and the label word list and returns
+them both. The next part of the code is
+input_vectors = np.zeros((len(input_words), context, number_of_words), dtype=np.int16)
+vectorized_labels = np.zeros((len(input_words), number_of_words), dtype=np.int16)
+Thiscodeproduces‘blank’tensors,populatedbyzeros.Notethattheterm‘matrix’
+and ‘tensor’ come from mathematics, where they are objects that work with certain
+operations, and are distinct. Computer science treats them both as multidimensional
+arrays. The difference is that computer science places the focus on their structure: if
+we iterate along one dimension, all elements along that dimension (properly called
+‘axis’) have the same shape. The type of entries in the tensors will be int16, but
+you can change this as you wish.

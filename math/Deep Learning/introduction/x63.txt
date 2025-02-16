@@ -1,0 +1,100 @@
+reshaping the array (the initial dimension was (60000, 28, 28)) was actually to add
+the final dimension with 1 component in it. The reason behind this is that as we
+progress through convolutional layers, feature maps will be added in this direction,
+so we need to prepare the tensor to be able to accept it. The third row declares the
+entries in the array to be of type float32. This simply means that they are to be
+treated as decimal numbers. Python would to his automatically, but Numpy, which
+speeds up computation drastically, needs type declarations, so we have to put this
+line in. The fifth line normalizes array entries from a range of 0 to 255 to a range
+between 0 and 1 (to be interpreted as the percentage of grey in a pixel). That takes
+care of the samples, now we must preprocess the labels (digits from 0 to 9) with one
+hot encoding. We do this with the following code:
+c_train_labels = np_utils.to_categorical(train_labels, 10)
+c_test_labels = np_utils.to_categorical(test_labels, 10)
+With that we are finished preprocessing the data and we may continue to build
+the actual convolutional neural network. The following code specifies the layers:
+convnet = Sequential()
+convnet.add(Convolution2D(32, 4, 4, activation=’relu’, input_shape=(28,28,1)))
+convnet.add(MaxPooling2D(pool_size=(2,2)))
+convnet.add(Convolution2D(32, 3, 3, activation=’relu’))
+convnet.add(MaxPooling2D(pool_size=(2,2)))
+convnet.add(Dropout(0.3))
+convnet.add(Flatten())
+convnet.add(Dense(10, activation=’softmax’))
+The first line of this block of code creates a new blank model, and the rest of the
+lines here fill the network specification. The second line adds the first layer, in this
+case it is a convolutional layer, which has to produce 32 feature maps, has ReLU as
+the activation function and has a 4 by 4 receptive field. For the first layer, we also
+have to specify the input dimensions for each training sample that we will be giving
+it. Notice that Keras takes the first dimension of an array to represent individual
+training samples and chops up (parses) the dataset along it, so we do not need to
+worry about giving a (65600, 28, 28, 1) tensor instead of a (60000, 28, 28, 1) after
+we have specified that it takes input_shape=(28, 28, 1), but the code will
+crash if we give it a (60000, 29, 29, 1) or even a (60000, 28, 28) dataset. The third
+row defines a max pooling layer with a pool size of 2 by 2. The next line specifies
+a third layer, which is a convolutional layer, this time with a receptive field of 3 by
+3. Here we do not have to specify the input dimensions, Keras will do that for us.
+Following that we have another max pooling layer, also with a pool size of 2 by 2.
+After this we have a dropout ‘layer’. This is not a real layer, but only a modification
+of the connections between the previous and the following layer. The connections are
+modified to include a dropout rate of 0.3 for all connections. The next line flattens the
+
+6.3
+A Complete Convolutional Network
+129
+tensor. This is a generalized version of the process which we described for translating
+fixed-size matrices into a vector,8 only here it is generalized for arbitrary tensors.
+The flattened vector is then fed into the final layer (the final line of code in this
+block) which is a standard fully-connected feed-forward layer,9 accepting as many
+inputs as there are components in the flattened vector, and outputting 10 values
+(10 output neurons), where each of them will represent one digit and it will output
+the respective probability. Which of them represents which digit is actually defined
+only by the order we had when we did one-hot encoding of the labels.
+The softmax activation function used in the final layer is a version of the logistic
+function for more than two classes, but we will describe it in the later chapters, for
+now just think of it as a logistic function for many classes (we have one class for
+each label 0–9). Now we have a model specified, and we must compile it. Compiling
+a model means that Keras can now deduce and fill in all the necessary details we
+did not specify such as the input size for the second convolutional layer, or the
+dimensionality of the flattened vector. The next line of code compiles the model:
+convnet.compile(loss=’mean_squared_error’, optimizer=’sgd’, metrics=[’accuracy’])
+Here we can see that we have specified the training method to be ’sgd’ which
+is stochastic gradient descent, with MSE as the error function. We have also asked
+the Keras to calculate the accuracy when training. The next line of code trains the
+compiled model:
+convnet.fit(train_samples, c_train_labels, batch_size=32, nb_epoch=20, verbose=1)
+This line of code trains the model using train_samples as training samples
+and c_train_labels as training labels. It also uses a batch size of 32 and trains
+for 20 epochs. The ‘verbose’ flag is set to 1 which means that it will print out details of
+training. And now we continue to the final part of the code which prints the accuracy
+and makes predictions from what it has learned for a new set of data:
+metrics = convnet.evaluate(test_samples, c_test_labels, verbose=1)
+print()
+print("%s: %.2f%%" % (convnet.metrics_names[1], metrics[1]*100))
+predictions = convnet.predict(test_samples)
+The last line is important. Here we have put test_samples, but if you
+want to use it for predictions, you should put some fresh samples here, bearing
+in mind that they have to have exactly the same dimensions as test_samples
+asides from the first dimension, which holds individual training samples and along
+which Keras parses the dataset. The variable predictions will have exactly
+the same dimensionality as c_test_labels asides from the first dimension,
+but the first dimension of test_samples and c_test_labels will be the
+same (since they are predicted labels for that set of samples). You can add a
+line to the end saying print(predictions) to see the actual predictions, or
+8Remember how we can convert a 28 by 28 matrix into a 784-dimensional vector.
+9Keras calls them ‘Dense’.
+
+130
+6
+Convolutional Neural Networks
+print(predictions.shape) to see the dimensionality of the array stored in
+predictions. These 29 lines of code (or 30 if you added one of the last ones)
+form a fully functional convolutional network.
+6.4 Using a Convolutional Network to Classify Text
+Even though the standard setting for a convolutional neural network is pattern recog-
+nition in images, convolutional neural networks can also be used to classify text. A
+standard approach is to use characters instead of words as primitives, and then try to
+map a representation of text on a character level to a higher level idea like positive
+or negative sentiment. This is very interesting since it allows to do a considerable
+amount of language processing from raw text, without any fancy feature engineer-
+ing or a knowledge-heavy logical system—just learning from the letters used. In

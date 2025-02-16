@@ -1,0 +1,100 @@
+this section, we explore the now classical paper by Xiang Zhang, Junbo Zhao and
+Yann LeCun titled Character-level Convolutional Networks for Text Classification
+[3]. The paper itself is considerably more rich than what we present here, but we will
+be showing the bare bones of the approach that the authors used. We do this to help
+the reader to understand how to read research papers, and we strongly encourage the
+reader to download a copy of the paper from arxiv.org/abs/1509.01626
+and compare the text with what we write here. There will be a couple more sections
+like this, all with the same aim, to help the student understand papers we consider
+to be especially interesting. Of course, there are many more seminal and interesting
+papers, but we had to pick only a couple, but we encourage the reader to find more
+and work through them by herself.
+The paper Character-level Convolutional Networks for Text Classification uses
+convolutional neural networks to classify text. One of the tasks the authors explore
+is the Amazon Review Sentiment Analysis. This is the most widely used sentiment
+analysis dataset, and it is available from a variety of sources, perhaps the best one
+being https://www.kaggle.com/bittlingmayer/amazonreviews. You will need a bit of
+formatting to get it to run, and getting this to work will be a great data wrangling
+exercise. Every line in these files has a review together with a label at the beginning.
+Two samples from the raw file are (you can conclude which label is which, there are
+only these two):
+__label__1 Waste of money!
+__label__2 Great book for travelling Europe:
+The authors use a couple of architectures, and we focus on the larger one. The
+network uses 1D convolutional layers. Note that here we will have an example of a
+1D convolutional layer processing a m × n matrix rather than a vector. This is the
+same as processing a vector, since the 1D convolutional layer will behave in the same
+way, except it will take all m rows in a pass instead of a single one as it would if it
+
+6.4
+Using a Convolutional Network to Classify Text
+131
+were a vector. The ‘width’ of the local receptive field remains a hyperparameter, as
+does the stride. The stride here is 1 throughout the paper.
+The first layer of the network used in the paper is of size 1024, with a local
+receptive field (called ‘kernel’ in the paper) of 7, followed by a pooling layer with a
+pool of size 3. This all is called ‘layer 1’ in the paper. The authors consider pooling to
+be a part of the convolutional layer, which is ok, but Keras treats pooling as a separate
+layer, so we will re-enumerate the layers here so that the reader can recreate them
+in Keras. The third and fourth level are the same as the first and second. The fifth,
+sixth, seventh and eighth layer are the same as the first layer (they are convolutional
+layers with no pooling), the ninth layer is a max pooling layer with a pool of 3 (i.e.
+it is like the second layer). The tenth layer is a flattening layer, and the eleventh and
+twelfth layers are fully-connected layers of size 2048. The final layer’s size depends
+on the number of classes used. For sentiment this is ‘positive’ and ‘negative’, so we
+may use a logistic function with a single output neuron (all other layers use ReLUs).
+If we were to have more classes, we would use softmax, but we will do this in the
+later chapters. There are also two dropout layers between the three fully-connected
+layers and special weight initializations, but we ignore them here.
+So now we have explained the task, shown you where to find the dataset with the
+data and labels, and explored the network architecture. What is left to do is to see
+how to feed the data to the network, and for this, we need encoding. The encoding
+is the trickiest part of this paper.10
+Let us see how the authors encode the text. We have already noted that they use a
+character based approach, so we have to specify which characters to use, i.e. which we
+shall leave in the text and which we will remove. The authors substitute all uppercase
+letters for lower ones, and keep all the 26 letters of the English alphabet as valid
+characters. In addition, they keep the ten digits and 33 other characters (including
+brackets, $, #, etc.). They total to 69. They keep also the new line character, often
+denoted as \n. This is the character that the Enter or Return key produces when hit.
+You do not see it directly, but the computer produces a new line. This means that the
+vocabulary size is 69, and we shall denote this by M.
+The length of the particular review as a string is denoted by L. The review (without
+the label part) will be one-hot-encoded (aka 1-of-M encoding) using characters,
+but there is a twist. To make the system behave like human memory, every string
+is reversed, so Waste of money! will become !yenom fo etsaW. To see
+a complete example, imagine we have only allowed a, b, c, d and S as allowed
+characters,11 where the S simply represents whitespace, since leaving it as a space
+would probably cause confusion (and we have used the for Python code indentation).
+Suppose the text of the review is ‘abbaScadd’, and L f inal = 7. First, the reverse it
+to ‘ddacSabba’, and then cut it to have a length of 7, to get ‘ddacSab’. Then we use
+one hot encoding to get an M by L f inal matrix to represent this input sample:
+10Trivially, every paper will have a ‘trickiest part’, and it is your job to learn how to decode this
+part, since it is often the most important part of the paper.
+11Since the whole alphabet will not fit on a page, but you can easily imagine how it will expand to
+the normal English alphabet.
+
+132
+6
+Convolutional Neural Networks
+a 0 0 1 0 0 1 0
+b 0 0 0 0 0 0 1
+c 0 0 0 1 0 0 0
+d 1 1 0 0 0 0 0
+S 0 0 0 0 1 0 0
+If on the other hand we had the review ‘bad’ and L f inal = 7, we would first
+reverse it to ‘dab’ and then put it in the left of the M by L f inal matrix and pad the
+rest of the columns with zeros:
+a 0 1 0 0 0 0 0
+b 0 0 1 0 0 0 0
+c 0 0 0 0 0 0 0
+d 1 0 0 0 0 0 0
+S 0 0 0 0 0 0 0
+But for a convolutional neural networks, all input matrices must have the same
+dimension, so we have an L f inal. All inputs for which L > L f inal are clipped to
+L f inal and all of the inputs for which L f inal > L are padded by adding enough zeros
+to the right side to make their length exactly L f inal. This is why the authors used the
+reversing, so that we loose only the more remote information at the beginning when
+clipping, and not the more recent one at the end.
+We might ask how to make a Keras-friendly dataset from these? The first task is
+to view them as a tensor. This just means to collect all of the M by L f inal matrices

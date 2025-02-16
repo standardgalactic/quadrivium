@@ -1,0 +1,100 @@
+(fff (t)), which will have the task of deciding which parts of the inputs and how much
+of it to include in h(t):
+fff (t) := σ(wfff (x(t) + h(t − 1))).
+(7.11)
+Now, the only thing left for a complete output gate (whose result is actually not
+o(t) but h(t)), we need to multiply the fff (t) by the current cell state squashed between
+−1 and 1:
+h(t) := fff (t) · τ(C(t)).
+(7.12)
+And now finally, we have the complete LSTM. Just a quick final remark: the
+fff (t) can be thought of as a ‘focus’ mechanism which tries to say what is the most
+important part of the cell state. You might think of f (t), ff (t) and fff (t), but the idea
+is that they all participate in different parts and as such, we hope they will take on
+the mechanism we want (‘remember from last unit’, ‘save input’ and ‘focus on this
+part of the cell state’ respectively). Remember that this is only our wild hope, we
+
+7.5
+Long Short-Term Memory
+145
+have no way to ‘force’ this interpretation on the LSTM other than with the sequence
+of calculations or flow of information we have chosen to use. This means that these
+interpretations are metaphorical, and only if we have made a one-in-a-million lucky
+guesstimate will these mechanisms actually coincide with the mechanisms in the
+human brain.
+The LSTMs have been first proposed by Hochreiter and Schmidhuber in 1997
+[2], and they have become one of the most important deep architectures for natural
+language processing, time series analysis and many other sequential tasks. Today
+one of the best reference books on recurrent neural networks is [5], and we highly
+recommend it for any reader that wishes to specialize in these amazing architectures.
+7.6 Using a Recurrent Neural Network for Predicting Following
+Words
+In this section, we give a practical example of a simple recurrent neural network
+used for predicting next words from a text. This sort of task is highly flexible, since
+it allows not just predictions but also question answering—the (single word) answer
+is simply the next word in the sequence. The example we use is a modification of
+an example from [6], with ample comments and explanations. Some portions of
+the original code have been modified to make the code easier to understand. As we
+explained in the previous section, this is a working Python 3 code, but you will need
+to install all dependencies. You should also be able to follow the ideas from the
+code on chapter, but to see the subtleties, one needs to have the actual code on the
+computer.6 We start by importing the Python libraries and we will be needing:
+from keras.layers import Dense, Activation
+from keras.layers.recurrent import SimpleRNN
+from keras.models import Sequential
+import numpy as np
+The next thing is to define hyperparameters:
+hidden_neurons = 50
+my_optimizer ="sgd"
+batch_size = 60
+error_function = "mean_squared_error"
+output_nonlinearity = "softmax"
+cycles = 5
+epochs_per_cycle = 3
+context = 3
+6Which you can get either from the book’s GitHub repository, or by typing in all the code in this
+section in one simple file (.txt) and rename it to change its extension to .py.
+
+146
+7
+Recurrent Neural Networks
+Let us take a minute and see what we are using. The variable hidden_neurons
+simply states how many hidden units are we going to use. We use Elman units
+here, so this is the same as the number of feedback loops on the hidden layer. The
+variable optimizer defines which Keras optimizer we are going to use, and in this
+case it is the stochastic gradient descent, but there are others,7 and we recommend to
+experiment with several optimizers just to get a feel. Note that "sgd" is a Keras name
+for it, so you must type it exactly like this, not "SGD", nor "stochastic_GD", nor
+anything similar. The batch_size simply says how many examples we will use for
+asingleiterationofthestochasticgradientdescent.Thevariable error_function
+= "mean_squared_error" tells Keras to use the MSE we have been using
+before.
+But now we come to the activation function output_nonlinearity, and we
+see something we have not seen before, the softmax activation function or nonlin-
+earity, with its Keras name "softmax". The softmax function is defined as
+ζ(z j) :=
+ez j
+�N
+n=1 ezk , j = 1, . . . , N.
+(7.13)
+The softmax is quite a useful function: it basically transforms a vector z with arbitrary
+real values to a vector with values ranging from 0 to 1, and they are such that they
+all add up to 1. This is why the softmax is very often used in the final layer of
+a deep neural network used for multiclass classification8 to get the output which
+can be a probability proxy for the classes. It can be shown that if the vector z has
+only two components, z0 and z1 (which would simulate binary classification) would
+reduce exactly to the logistic function classification, only with the weight being
+wσ = wζ1 − wζ0. We can now continue to the next part of the SRN code, bearing in
+mind that the rest of the parameters we will comment when they become active in
+the code:
+def create_tesla_text_from_file(textfile="tesla.txt"):
+clean_text_chunks = []
+with open(textfile, ’r’, encoding=’utf-8’) as text:
+for line in text:
+clean_text_chunks.append(line)
+clean_text = ("".join(clean_text_chunks)).lower()
+text_as_list = clean_text.split()
+return text_as_list
+text_as_list = create_tesla_text_from_file()
+This part of the code opens a plain text file tesla.txt, which will be used for
+training and predicting. This file should be encoded in utf-8 or the utf-8 in the

@@ -1,0 +1,100 @@
+In the remainder of this section, we describe the dataset used in the experiments, as well as the models whose adversarial robustnesswas evaluated. Additionally, we specify the threat models consideredand detail the attacks used under each scenario. We also clarify how the metrics used to compare the different models are computed.
+15.4.2.1 Dataset and Target Models
+All the experiments were conducted on the CIFAR-10dataset  [31], which consists of RGB images divided into 10 classes. The test set, which was used to generate adversarial examples, has 10000 images equally distributed across classes (i.e., the dataset is balanced). The original pixel values are in , but all models operate with pixels modeled as real numbers. Thus, a pre-processing step is applied across models to normalize the pixel values to the interval 
+We evaluated models designed by two NE approaches, DENSER  [3] and NSGA-Net  [35], and compared them against one handcrafted architecture, WRN-28-10  [65]. This choice was mainly based on two criteria: firstly, models had to be directly trained on CIFAR-10, and secondly, pre-trained models (i.e., network weights) had to be publicly available, so as to introduce as little biasas possible from our end.
+All the pre-trained models were used directly, without any form of re-training or tuning. Nevertheless, we describe some relevant differences in the training procedures of each model in what follows. These design choices were made by the original authors of the NE approaches or by the authors of the Model Zoo of RobustBench  [10], the source of the pre-trained WRN-28-10 network used in our experiments.
+The WRN-28-10 architecture  [65], a manually designed Wide Residual Network, was used as the baseline model in our experiments for multiple reasons: its performance on CIFAR-10is similar to that of the remaining models under evaluation, the work which proposes NSGA-Net  [35] also uses it as a baseline, and some of the defenses from the RobustBench leaderboard  [10] are based on this architecture. As previously mentioned, we used the pre-trained model from the Model Zoo of RobustBench,2which was trained with the 50000 training images of CIFAR-10, without any data augmentation. The only pre-processing applied to the data is the conversion of the pixel values from to 
+In what concerns DENSER  [3], we selected the network that achieved the best accuracy on the CIFAR-10test set over 10 evolutionary runs. This architecture consists of 10 convolutional layersand 2 pooling layers, followed by 2 fully connected layers  [3]. The models resulting from 5 independent training runs of this network are publicly available,3but, again, we solely attacked the one with the highest test accuracy. In these training runs, the original work used the complete training set of CIFAR-10and applied a data augmentationmethod which includes padding, horizontal flipping, and random crops (similar to what is done in Suganuma et al. [50]). In addition to converting the pixel values to real numbers, the data is expected to be centered around zero before being fed to the first layer of the network. Following Assunção et al. [3], this is accomplished through the removal of the mean pixel value per location and color channel (calculated on the entire training set).
+As far as the NSGA-Net approach  [35] is concerned, we conducted experiments with a pre-trained model (NSGA-M) from a macro search space of networks with 3 phases and fixed changes in spatial resolution between them. Moreover, each phase had a maximum of 6 nodes, each composed of the same sequence of operations. In addition to that model, we also attacked three variants of an architecture obtained by using the cells (normal and reduction) found by NSGA-Net on the NASNet micro search space  [66] (NSGA-mA, NSGA-mB, and NSGA-mC with an increasingly higher number of model parameters, as shown in Table  15.1). In the original work, cutout  [13] was used to train these models, together with a data augmentationstrategy similar to the one adopted by DENSER, which includes padding, random crops, and horizontal flipping. For the three models from the micro search space, the scheduled path dropout technique  [66] was also adopted, together with an auxiliary head classifier, whose loss is aggregated with the loss from the main network  [35]. After converting the pixel values to real numbers, the data is expected to be normalized using pre-calculated means and standard deviations for each color channel. Further details about the architectures and training procedure can be found in the original paper  [35] and the source code repository.4
+Table  15.1presents an overview of the size of the models used in our experiments, as given by the number of trainable parameters. We reiterate that all models used a standard training procedure and no defensive method against adversarial exampleswas applied.
+Table 15.1
+Overview of the models in terms of number of parameters and accuracy on the clean examples of the CIFAR-10test set
+Model
+No. of parameters
+Clean accuracy (%)
+WRN-28-10
+36.48 M
+94.78
+DENSER
+10.81 M
+93.70
+NSGA-M
+3.37 M
+96.27
+NSGA-mA
+1.97 M
+97.57
+NSGA-mB
+2.20 M
+97.78
+NSGA-mC
+4.05 M
+97.98
+15.4.2.2 Threat Models and Adversarial Attacks
+Weconsidered the scenario in which an attacker has full access to the target model and performed white-box attacks, a choice mainly motivated by the fact that all models are publicly available and details about their training are easily accessible.
+Furthermore, we considered untargeted attacks, where the adversarial perturbations were bounded by under the -norm or, in the case of the -norm, by . These perturbation budgets were chosen based on threat modelsused in previous works, namely in the RobustBench benchmark  [10].
+Instead of finding minimal adversarial perturbations, we focused on attacks that craft adversarial examplesby maximizing the loss with respect to the true label while solving the constrained optimization problem. Therefore, we attacked the chosen models using different configurations (number of iterations and number of random initializations) of the following attacks:
+the FGSM and the FGM attacks, for the and the threat model, respectively;
+the BIM attack, for both threat models;
+the PGD attack, for the threat model.
+For the iterative attacks (i.e., BIM and PGD), we set the step size to . We used the Python implementations of the attacks by the Adversarial RobustnessToolbox (ART) library  [41].
+15.4.2.3 Metrics and Baseline Performance
+Table  15.1shows the accuracy of the models on the clean examples of the CIFAR-10test set. For a fair comparison, adversarial exampleswere only generated on samples that, before being perturbed, are correctly classified by the model under evaluation. Consequently, the higher the clean accuracy of a model (e.g., NSGA-mC), the larger the number of generated attacks, i.e., the number of images that are adversarially perturbed. In an untargeted setting, an attack succeeds if the model produces a misclassification, regardless of the predicted class. For this reason, a sample incorrectly classified can be considered a successful attack where no adversarial perturbation had to be added to the original input. Notwithstanding, the models’ accuracy on adversarially generated samples is reported taking the complete test set (10000 images) into account.
+15.4.3 Experimental Results for the Standard Scenario
+We first look into the results for the scenario where the attacks operated in , and any additional model-specific pre-processing was only applied after the adversarial perturbations were added to the images. Table  15.2shows the accuracy of the models on the images with perturbations. We present the results for the FGSM attack, for FGSM with 10 random initializations (FGSM-10), and for the BIM attack with 10 and 50 iterations (BIM-10 and BIM-50, respectively).
+A brief perusal of the results reveals that the DENSER model is the most susceptible to attacks. Even in the case of single-step attacks like FGSM, the accuracy falls below 10% when random restarts are incorporated. On the other hand, the models designed by NSGA-Net on the NASNet search space are the most resistant to these attacks, even achieving higher accuracy on the adversarially perturbed images than the baseline model. However, the four NSGA-Net models are also the ones where the most drastic drops in accuracy are observed when random restarts are incorporated in FGSM.
+Despite these observations, the accuracy of all models eventually drops to zero under this threat modelif we resort to attacks with enough iterations (BIM-50). If robustness is not explicitly included in the evolutionary process, these NE approaches do not seem to find highly accurate models that are also robust against this type of perturbations.
+Table  15.2also shows the adversarial accuracy of the models when attacked with -bounded perturbations. We present the results for the FGM attack, for the BIM attack with 10, 50, and 100 steps (BIM-10, BIM-50, and BIM-100, respectively), as well as for the PGD attack with 10 random restarts and 50 iterations (PGD-50-10).
+Table 15.2
+Accuracy on the CIFAR-10test set when the attacks operate in . The highest reported accuracy under each attack is in bold
+WRN-28-10 (%)
+DENSER (%)
+NSGA-M (%)
+NSGA-mA (%)
+NSGA-mB (%)
+NSGA-mC (%)
+FGSM
+28.85
+16.37
+35.08
+52.09
+51.86
+55.06
+FGSM-10
+11.03
+6.19
+9.28
+25.02
+22.49
+26.92
+BIM-10
+0.02
+0.00
+0.00
+0.16
+0.00
+0.02
+BIM-50
+0.00
+0.00
+0.00
+0.00
+0.00
+0.00
+FGM
+47.61
+44.76
+48.51
+61.34
+60.61
+64.06
+BIM-10
+2.01
+30.76
+0.23
+3.04
+0.73
+2.57
+BIM-50
+0.16
+24.13

@@ -1,0 +1,100 @@
+Notice that the price per kilogram is actually similar to the neural network weight.
+To see this think of how you would find the price per kilogram of the meal compo-
+nents: you make a guess on the prices per kilogram for the components, multiply
+with the quantity you got today and compare their sum to the price you have actually
+paid. You will see that you are off by e.g. 6e. Now you must find out which com-
+ponents are ‘off’. You could stipulate that each component is off by 2e and then
+readjust your stipulated price per kilogram by the 2e and wait for you next meal to
+see whether it will be better now. Of course you could have also stipulated that the
+components are off by 3, 2, 1e respectively, and either way, you would have to wait
+for your next meal with your new price per kilograms and try again to see whether
+you will be off by a lesser or greater amount. Of course, you want to correct your
+6This is a modified version of an example given by Geoffrey Hinton.
+7Forexample,ifweonlybuychicken,thenitwouldbeeasytogetthepriceofthechickenanalytically
+as total = price · quantity, and we get price =
+total
+quantity .
+
+88
+4
+Feedforward Neural Networks
+estimations so that you are off by less and less as the meals pass, and hopefully, this
+will lead you to a good approximation.
+Note that there exists a true price per kilogram but we do not know it, and our
+method is trying to discover it just by measuring how much we miss the total price.
+There is a certain ‘indirectness’ in this procedure and this is highly useful and the
+essence of neural networks. Once, we find our good approximations, we will be
+able to calculate with appropriate precision the total price of all of our future meals,
+without needing to find out the actual prices.8
+Let us work a bit more this example. Each meal has the following general form:
+total = ppkchicken · quantchicken + ppkzucchini · quantzucchini + ppkrice · quantrice
+where total is the total price, the quant is the quantity and the ppk is the price per
+kilogram for each component. Each meal has a total price we know, and the quantities
+we know. So each meal places a linear constraint on the ppk-s. But with only this
+we cannot solve it. If we plug in this formula our initial (or subsequenlty corrected)
+‘guesstimate’9 we will get also the predicted value, and by comparing it with the true
+(target) total value we will also get an error value which will tell us by how much
+we missed. If after each meal we miss by less, we are doing a great job.
+Let us imagine that the true price is ppkchicken = 10, ppkzucchini = 3, and ppkrice =
+5. Let us start with a guesstimate of ppkchicken = 6, ppkzucchini = 3, and ppkrice = 3.
+We know we bought 0.23kg of chicken, 0.15kg of zucchini and 0.27kg of rice and
+that we paid 3e in total. By multiplying our guessed prices with the quantities we
+get 1.38, 0.45 and 0.81, which totals to 2.64, which is 0.35 less than the true price.
+This value is called the residual error, and we want to minimize it over the course
+of future iterations (meals), so we need to distribute the residual error to the ppk-s.
+We do this simply by changing the ppk-s by:
+�ppki = 1
+n · quanti(t − y)
+where i ∈ {chicken, zucchini, rice}, n is the cardinality (number of elements) of this
+set (i.e. 3), quanti is the quantity of i, t is the total price and y is the predicted
+total price. This is known as the delta rule. When we rewrite this in standard neural
+network notation it looks like:
+�wi = ηxi(t − y)
+8In practical terms this might seem far more complicated than simply asking the person serving
+you lunch the price per kilogram for components, but you can imagine that the person is the soup
+vendor from the soup kitchen from the TV show Seinfeld (116th episode, or S07E06).
+9A guessed estimate. We use this term just to note that for now, we should keep things intuitive an
+not guess an initial value of, e.g. 12000, 4533233456, 0.0000123, not because it will be impossible
+to solve it, but because it will need much more steps to assume a form where we could see the
+regularities appear.
+
+4.4
+The Delta Rule
+89
+where wi is a weight, xi is the input and t − y is the residual error. The η is called
+the learning rate. Its default value should be 1
+n, but there is no constraint placed
+on it so values like 10 are perfectly ok to use. In practice, however, we want the
+values for η to be small, and usually of the form 10−n, meaning 0.1, 0.01, etc., but
+values such as 0.03 or 0.0006 are also used. The learning rate is an example of a
+hyperparameter, which are parameters in the neural network which cannot be learned
+like regular parameters (like weights and biases) but have to be adjusted by hand.
+Another example of a hyperparameter is the hidden layer size.
+The learning rate controls how much of the residual error is handed down to
+the individual weights to be updated. The proportional distribution of 1
+n is not that
+important if the learning rate is close to that number. For example, if n = 90 it is
+virtually the same if one uses the proportional learning rate of 1
+90 or a learning rate
+of 0.01. From a practical point of view, it is best to use a learning rate close to the
+proportional learning rate or smaller. The intuition behind using a smaller learning
+rate than the proportional is to update the weights only a bit in the right direction.
+This has two effects: (i) the learning takes longer and (ii) the learning is much more
+precise. The learning takes longer since with a smaller learning rate each update
+make only a part of the change needed, and it is more precise since it is much less
+likely to be overinfluenced by one learning step. We will make this more clear later.
+4.5 From the Logistic Neuron to Backpropagation
+The delta rule as defined above works for a simple neuron called the linear neuron,
+which is even simpler than the binary threshold unit:
+y =
+�
+i
+wixi = w⊤x
+To make the delta rule work, we will be needing a function which should measure
+if we got the result right, and if not, by how much we missed. This is usually called
+an error function or cost function and traditionally denoted by E(x) or by J(x). We
+will be using the mean squared error:
+E = 1
+2
+�
+n∈train

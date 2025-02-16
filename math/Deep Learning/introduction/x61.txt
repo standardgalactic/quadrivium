@@ -1,0 +1,100 @@
+in −1, 0 and 11 components to get the output vector to have the same size as the
+input vector is called padding. The additional components usually get values 0, but it
+sometimes makes sense to take either the values of the first and last components of the
+image or the average of all values. The important thing when padding is to think how
+not to trick the convolutional layer in learning regularities of the padding. Padding
+(and some other concepts we discussed) will become much more intuitive when we
+switch from flattened vectors to non-flattened images. But before we continue, one
+final comment. We moved the local receptive field one component at a time, but we
+could move it by two or more. We could even experiment with dynamically changing
+by how much we move, by moving quicker around the ends and slower towards the
+centre of the vector. The parameter which says by how many components we move
+the receptive field between taking inputs is called the stride of the convolutional
+layer.
+Let us review the situation in 2D, as if we did not flatten the image into a vector.
+This is the classical setting for convolutional layers, and such layers are called 2D
+convolutional layers or planar convolutional layers. If we were to use 3D, we would
+call it spatial, and for 4D or more hyperspatial. In the literature is common to refer
+to the 2D convolutional layer as ‘spatial’, but this makes one’s spider sense tingle.
+The logistic regression (local perceptive field) inputs now should be also 2D, and
+this is the reason why we most often use 4, 9 and 16, since they are squares of 2 by
+2, 3 by 3 and 4 by 4 respectively. The stride now represents a move of this square
+on the image, staring from left, going to the right and after it is finished, one row
+down, move all the way to the left without scanning, and start scanning from left to
+right (you can see the steps of this process on the top part of Fig.6.2). One thing
+that becomes obvious is that now we will get less outputs. If we use a 3 by 3 local
+Fig.6.2 2D Convolutional layer
+
+124
+6
+Convolutional Neural Networks
+receptive field to scan a 10 by 10 image, as the output from the local receptive field we
+will get an 8 by 8 array (see bottom part of Fig.6.2). This completes a convolutional
+layer.
+A convolutional neural network has multiple layers. Imagine a convolutional neu-
+ral network consisting of three convolutional layers and one fully connected layer.
+Suppose it will be processing an image of size 10 and that all three layers have a
+local receptive field of 3 by 3. Its task is to decide whether a picture has a car in it or
+not. Let us see how the network works.
+The first layer takes a 10 by 10 image, produces an output (it has randomly initial-
+ized weights and bias) of size 8 by 8, which is then given to the second convolutional
+layer (which has its own local receptive field with randomly initialized weights and
+biases but we have decided to have it also 3 by 3), which produces an output of
+size 6 by 6, and this is given to the third layer (which has a third local receptive
+field). This third convolutional layer produces a 4 by 4 image. We then flatten it to a
+16-dimensional vector and feed it to a standard fully-connected layer which has one
+output neuron and uses a logistic function as its nonlinearity. This is actually another
+logistic regression in disguise, but it could have had more than one output neuron,
+and then it would not be a proper logistic regression, so we call it a fully-connected
+layer of size 1. The input layer size is not specified and it is assumed to be equal to
+the output of the previous layer. Then, since it uses the logistic function, it produces
+an output between 0 and 1 and compares its output to the image label. The error is
+calculated and backpropagated, and this is repeated for every image in the dataset
+which completes the training of the network.
+Training a convolutional layer means training the local receptive fields of the
+layers (and weights and biases of fully-connected layers). It has a single bias, and
+small number of weights (equal to the number of units in the local receptive field).
+In this respect, it is just like a small logistic regression, and that is what makes
+convolutional networks quick to train–they have only a small number of parameters
+to learn. The main structural difference between a logistic regression and a local
+receptive field is that in a local receptive field we can use any activation function
+and in logistic regression we are supposed to use the logistic function (if we want to
+call it ‘logistic regression’). The activation function which is most often used is the
+rectified linear unit or ReLU. A ReLU of x is simply the maximal value of 0 and x,
+meaning that it will return a 0 if the input is negative or the raw input otherwise. In
+symbols:
+ρ(x) = max(x, 0)
+(6.1)
+Padding in 2D is simply a ‘frame’ of n pixels around the image. Note that it does
+not make much sense to use a padding of say 3 (pixels) if we use only a 3 by 3 local
+receptive field, since it will only go one pixel over the image border.
+
+6.2
+Feature Maps and Pooling
+125
+6.2 Feature Maps and Pooling
+Now that we know how a convolutional neural network works, we can use a trick.
+Recall that a convolutional layer scans a 10 by 10 image with an e.g. 3 by 3 local
+receptive field (9 weights, 1 bias) and builds a new 8 by 8 ‘image’ as the output.
+Imagine also that the image has three channels for colours. How would you process
+an image with three channels? A natural answer is to run over the same receptive
+field (which has trainable but randomly initialized weights and bias). This is a good
+strategy. But what if we invert it, and instead of using one local receptive field over
+threechannels,wewanttousefivelocalreceptivefieldsoveronechannel?Remember
+that a local receptive field is defined by its size and by its weights and bias. The idea
+here is to keep the same size but initialize the other receptive fields with different
+weights and biases.
+This means that when they scan a 10 by 10 3-channel image, they will construct
+15 8 by 8 output images. These images are called feature maps. It is like having
+an 8 by 8 image with 15 channels. This is very useful since only one feature map
+which learns a good representation (e.g. eyes and noses on pictures of dogs) will
+boost considerably the overall accuracy of the network3 (suppose that the task for
+the whole network was to classify images of dogs and various non-dog objects (i.e.
+detecting a dog in an image)).
+One of the main ideas here is that a 10 by 10 3-channel image turns into an 8 by 8
+15-channel image. The input image was transformed into a smaller but deeper object,
+and this will happen in every convolutional layer.4 Getting the image smaller, means
+packing the information in a more compact (but deeper) representation. In our quest
+for compactness, we may add a new layer after or before a convolutional layer. This
+new layer is called a max-pooling layer. The max-pooling layer takes a pool size as
+a hyperparameter, usually 2 by 2. It then processes its input image in the following

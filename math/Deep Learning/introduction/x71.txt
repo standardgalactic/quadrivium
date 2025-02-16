@@ -1,0 +1,100 @@
+Let us discuss tensor dimensions a bit. The tensor input_vectors is techni-
+cally called a third-order tensor, but in reality this is just a ‘matrix’ with three dimen-
+sions,orsimplya3Darray.Tounderstandthedimensionalityoftheinput_vectors
+tensor note that first we have three words (i.e. a number of words defined by
+context) to make a one-hot encoding of. Notice that we are technically using
+a one-hot encoding and not a bag of words, since we have only kept distinct words
+from the text. Since we have a one-hot encoding, this would expand a second dimen-
+sion. This takes care of the context and number_of_words dimensions of the
+tensor, and third one (in the code it is the first one, len(input_words)) is actu-
+ally here just to bundle all inputs together, like we had a matrix holding all input
+vectors in the previous chapters. The vectorized_labels is the same, only
+here we do not have three or n words specified by the variable context, but only
+a single one, the label word, so we need one less dimension in the tensor. Since we
+have initialized two blank tensors, we need something to put the 1s in the appropriate
+places, and the next part of the code does just that which is as follows:
+
+7.6
+Using a Recurrent Neural Network for Predicting Following Words
+149
+for i, input_w in enumerate(input_words):
+for j, w in enumerate(input_w):
+input_vectors[i, j, word2index[w]] = 1
+vectorized_labels[i, word2index[label_word[i]]] = 1
+It is a bit hard, but try to figure out for yourself how this code ‘crawls’ the tensors
+and puts the 1s where they should be.9 Now, we have cleared all the messy parts,
+and the next part of the code actually specifies the complete simple recurrent neural
+network with Keras functions.
+model = Sequential()
+model.add(SimpleRNN(hidden_neurons, return_sequences=False,
+input_shape=(context,number_of_words), unroll=True))
+model.add(Dense(number_of_words))
+model.add(Activation(output_nonlinearity))
+model.compile(loss=error_function, optimizer=my_optimizer)
+Most of the things that can be tweaked here are actually placed in the hyperparam-
+eters. No change should be done in this part, except perhaps add a number of new
+layers, which is done by duplicating the line or lines specifying the layer, in particular
+the second line, or the third and fourth lines. The only thing left to do is to see how
+well does the model work, and what does it produce as output. This is done by the
+final part of the code which is as follows:
+for cycle in range(cycles):
+print("> − <" * 50)
+print("Cycle: %d" % (cycle+1))
+model.fit(input_vectors, vectorized_labels, batch_size = batch_size,
+epochs = epochs_per_cycle)
+test_index = np.random.randint(len(input_words))
+test_words = input_words[test_index]
+print("Generating test from test index %s with words %s:" % (test_index,
+test_words))
+input_for_test = np.zeros((1, context, number_of_words))
+for i, w in enumerate(test_words):
+input_for_test[0, i, word2index[w]] = 1
+predictions_all_matrix = model.predict(input_for_test, verbose = 0)[0]
+predicted_word = index2word[np.argmax(predictions_all_matrix)]
+print("THE COMPLETE RESULTING SENTENCE IS: %s %s" % ("".join(test_words),
+predicted_word))
+print()
+This part of the code trains and tests the complete SRN. Testing would usually be
+predicting a part of data we held out (test set) and then measuring accuracy. But here
+9This is perhaps the single most challenging task in this book, but do not skip it since it will be
+extremely useful for a good understanding, and it is just four lines of code.
+
+150
+7
+Recurrent Neural Networks
+we have the predict-next setting, which does not have labels, so we have to adopt a
+different approach. The idea is to train and test in a cycle. A cycle is composed of a
+training session (with a number of epochs) and then we generate a test sentence from
+the text and see whether the word which the network gives makes sense when placed
+after the words from the text. This completes one cycle. These cycles are cumulative,
+and sentences will become more and more meaningful after each successive cycle.
+In the hyperparameters we have specified that we will train for 5 cycles, each having
+3 epochs.
+Let us make a brief remark on what we have done. For computational efficiency,
+most tools used for the predict-next make use of the Markov assumption. Informally,
+the Markov assumption means that we simplify a probability which would have
+to consider all steps from the beginning of time, P(sn|sn−1, sn−2, sn−3, . . .), to a
+probability which just considers the previous step P(sn|sn−1). If a system takes this
+computational detour it is said to ‘use the Markov assumption’. If a process turns out
+to be such that it really does not matter anything but the preceding state in time, it is
+said to be a Markov process. Language production is not a Markov process. Suppose
+you are a classifier and you have a ‘training’ sentence: ‘We need to remember what is
+important in life: friends, waffles, work. Or waffles, friends, work. Does not matter,
+but work is third’. If it were a Markov process, and you could make the Markov
+assumption without a big loss in functionality, you would be needing just one word
+and you could tell which one follows. If you have ‘Does’, you can tell that in you
+training set, after this it always comes ‘not’, and you would be right. But if you were
+given ‘work’, you would have more trouble, but you could get away with a probability
+distribution. But what if you did not have a predict-next setting, but your task was to
+identify when the speaker got confused (i.e. when you try to dig into meaning). Then,
+you would need all of the previous words for comparison. At many times you can
+cut corners a bit and make the Markov assumption for non-Markov processes and
+get away with it, but the point is that unlike many other machine learning algorithms,
+recurrent neural networks do no have to make the Markov assumption, since they
+are fully capable of handling many time steps, not just the last one.
+There is one last thing we need to comment before leaving recurrent neural net-
+works, an this is how backpropagation works. Backpropagation in recurrent neural
+networks is called backpropagation through time (BPTT). In our code, we did not
+have to worry about backpropagation since TensorFlow, which is the default back-
+end for Keras calculated the gradients for us automatically, but let us see what is
+happening under the hood. Remember that the goal in backpropagation is to calcu-

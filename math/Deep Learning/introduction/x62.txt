@@ -1,0 +1,100 @@
+way: divide the image in 2 by 2 areas (like a grid), and take from each four-pixel
+pool the pixel with the maximal value. Compose these pixels into a new image, with
+the same order as the original image. A 2 by 2 max-pooling layer produces an image
+that is half the size of the original image (it does not increase the channel number).
+Of course, instead of the maximum, a different pixel selection or creation can be
+devised, such as the average of the four pixels, the minimum, and so on.
+The idea behind max-pooling is that important information in a picture is seldom
+contained in adjacent pixels (this accounts for the ‘pick-one-out-of-four’ part), and it
+is often contained in darker pixels (this accounts for using the max). You may notice
+right away that this is a very strong assumption which may not be generally valid.
+It must be said that max-pooling is rarely used on images themselves (although it
+can be used), but rather on learned feature maps, which are images but they are very
+3Here you might notice how important is weight initialization. We do have some techniques that
+are better than random initialization, but to find a good weight initialization strategy is an important
+open research problem.
+4If using padding we will keep the same size, but still expand the depth. Padding is useful when
+there is possibly important information on the edges of the image.
+
+126
+6
+Convolutional Neural Networks
+peculiar images. You can try to modify the code in the section below to print out
+feature maps which come out of a convolutional layer.5 You can think of max-pooling
+in terms of decreasing the screen resolution. In general, if you recognize a dog on
+a 1200 by 1600 image, you will probably recognize him on a grainer 600 by 800
+image.
+Usually a convolutional neural network is composed of a convolutional layer
+followed by a max-pooling layer, followed by a convolutional layer, and so on. As
+the image goes through the network, after a number of layers, we get a small image
+with a lot of channels. Then we can flatten this to a vector and use a simple logistic
+regression at the end to extract which parts are relevant for our classification problem.
+The logistic regression (this time with the logistic function) will pick out which parts
+of the representation will be used for classification and create a result which will be
+compared with the target and then the error will be backpropagated. This forms a
+complete convolutional neural network. A simple but fully functional convolutional
+network with four layers is shown in Fig.6.3.
+Whyareconvolutionalneuralnetworkseasiertotrain?Theanswerisinthenumber
+of parameters used. A five-layer deep fully connected neural network for MNIST has
+alotofweights,6 throughwhichweneedtobackpropagate.Afive-layerconvolutional
+network (containing only convolutional layers) with all receptive fields of 3 by 3 has
+45 weight and 5 biases. Notice that this configuration can be used for arbitrarily large
+images: we do not have to expand the input layer (which is a convolutional layer in
+our case), but we will need more convolutional layers then to shrink the image. Even
+if we add feature maps, the training of each feature map is independent of the other,
+i.e. we can train it in parallel. This makes the process not only computationally fast,
+but we can also split it across many processors. By contrast, to backpropagate errors
+Fig. 6.3 A convolutional neural network with a convolutional layer, a max-pooling layer, a
+flattening layer and a fully connected layer with one neuron
+5You have everything you need in this book to get the array (tensor) with the feature maps, and
+even to squash it to 2D, but you might have to search the Internet to find out how to visualize the
+tensor as an image. Consider it a good (but advanced) Python exercise.
+6If it has 100 neurons per layer, with only one output neuron, that makes the total of 784 · 100 +
+100 · 100 + 100 · 100 + 100 · 1 = 98500 parameters, and that is without the biases!.
+
+6.2
+Feature Maps and Pooling
+127
+through a regular feed-forward fully connected network is highly sequential, since
+we need to have the derivatives of the outer layers to compute the derivatives of the
+inner layers.
+6.3 A Complete Convolutional Network
+We now show a complete convolutional neural network in Python. We are using the
+library Keras, which gives us the ability to build neural networks from components,
+without having to worry too much about dimensionality. All the code here should
+be placed in one Python file and then executed in the terminal or command prompt.
+There are other ways to run Python code, and feel free to experiment with them—
+nothing will break. The first part of the code which should be placed in the file
+handles the imports from Keras and Numpy:
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Activation, Flatten
+from keras.layers import Convolution2D, MaxPooling2D
+from keras.utils import np_utils
+from keras.datasets import mnist
+(train_samples, train_labels), (test_samples, test_labels) = mnist.load_data()
+You might notice the we are importing MNIST from the Keras repository. The
+last line of this code loads training samples, training labels, test samples and test
+labels in four different variables. Most of the code in this Python file will actually be
+used for formatting (or preprocessing) MNIST data to meed the demands which it
+must fulfill to be fed into a convolutional neural network. The next part of the code
+processes the MNIST images:
+train_samples = train_samples.reshape(train_samples.shape [0], 28, 28, 1)
+test_samples = test_samples.reshape(test_samples.shape [0], 28, 28, 1)
+train_samples = train_samples.astype(’float32’)
+test_samples = test_samples.astype(’float32’)
+train_samples = train_samples/255
+test_samples = test_samples/255
+First notice that the code is actually duplicated: all operations are performed on
+both the training set and the testing set, and we will comment only one (we will
+talk about the training set), the other one functions in the same manner. The first
+line of this block of code reshapes the array which holds MNIST. The result of
+this reshaping is a (60000, 28, 28, 1)-dimensional array.7 The first dimension is
+simply the number of samples, the second and the third are here to represent the 28
+7Which is, mathematically speaking, a tensor.
+
+128
+6
+Convolutional Neural Networks
+by 28 dimension of the images, and the last one is the channel. It could be RGB,
+but MNIST is in greyscale, so this might seem redundant, but the whole point of

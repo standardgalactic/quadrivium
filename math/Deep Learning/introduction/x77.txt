@@ -1,0 +1,100 @@
+autoencoder.save_weights("all_AE_weights.h5")
+The resulting weight matrix is stored in the variable deeply_encoded_MNIST
+_weight_matrix, which contains the trained weights for the middlemost layer
+of the stacked autoencoder, and this should afterwards be fed to a fully connected
+neural network together with the labels (the ones we dumped). This weight matrix
+is a distributed representation of the original dataset. A copy of all weights is also
+saved for later use in a H5 file. We have also added a variable results to make
+predictions with the autoencoder, but this is mainly used for assessing autoencoder
+quality, and not for actual predictions.
+8.4 Recreating the Cat Paper
+In this section, we recreate the idea presented in the famous ‘cat paper’, with the
+official title Building High-level Features Using Large Scale Unsupervised Learning
+[7]. We will present a simplification to better delineate the subtleties of this amazing
+paper. This paper became famous since the authors made a neural network which
+was capable of learning to recognize cats just by watching YouTube videos. But
+what does that mean? Let us take a step back. The ‘watching’ means simply that the
+authors sampled frames from 10 million YouTube videos, and took a number of 200
+by 200 images in RGB. Now, the tricky part: what does it mean to ‘recognize a cat’?
+Surely it could mean that they build a classifier which was trained on images of cats
+and then it classified cats. But the authors did not do this. They gave the network an
+unlabelled dataset, and then tested it against images of cats from ImageNet (negative
+samples were just random images not containing cats). The network was trained by
+learning to reconstruct inputs (it means that the number of output neurons is the same
+
+162
+8
+Autoencoders
+as the number of input neurons), which makes it an autoencoder. Result neurons are
+found in the middle part of the autoencoder. The network had a number of result
+neurons (let us say there are 4 of them for simplicity), and they noticed that the
+activations of those neurons formed a pattern (activations are sigmoid so they range
+from 0 to 1). If the network was classifying something similar to what it has seen
+(cats), it formed a pattern, e.g. neuron 1 was 0.1, neuron 2 was 0.2, neuron 3 was 0.5
+and neuron 4 was 0.2. If it got something it did not know about, neuron 1 would get
+0.9, and the others 0. In this way, an implicit label generation was discovered.
+But the cat paper presented another cool result. They asked the network what was
+in the videos, and the network drew the face of a cat (as the tech media formulated
+it). But what does that mean? It means that they took the best performing ‘cat finder’
+neuron, in our case neuron 3, and found the top 5 images it recognized as cats.
+Suppose the cat finder neuron had activations of 0.94, 0.96, 0.97, 0.95 and 0.99 for
+them. They then combined and modified this image (with numerical optimization,
+similar to gradient descent) to find a new image such that given neuron gets the
+activation 1. Such image was a drawing of a cat face. It may seem like science
+fiction, but if you think about it, it is not that unusual. They picked the best cat
+recognizer neuron, and then selected top 5 images it was most confident of. It is
+easy to imagine that these were the clearest pictures of cat faces. It then combined
+them, added a little contrast, and there you have it—an image which produced the
+activation of 1in that neuron. And it was an image of a cat different from any other
+image in the dataset. The neural network was set loose to watch YouTube videos of
+cats (without knowing it was looking at cats), and once prompted to answer what it
+was looking at, the network drew a picture of a cat.
+We scaled down a bit, but the actual architecture used was immense: 16000 com-
+puter cores (your laptop has 2 or 4), and the network was trained over three days. The
+autoencoder had over 1 billion trainable parameters, which is still only a fraction of
+the number of synapses in the human visual cortex. The input images were a 200
+by 200 by 3 tensors for training, and for testing 32 by 32 by 3. The authors used
+a receptive field of 18 by 18 similar to the convolutional networks, but the weights
+were not shared across the image but each ‘tile’ of the field had its own weights. The
+number of feature maps used was 8. After this, there was a pooling layer using L2
+pooling. L2 pooling takes a region (e.g. 2 by 2) in the same way as max-pooling, but
+instead of outputting the max of the inputs, it squares all inputs, adds them, and then
+takes the square root of it and presents this as the output.
+The overall autoencoder has three parts, all of them are of the same architecture. A
+part takes the input, applies the receptive field (no shared weights), and then applies
+L2 pooling, and finally a transformation known as local contrast normalization. After
+this part is finished, there are two more exactly the same. The whole network is trained
+with asynchronous SGD. This means that there are many SGDs working at once over
+different parts, and have a central weights repository. At the beginning of each phase,
+every SGD asks the repository for the update on weights, optimizes them a bit, and
+
+8.4
+Recreating the Cat Paper
+163
+then sends them back to the repository so that other instances running asynchronous
+SGD can use them. The minibatch size used was 100. We omit the rest of the details,
+and refer the reader to the original paper.
+References
+1. S. Axler, Linear Algebra Done Right (Springer, New York, 2015)
+2. R. Vidal, Y. Ma, S. Sastry, Generalized Principal Component Analysis (Springer, London, 2016)
+3. I. Goodfellow, Y. Bengio, A. Courville, Deep Learning (MIT Press, Cambridge, 2016)
+4. D.H. Ballard, Modular learning in neural networks, in AAAI-87 Proceedings (AAAI, 1987), pp.
+279–284
+5. Y. LeCun, Modeles connexionnistes de l’apprentissage (Connectionist Learning Models) (Uni-
+versité P. et M. Curie (Paris 6), 1987)
+6. P. Vincent, H. Larochelle, I. Lajoie, Y. Bengio, P.-A. Manzagol, Stacked denoising autoencoders:
+learning useful representations in a deep network with a local denoising criterion. J. Mach. Learn.
+Res. 11, 3371–3408 (2010)
+7. Q.V. Le, M.A. Ranzato, R. Monga, M. Devin, K. Chen, G.S. Corrado, J. Dean, A.Y. Ng, Building
+high-level features using large scale unsupervised learning, in Proceedings of the 29th Interna-
+tional Conference on Machine Learning. ICML (2012)
+
+9
+Neural Language Models
+9.1 Word Embeddings and Word Analogies
+Neural language models are distributed representations of words and sentences. They
+are learned representations, meaning that they are numerical vectors. A word embed-
+ding is any method which converts words in numbers, and therefore, any learned
+neural language model is a way of obtaining word embeddings. We use the term
+‘word embedding’ to denote a very concrete numerical representation of a certain
+word or words, represent ‘Nowhere fast’ as (1, 0, 0, 5.678, −1.6, 1). In this chapter,

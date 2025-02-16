@@ -1,0 +1,100 @@
+trains the Keras model:
+
+170
+9
+Neural Language Models
+word2vec = Sequential()
+word2vec.add(Dense(embedding_size, input_shape=(number_of_words,), activation=
+"linear", use_bias=False))
+word2vec.add(Dense(number_of_words, activation="softmax", use_bias=False))
+word2vec.compile(loss="mean_squared_error", optimizer="sgd", metrics=[’accuracy’])
+word2vec.fit(input_vectors, vectorized_labels, epochs=1500, batch_size=10, verbose=1)
+metrics = word2vec.evaluate(input_vectors, vectorized_labels, verbose=1)
+print("%s: %.2f%%" % (word2vec.metrics_names[1], metrics[1]*100))
+The model follows closely the architecture we presented in the last section.
+It does not use biases since we will be taking out the weights and we do not
+want any information to be anywhere else. The model is trained for 1500 epochs
+and you may want to experiment with these. If one wants to make a skip-gram
+model instead, one should just interchange these matrices, so the part that says
+word2vec.fit(input_vectors, vectorized_labels, epochs
+=1500, batch_size=10, verbose=1) should be changed to word2vec.
+fit(vectorized_labels, input_vectors, epochs=1500,
+batch_size=10, verbose=1) and you will have a skip-gram. Once we have
+this, we just take out the weights with the following code:
+word2vec.save_weights("all_weights.h5")
+embedding_weight_matrix = word2vec.get_weights()[0]
+And we are done. The first line of this code returns the word vectors for all the
+words, in the form of a number_of_words×embedding_size dimensional
+array, and we can pick the appropriate row to get the vector for that word. The first
+line saves all the weights in the network to a H5 file. You can do several things
+with word2vec and for all of them we need these weights. First, we may just learn
+weights from scratch, as we did with our code. Second, we might want to fine-tune a
+previously learned word embedding (suppose it was learned from Wikipedia data),
+and in that case, we want to load previously saved weights in a copy of the original
+model and train it on new texts that are perhaps more specific and more closely
+connected with e.g. legal texts. The third way we may use word vectors is to simply
+use them instead of one-hot encoded words (or a Bag of Words), and feed them in
+another neural network which has the task of e.g. predicting sentiment.
+Note that the H5 file contains all the weights of the network, and we want to
+use just the weight matrix from the first layer,2 and this matrix is fetched by the
+last line of code and named embedding_weight_matrix. We will be using
+embedding_weight_matrix in the code in the next section (which should be
+in the same file as the code of this section).
+2If we were to save and load from a H5 file, we would be saving ans loading all the weights in a new
+network of the same configuration, possibly fine-tuning them and then taking out just the weight
+matrix with the same code we used here.
+
+9.4
+Walking Through the Word-Space:An Idea That Has Eluded Symbolic AI
+171
+9.4 Walking Through the Word-Space: An Idea That Has Eluded
+Symbolic AI
+Word vectors are a very interesting type of word embeddings, since they allow much
+more than meets the eye. Traditionally, reasoning is viewed as a symbolic concept
+which ties together various relations of an object or even various relations of various
+objects. Objects, and symbols denoting them, have been seen as logically primitive.
+This means that they were defined, and as such void of any content other than that
+which we explicitly placed in them. This has been a dogma of the logical approach to
+artificial intelligence (GOFAI) for decades. The main problem is that rationality was
+equated with intelligence, and this meant that the higher faculties, where the one that
+embodied intelligence. Hans Moravec [10] discovered that higher faculties (such
+as chess playing and theorem proving) where in fact easier than recognizing cats
+on unlabelled photos, and this caused the AI community to rethink the previously
+accepted concept of intelligence, and with it ideas of low faculty reasoning became
+interesting.
+To explain what low faculty reasoning is we turn to an example. If you consider
+two sentences ‘a tomato is a vegetable’ and ‘a tomato is a suspension bridge’, you
+might conclude that they are both false, and you would technically be right. But most
+people (and intelligent animals) endorse an idea of fuzziness which takes into account
+the degree of wrongness. You are less wrong by uttering ‘a tomato is a vegetable’ than
+‘a tomato is a suspension bridge’. Note also that these are not sentences of natural
+phenomena, but sentences about linguistic classification and the social conventions
+on language use. You are not referring to objects (except for ‘tomato’), but to classes
+defined by descriptions (composed of properties) or examples (which share to a
+degree a number of common properties). Notice that you are using singular terms in
+all three cases, and the only symbolic part is ‘_is a_’, which is irrelevant.
+If an agent were locked in a room and given only books in a foreign language to
+read, we would consider her intelligent if she would be able to find patters, such as
+a word which denote places and words that denote people. So if she would classify
+two sentences ‘Luca frequenta la scuola elementare Pedagna’ and ‘Marco frequenta
+la scuola elementare Zolino’ as being similar, she would display a certain degree of
+intelligence. She might even go so far to say that in this context ‘Luca’ is to ‘Pedagna’
+as ‘Marco’ is to ‘Zolino’. If she was given a new sentence ‘Luca vive in Pedagna’,
+she might infer the sentence ‘Marco vive in Zolino’, and she might hit it spot on. The
+question of semantically similar terms very quickly became a question of reasoning.
+We can actually find similarities of terms in our datasets an even reason with
+them in this fashion using Word2vec. To see how, let us return to our code. The
+following code goes immediately after the code from the last section (in the same
+Python file). We will use the embedding_weight_matrix to find an interesting
+way to measure word similarities (actually word vector clusterings) and to calcu-
+late and reason with words with the help of word vectors. To do this, we first run
+
+172
+9
+Neural Language Models
+embedding_weight_matrix through PCA and keep just the first two dimen-
+sions,3 and then simply draw the results to a file:
+pca = PCA(n_components=2)
+pca.fit(embedding_weight_matrix)
+results = pca.transform(embedding_weight_matrix)
+x = np.transpose(results).tolist()[0]

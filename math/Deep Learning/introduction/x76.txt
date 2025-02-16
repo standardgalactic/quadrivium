@@ -1,0 +1,100 @@
+a natural bottleneck. For other architectures, it may make sense to make a different
+arrangement. The real result of the stacked autoencoder is again the distributed
+representation built by the middle layer. We will be stacking denoising autoencoders
+following the approach of [6] and we present a modification of the code available at
+https://blog.keras.io/building-autoencoders-in-keras.html. The
+first part of the code, as always, consists of import statements:
+from keras.layers import Input, Dense
+from keras.models import Model
+from keras.datasets import mnist
+import numpy as np
+(x_train, _), (x_test, _) = mnist.load_data()
+The last line of code loads the MNIST dataset from the Keras repositories. You
+could do this by hand, but Keras has a built-in function that lets you load MNIST
+into Numpy3 arrays. Note that the Keras function returns two pairs, one consists
+of train samples and train labels (both as Numpy arrays of 60000 rows), and the
+second consisting of test samples and test labels (again, Numpy arrays, but this time
+of 10000 rows). Since we do not need labels, we load them in the _ anonymous
+variable, which is basically a trash can, but we need it since the function needs to
+return two pairs and if we do not provide the necessary variables, the system will
+crash. So we accept the values and dump them in the variable _. The next part of the
+code preprocesses the MNIST data. We break it down in steps:
+x_train = x_train.astype(’float32’) / 255.0
+x_test = x_test.astype(’float32’) / 255.0
+noise_rate = 0.05
+This part of the code turns the original values ranging from 0 to 255 to values
+between 0 and 1, and declares their Numpy types as float32 (decimal number with a
+precision of 32). It also introduces a noise rate parameter, which we will be needing
+shortly.
+x_train_noisy = x_train + noise_rate * np.random.normal
+(loc=0.0, scale=1.0, size=x_train.shape)
+x_test_noisy = x_test + noise_rate * np.random.normal
+(loc=0.0, scale=1.0, size=x_test.shape)
+x_train_noisy = np.clip(x_train_noisy, 0.0, 1.0)
+x_test_noisy = np.clip(x_test_noisy, 0.0, 1.0)
+This part of the code introduces the noise into a copy of the data. Note that the
+np.random.normal(loc=0.0, scale=1.0, size=x_train.shape)
+3Numpy is the Python library for handling arrays and fast numerical computations.
+
+160
+8
+Autoencoders
+introduces a new array, of the size of the x_train array populated with a Gaussian
+random variable with loc=0.0 (which is actually the mean), and a scale=1.0
+(which is the standard deviation). This is then multiplies with the noise rate and
+added to the data. The next two rows actually make sure that all the data is bound
+between 0 and 1 even after the addition. We can now reshape our arrays which are
+currently (60000, 28, 28) and (10000, 28, 28) into (60000, 784) and (10000, 784)
+respectively. We have touched upon this idea when we have first introduced MNIST,
+and now we can see the code in action:
+x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
+x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
+x_train_noisy = x_train_noisy.reshape((len(x_train_noisy), np.prod(x_train_noisy.shape[1:])))
+x_test_noisy = x_test_noisy.reshape((len(x_test_noisy), np.prod(x_test_noisy.shape[1:])))
+assert x_train_noisy.shape[1] == x_test_noisy.shape[1]
+The first four rows reshape the four arrays we have, and the final row is a test to
+see whether the sizes of the noisy train and test vectors are the same. Since we are
+using autoencoders, this has to be the case. If they are somehow not the same, the
+whole program will crash here. It might seem strange to want to crash the program
+on purpose, but in this way we actually gain control, since we know where it has
+crashed, and by using as many tests as we can, we can quickly debug even very
+complex codes. This ends the preprocessing part of the code, and we continue to
+build the actual autoencoder:
+inputs = Input(shape=(x_train_noisy.shape[1],))
+encode1 = Dense(128, activation=’relu’)(inputs)
+encode2 = Dense(64, activation=’tanh’)(encode1)
+encode3 = Dense(32, activation=’relu’)(encode2)
+decode3 = Dense(64, activation=’relu’)(encode3)
+decode2 = Dense(128, activation=’sigmoid’)(decode3)
+decode1 = Dense(x_train_noisy.shape[1], activation=’relu’)(decode2)
+This offers a different view from what we are used to, since now we manually
+connect the layers (you can see the layer sizes, 128, 64, 32, 64, 128). We have added
+different activations just to show their names, but you can freely experiment with
+different combinations. What is important here to notice is that the input size and
+the output size are both equal to x_train_noisy.shape[1]. Once we have
+the layers specified, we continue to build the model (feel free to experiment with
+different optimizers4 and error functions5):
+autoencoder = Model(inputs, decode1)
+autoencoder.compile(optimizer=’sgd’, loss=’mean_squared_error’,metrics=[’accuracy’])
+autoencoder.fit(x_train,x_train,epochs=5,batch_size=256,shuffle=True)
+4Try’adam’.
+5Try’binary_crossentropy’.
+
+8.3
+Stacking Autoencoders
+161
+You should also increase the number of epochs once you get the code to work.
+Finally we get to the last part of the autoencoder code when we evaluate, predict
+and pull out the weight of the deepest middle layer. Note that when we print all the
+weight matrices, the right weight matrix (the result of the stacked autoencoder) is
+the first one where the dimensions start to increase (in our case (32, 64)):
+metrics = autoencoder.evaluate(x_test_noisy, x_test, verbose=1)
+print()
+print("%s:%.2f%%" % (autoencoder.metrics_names[1], metrics[1]*100))
+print()
+results = autoencoder.predict(x_test)
+all_AE_weights_shapes = [x.shape for x in autoencoder.get_weights()]
+print(all_AE_weights_shapes)
+ww=len(all_AE_weights_shapes)
+deeply_encoded_MNIST_weight_matrix = autoencoder.get_weights()[int((ww/2))]
+print(deeply_encoded_MNIST_weight_matrix.shape)

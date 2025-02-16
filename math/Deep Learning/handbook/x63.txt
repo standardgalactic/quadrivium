@@ -1,0 +1,100 @@
+U
+Stride
+A straightforward software implementation of the convolutional layeroperation is depicted in the algorithm of Fig.  12.2. The core operation is the so-called Multiply-And-Accumulate (MAC)operation. It multiplies a weight with an input activation and adds the product to a partial sum. Figure  12.3shows its basic circuit implementation, including the number of bits for each signal when a fixed-point (FX) number representation is utilized. The 2N-bit product is added to a bit partial sum, where Mdepends on the number of weights. The result is quantized into Nbits. The floating-point (FP) number representation is typically used for training.
+Fig. 12.2
+Algorithm for convolution
+Fig. 12.3
+A typical implementation of the Multiply &Accumulate (MAC) circuit utilizing the N-bit fixed-point number representation for the weights
+Computing the resulting output feature mapsof convolutional layersand fully connected layers is usually transformed into matrix multiplications. The key factors determining how much time and energy will one inference require are the size of these matrices, resources available on a given hardware platform, and a data flowcontrol algorithm. Since a moderate CNNcan have millions of parameters, these matrices do not fit the local memory of the accelerator. Hence, they must be processed at the block level, where a block is a submatrix that can be stored in local memory. These blocks are sent from the main (external) memory to local memory, then read and processed using arithmetic units (in MAC circuits). The partial results are stored in local memory or copied into the main memory when needed.
+12.2.2 DNN Accelerators: Temporal Architecture
+Hardware acceleratorswith temporal architectureemploya set of Arithmetic Logic Units (ALUs) with a fixed connection pattern and a hierarchical memory subsystem. General-purpose CPUs and GPUsare typical examples of temporal architectures. The ALU always receives data from local memory and returns the result to the same memory. As there is minimal support for data reuse, i.e., direct data sending between multiple ALUs, memory access becomes the main performance and energy bottleneck. Libraries such as MKL  [25] and cuDNN  [12] provide highly optimized matrix multiplication and other algorithms for CPUs and GPUs
+GPUsconsist of hundreds to thousands of lightweight processing cores with a high-throughput memory subsystem organized into a high-performance single-instruction multiple data (SIMD) programmable stream architecture. Hence, GPUsare useful for the parallelization of matrix multiplication and other operations conducted on FP data types during DNN training and inference. GPUs range from small devices (e.g., NVIDIA Jetson Nano with 472 GFLOPS and 5–10 W) to high-performance nodes of supercomputers (e.g., NVIDIA V100 with 100 TFLOPS and 300 W).
+Compared to GPUs, standard CPUs equipped with a few cores offer limited options for DNN acceleration. However, the data-level parallelism provided by SIMD instructions (SSE, AVX) is often exploited. A detailed survey of CPU-based DNN acceleration techniques is provided by Mittal et al.  [47]. Low-cost microcontrollers (MCU) are typically employed to implement DNNs on low-power edge devices. Their instruction set can be enhanced with specialized instructions to accelerate MACs and, thus, convolutions. For example, RI5CY is an open MCU class RISC-V Core for energy-efficient processing of Quantized NNs (QNN) utilizing specialized SIMD instructions, fast dot product unit, and multiple FX data formats such as INT-2, INT-4, INT-8, INT-16, INT-32  [21]. To provide DNNs on low-power processors, GAP-8 programmable chip featuring an 8-core cluster composed of RISC-V processors, cache, and other components was developed  [20].
+As programming of CPUs and GPUsdoes not require hardware design skills, the DNN accelerators based on CPUs and GPUs are, in principle, more accessible to a broader spectrum of designers than specialized ASICs.
+12.2.3 DNN Accelerators: Spatial Architecture
+The spatial architectures, typically implemented in application-specific integrated circuits or in the field programmable gate arrays, employ an array of many locally communicating processing elements (PE), see  Fig.  12.4. Each of them implements a MAC circuit, a small local memory (registers), and a controller. PEs are usually organized as pipelined systolic arrays optimized for fast execution of DNN operations. Hence, a PE can directly send its output to other PE(s), which leads to faster and energy-efficient computing of DNN operations, eliminating thus memory accesses. The used on-chip network determines connection options among the PEs. The execution time and energy of a DNN accelerator are thus primarily determined by the PE array size, memory subsystem, on-chip network, and the so-called data floworganization.
+Fig. 12.4
+Generic programmable hardware spatial accelerator for DNN inference. Processing elements form a two-dimensional systolic array enabling highly efficient parallel computing and data reuse. The weights are stored in the external DRAM memory; some can be cached on the chip. Based on the DNN architecture description, hardware configuration, and other constraints, the compiler (mapper) generates the mappingof the DNN on hardware resources and its execution plan
+Data flowis a general term covering the computation order and parallelization strategy applied in the accelerator. It defines the order of arithmetic operations and memory accesses to maximize data reuse. The term mappingrefers to the dataflow strategy (i.e., computation order and parallelism strategy) coupled with the tiling strategy (selecting the size of input data with respect to available hardware resources such as buffers and PEs). A particular mappingof a given DNN on hardware resources and executing this mappingis implemented by the accelerator controller
+ASIC accelerators for DNNs (as surveyed   [8, 69]) share the implementation ideas discussed in the previous paragraph. However, their various implementations differ in many aspects, including the fabrication technology, maximum operation frequency, bit precision, the size (of the PE array and on-chip memory), interconnection network, dataflow algorithm, support for weight compression, etc.
+These accelerators often utilize the principles of approximate computingto provide the best trade-offs between inference accuracy and other objectives (performance, energy). Common approximation techniques are precision scaling, employing approximate arithmetic operations, network pruning, and approximate memory  [45]. The most significant gains are obtained when the cross-layer approximation approach is adopted, involving software, architecture, and hardware, breaking thus conventional methods focused on optimizing each layer of abstraction independently  [72]. Recent ASIC accelerators also employ the principles of in-memory computingtoalleviate the data communication bottleneck between PEs and memory elements. In-memory computing aims to extend typical memory architecture with the capability of performing some arithmetic operations to accelerate data processing  [66].
+Google’s Tensor Processing Unit (TPU)family is an example of DNN accelerators implemented as ASICs  [28]. TPUv1, introduced in 2016, provided a systolic array of 256 256 8-bit FX multipliers allowing significantly accelerated matrix multiplications for CNN inference(with the peak performance 92 TOPS at 75 W). TPUv2 and TPUv3 offer increased performance and support FP operations which make them usable for DNN training. EdgeTPU, with a peak performance of 4 TOPs and 2 TOPs/W, was developed for edge computing and smartphones. It is programmed using TensorFlow Lite models.
+FPGAs have traditionally been seen as programmable arrays of logic blocks whose function is defined by means of look-up tables (LUT) and whose interconnection is based on programmable switches. However, modern FPGAs are heterogenous systems containing not only programmable logic but also embedded memories (BRAM), processors, programmable interfaces, and other specialized circuits (the so-called hard blocks) such as configurable digital signal processing (DSP) blocks. The DSP blocks are especially useful for accelerating the convolution operations of DNNs. Designers can currently choose from various models ranging from small Xilinx Zynq chips suitable for IoT nodes to complex systems on a chip such as Xilinx Versal integrating programmable logic for flexible parallel compute-intensive tasks, processors for sequential processing tasks, and vector processors for domain-specific parallel data processing  [46, 61].
+Table  12.2summarizes the key parameters of selected platforms when programmed to accelerate the AlexNet inference. While ASIC provides the most energy-efficient DNN processing (see the Efficiency column), Titan X GPUshows the highest performance (see the Performance column). The architecture of a given chip, fabrication technology, and operational frequency are primarily determining these properties.
+Table 12.2
+Performance and energy efficiency of AlexNet on various platforms (composed using   [10, 79])
+Platform
+Chip
+Freq.
+(MHz)
+Precision
+Perform.
+(inference/s)
+Power
+(W)
+Efficiency
+(inference/s/W)
+ASIC
+Eyeriss
+200
+FX16
+34.7
+0.3
+124.8
+FPGA
+Kintex KU115
+235
+FX8
+2252
+22.9
+98.3
+FPGA
+Kintex KU115
+235
+FX16
+1126
+22.9
+49.2
+FPGA
+Zynq XC7Z045
+200
+FX8
+340
+7.2
+47.2
+FPGA
+Zynq XC7Z045
+200
+FX16
+170
+7.2
+23.6
+GPU
+Jetson TX2
+1  300
+FP16
+250
+10.7
+23.3
+GPU
+Titan X
+1  417
+FP32
+5120
+227.0
+22.6
+CPU
+Core-i7
+3  500
+FP32
+162
+73.0
+2.2
+12.2.4 Hardware Simulators and Performance Predictors
+Suppose we have a CNNmodel (i.e., a computation graph) and need to know the hardware parameters(e.g., latency and energy) of its potential implementation on a given accelerator. However, there are usually many options on how to configure a given accelerator, map the CNNon the available resources, and schedule the CNN processing.
+To choose the most suitable implementation, a search has to be conducted in the space of possible mappingsand hardware configurations. The objective is to minimize the inference time (latency), energy, or other parameters. From Table  12.3, presenting the cost of typical operations conducted on a chip (when a 45 nm technology is considered), one can conclude that (1) minimizing the access to external memory has to be optimized with the highest priority, and (2) optimizing the bit width saves some energy not only when arithmetic operations are conducted but also when data are moved to/from memory; moreover, shorter weights will reduce the memory size.
+Table 12.3
+Energy needed to perform selected operations on a chip fabricated in 45 nm technology  [69]
+Operation (–)
+Type (–)
+Width (bits)

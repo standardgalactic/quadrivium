@@ -1,0 +1,100 @@
+coders. To make the network which produces the embeddings, we use a shallow
+feedforward network. The input layer will receive word index vectors, so we will
+need as many input neurons as there are unique words in the vocabulary. The number
+of hidden neurons is called embedding size (suggested values range between 100 and
+1000, which is considerably less than the vocabulary size even for modest datasets),
+and the number of output neurons is the same as input neurons. The input to hidden
+connections are linear, i.e. they have no activation function, and the hidden to output
+have softmax activations. The weights of the input to hidden are the deliverables
+of the model (similar to the autoencoder deliverables), and this matrix contains as
+rows the individual word vectors for a particular word. One of the easiest methods
+of extracting the proper word vector is to multiply this matrix by the word index
+vector for a given word. Note that these weights are trained with backpropagation
+in the usual way. Figure9.1 offers an illustration of the whole process. If something
+is unclear, we ask the reader to fill out the details for herself by using what we have
+previously covered in this book—there should be no problem in doing this.
+Before continuing to the code for the CBOW Word2vec, we must correct a his-
+torical mistake. The idea behind Word2vec is that the meaning of a given word is
+determined by a context, which is usually defined as the way the word is used in
+a language. Most deep learning textbooks (including the official TensorFlow doc-
+umentation on Word2vec) attribute this idea to a paper from 1954 by Harris [7],
+and note that he idea came to be known in linguistics as the distributional hypothe-
+sis in 1957 [8]. This is actually wrong. The first time this idea was proposed was in
+Wittgenstein’s Philosophical Investigations in 1953 [9], and since ordinary language
+philosophy and philosophical logic (the area of logic dealing mainly with language
+formalization) played a major role in the history of natural language processing, the
+historical merit must be acknowledged and attributed correctly.
+
+168
+9
+Neural Language Models
+Fig.9.1 CBOW Word2vec architecture
+9.3 Word2vec in Code
+In this and the next section, we give an example of a CBOW Word2vec implemen-
+tation. All the code in these two sections should be placed in one Python file, since
+it is connected. We start with the usual imports and hyperparameters:
+from keras.models import Sequential
+from keras.layers.core import Dense
+import numpy as np
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+text_as_list=["who","are","you","that","you","do","not","know","your","history"]
+embedding_size = 300
+context = 2
+The text_as_list can hold any text, so you can put here your text, or use the
+parts of the code from the recurrent neural network which parse a text file into a list
+of words. The embedding size is the size of the hidden layer (and, consequently, that
+the word vectors will have). The context is the number of words before and after the
+given word which will be used this. If the context is 2, this means we will use two
+words before the main word and two words after the main word to create the inputs
+(the main word will be the target). We continue to the next block of code which is
+exactly the same as the same part of code for recurrent neural networks:
+distinct_words = set(text_as_list)
+number_of_words = len(distinct_words)
+
+9.3
+Word2vec in Code
+169
+word2index = dict((w, i) for i, w in enumerate(distinct_words))
+index2word = dict((i, w) for i, w in enumerate(distinct_words))
+This code creates word and index dictionaries in both ways, one where the word
+is the key and the index is the value and another one where the index is the key and
+the word is the value. The next part of the code is a bit tricky. It creates a function
+that produces two lists, one is a list of main words, and the other is a list of context
+words for a given word (it is a list of lists):
+def create_word_context_and_main_words_lists(text_as_list):
+input_words = []
+label_word = []
+for i in range(0,len(text_as_list)):
+label_word.append((text_as_list[i]))
+context_list = []
+if i >= context and i<(len(text_as_list)-context):
+context_list.append(text_as_list[i-context:i])
+context_list.append(text_as_list[i+1:i+1+context])
+context_list = [x for subl in context_list for x in subl]
+elif i<context:
+context_list.append(text_as_list[:i])
+context_list.append(text_as_list[i+1:i+1+context])
+context_list = [x for subl in context_list for x in subl]
+elif i>=(len(text_as_list)-context):
+context_list.append(text_as_list[i-context:i])
+context_list.append(text_as_list[i+1:])
+context_list = [x for subl in context_list for x in subl]
+input_words.append((context_list))
+return input_words, label_word
+input_words,label_word = create_word_context_and_main_words_lists(text_as_list)
+input_vectors = np.zeros((len(text_as_list), number_of_words), dtype=np.int16)
+vectorized_labels = np.zeros((len(text_as_list), number_of_words), dtype=np.int16)
+for i, input_w in enumerate(input_words):
+for j, w in enumerate(input_w):
+input_vectors[i, word2index[w]] = 1
+vectorized_labels[i, word2index[label_word[i]]] = 1
+Let us see what this block of code does. The first part is the definition of a function
+that takes in a list of words and returns two lists. One is a copy of that list of words
+(named label_word in the code), and the second is input_words, which is a
+list of lists. Each list in the list carries the words from the context of the corresponding
+word in label_word. After the whole function is defined, it is called on the variable
+text_as_list. After that two matrices to hold the word vectors corresponding
+to the two lists are created with zeros, and the final part of the code updates the
+corresponding parts of the matrices with 1, to make a final model of the context for
+inputs and of the main word for the target. The next part of the code initializes and
