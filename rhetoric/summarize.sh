@@ -79,6 +79,11 @@ process_files() {
             log "Skipping overview.txt"
             continue
         fi
+        
+        if [[ "$filename" == "detailed_summary.txt" ]]; then
+            log "Skipping detailed_summary.txt"
+            continue
+        fi
 
         if is_processed "$filename"; then
             log "Already processed: $filename"
