@@ -1,0 +1,274 @@
+Peter Dalmaris
+Lecture 54
+Arduino Step by Step
+Lecture 54 
+Single Wire LCD screen 
+In Lecture 24, you learned how to display text in a LCD screen. Although this was a simple 
+way to show useful information to the user, the sheer number of wires required to make the 
+LCD screen work makes this solution far from elegant. 
+In this lecture, I will show you a much improved solution to the same problem, one that 
+involves a single data wire (plus power). 
+The diﬀerence is stark. Have a look at the “before” (left) and “after” (right) images for the 
+exact same result. 
+To achieve this reduction in total number of wires we have to switch the type of interface we 
+use to connect the screen to the Arduino. Natively, the screen uses a parallel interface, 
+where each of the 8 bits that make up a character encoding uses up a wire. You may 
+remember that in Lecture 24, use used a 4-bit parallel mode instead of the full 8-bits in 
+order to save 4 wires. Still, even 4 wires are too many for transferring data. We also needed 
+wires for power, and for the screen backlit.  
+To improve the design, we’ll use an adaptor that allows us to connect the parallel LCD 
+screen to the Arduino using the I2C serial bus. We have used I2C before, but here is a quick 
+recap: 
+• Uses 1 wire for data (SDA - pin A4 on the Arduino Uno) 
+• Uses 1 wire for clock (SCL - pin A5 on the Arduino Uno) 
+• Uses 1 wire for +5V power and 1 for ground 
+• Can be shared amongst multiple I2C devices, which means that you can connect multiple 
+compatible devices to your Arduino without increasing the wire count. 
+$1
+
+Peter Dalmaris
+Lecture 54
+Arduino Step by Step
+The adaptor I’ll use in the demos is the 1602LCD 
+Display I2C board, like the one in this image. 
+It contains two rows of connectors: the long one 
+that connects to the 16x2 LCD screen, and the 
+short one that implements the I2C interface and 
+connects to the Arduino. On the board there is also 
+a potentiometer that you can use to adjust the 
+brightness of the screen, and the micro-controller 
+that handles that conversion and communications 
+workload. 
+In Demo 1, I’ll show you how to connect the 
+1602LCD to the screen and the Arduino. In Demo 2, I will add a second I2C device to the 
+circuit, a real-time clock, and show you how the same I2C wires can be used to drive both 
+devices by displaying the time from the clock to the LCD screen. 
+Demo 1: Connect the 16x2 LCD screen via I2C 
+When you purchase the 
+1602LCD adaptor, it typically 
+arrives without the headers 
+attached, so you will have to 
+the soldering your self. The 
+spacing and conﬁguration of 
+the 16 pins in the long row 
+match exactly that of the pins 
+on the LCD screen PCB.  
+Use a mini breadboard if you 
+have one, and line up the 
+LCD screen and the adaptor 
+like in this image.  
+On the adaptor, check the markings of the 4 pins. Connect the GND to GND on the 
+Arduino, VCC to 5V. Then, connect SDA (“DAta”) to analog pin 4 on the Arduino Uno, and 
+DCL (“CLock”) to analog pin 5. You are not done with the wirings! 
+You now need to install an LCD I2C library that will replace the original LiquidCrystal library 
+that comes with the IDE. There are several options that you could use, but the one that I 
+found easy to use and tested for this lecture is the LiquidCrystal_I2C available here. 
+Download the ZIP archive from this page and install it in your IDE’s Libraries folder. Don’t 
+forget to restart the IDE for the install process to complete! 
+$2
+
+Peter Dalmaris
+Lecture 54
+Arduino Step by Step
+Sketch 
+Here’s the sketch, with annotations embedded. 
+About I2C addresses 
+Because I2C is a shared serial bus, we need a way for each connected device to be able to 
+detect which of the messages that are ﬂowing through the common wires is meant to be 
+read by them. On the ﬂip side, the Arduino (or any master device) needs to be able to 
+determine which of the connected devices transmitted a message. 
+This is achieved by setting an address for each connected device. This address needs to 
+be unique within the group of the devices that are sharing the bus. Most devices, like the 
+LCD adaptor in this demo, come with an I2C address preset from factory that, in my 
+experience, does not conﬂict with addresses from other devices as long as they are not of 
+the same type. For example, if you connect an LCD screen adaptor and a real-time clock to 
+the same I2C bus, chances are that there will be no conﬂict with their preset addresses and 
+they will work out of the box.  
+But let’s say you wanted to attach two LCD screens to the same I2C bus, using two 
+separate, but of the same type, LCD adaptors. In this case, you will need to change the 
+address of one of the two adaptors. Most I2C devices provide a way to do this, usually by 
+changing the conﬁguration of jumpers or soldering address pins.  
+$3
+#include <Wire.h> 
+#include <LCD.h> 
+#include <LiquidCrystal_I2C.h> 
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); 
+void setup(){ 
+    lcd.begin(16,2); 
+    lcd.backlight(); 
+    lcd.setCursor(0, 0); 
+    lcd.print("Hello world!"); 
+    lcd.setCursor(0, 1); 
+    lcd.print("Row number: "); 
+    lcd.setCursor(12, 1); 
+    lcd.print("2"); 
+} 
+void loop(){ 
+}
+This library implements the I2C protocol.
+This library allows you to use various LCD displays.
+This library allows you to use the functionality offered 
+by the standard LCD library via the I2C bus.
+Initialise the lcd object that we’ll use to write to the 
+screen. The ﬁrst parameter “0x27” is the I2C address 
+of the adaptor (more about this further down). The 
+rest of the parameters are: 
+1: Device address 
+2: LCD screen enable (“En”) pin  
+3: LCD screen read/write (“R/W”) pin 
+4: LCD screen reset (“Rs”) pin 
+5: LCD screen data 0 pin 
+6: LCD screen data 1 pin 
+7: LCD screen data 2 pin 
+8: LCD screen data 3 pin 
+9: LCD screen backlight pin 
+10: LCD screen backlight polarity (POSITIVE or 
+NEGATIVE)
+Same use of LCD functions 
+as we saw in lecture 24.
+
+Peter Dalmaris
+Lecture 54
+Arduino Step by Step
+If you take a look at the front side 
+of the 1602LCD board, you will 
+notice 3 pads. By bridging those 
+pads vertically (a bit of solder will 
+do), you can change the I2C 
+address of the device. The 
+1602LCD provides 3 pairs of 
+pads, so you can have a total of 7 
+possible addresses. 
+Demo 2: I2C bus sharing by a LCD screen and a 
+real-time clock 
+In the second demo, we’ll combine 2 devices on the same I2C bus. We’ll use the LCD 
+adaptor from Demo 1, and the real-time clock from Lecture 48.  
+Here is what we are going to build: 
+1.
+Plug the DS1307 real-time clock at 
+the left end of the mini breadboard. 
+2.
+Plug the 16x2 LCD screen at the 
+right bottom end of the 
+breadboard. 
+3.
+Plug the LCD adaptor so that its 
+pins are aligned correctly with the 
+LCD screen, like we did in Demo 1. 
+4.
+Plug the Arduino GND and 5V pins 
+to the power strip at the top of the 
+breadboard. 
+5.
+Using the breadboard socket 
+column where the real-time clock 
+PCB is connected, connect the 
+SDA and SCL pins of the LCD adaptor to the corresponding pins of the real-time clock.  
+6.
+Using the same columns as in step 5, connect the SDA wire to Arduino Uno analog pin 
+4 and the SCL wire to the Arduino Uno analog pin 5. 
+7.
+Connect the power wires from the LCD adaptor and the real-time clock to the 
+breadboard’s top power power strip. 
+By default, the DS1307 is listening to I2C address 0x68 while the LCD adaptor to address 
+0x27 so there is no conﬂict.  
+$4
+1
+2
+3
+4
+5,6
+7
+
+Peter Dalmaris
+Lecture 54
+Arduino Step by Step
+Sketch 
+Let’s have a look at the sketch. Comments are embedded. 
+$5
+#include <Wire.h> 
+#include "RTClib.h" 
+#include <LCD.h> 
+#include <LiquidCrystal_I2C.h> 
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE); 
+RTC_DS1307 rtc; 
+void setup () { 
+  Serial.begin(9600); 
+  Wire.begin(); 
+  lcd.begin(16,2); 
+  lcd.backlight(); 
+  rtc.begin(); 
+  rtc.adjust(DateTime(__DATE__, __TIME__));  
+} 
+void loop () { 
+    DateTime now = rtc.now(); 
+    Serial.print(now.year(), DEC); Serial.print('/'); 
+    Serial.print(now.month(), DEC); Serial.print('/'); 
+    Serial.print(now.day(), DEC); Serial.print(' '); 
+    Serial.print(now.hour(), DEC); Serial.print(':'); 
+    Serial.print(now.minute(), DEC); Serial.print(':'); 
+    Serial.print(now.second(), DEC); Serial.println(); 
+    lcd.setCursor(0, 0); 
+    lcd.print(now.year(), DEC); lcd.print('/'); 
+    if (now.month()<10) 
+        { lcd.print("0"); } 
+    lcd.print(now.month(), DEC); lcd.print('/'); 
+    if (now.day()<10) 
+        { lcd.print("0"); } 
+    lcd.print(now.day(), DEC); 
+    lcd.setCursor(0, 1); 
+    if (now.hour()<10) 
+        { lcd.print("0"); } 
+    lcd.print(now.hour(), DEC); lcd.print(':'); 
+    if (now.minute()<10) 
+        { lcd.print("0"); } 
+    lcd.print(now.minute(), DEC); lcd.print(':'); 
+    if (now.second()<10) 
+        { lcd.print("0"); } 
+    lcd.print(now.second(), DEC);    
+    delay(100); 
+}
+Same as in Demo 1
+Add the real-time clock library
+Start the I2C bus.
+Start the LCD screen with 16 columns, 2 rows, and 
+turn backlight on.
+Start the real-time clock module, and set the time 
+and date to the system time and date during 
+compilation.
+Get the time from the real-time 
+clock and print it to the Serial 
+monitor.
+Set the LCD cursor to column 0, 
+row 0, and print the year in 
+decimal notation, followed by a 
+“/“.
+If the month is single digit, then 
+add a “0” in before printing the 
+month digit so that the month 
+segment always aligns well.
+Print the month, followed by a “/“.
+Similarly to printing out the month, 
+add a “0” in front of single digit 
+days, hours, minutes and seconds.
+
+Peter Dalmaris
+Lecture 54
+Arduino Step by Step
+Conclusion and exercise 
+You now know how to connect an LCD screen to your Arduino using a single data wire, and 
+how to combine multiple devices on a single I2C bus.  
+In this lecture, we used a real-time clock with an LCD parallel to serial adaptor. As an 
+exercise, try to add one or two additional IC2 devices. Here’s some recommendations: 
+* Add a BMP085 temperature and barometric sensor. We saw this device in lecture 9. 
+Display the temperature and humidity in the LCD screen. 
+* Add an SD card module. We saw this device in lecture 45. Store BMP085 readings in a 
+log ﬁle. 
+* A total of 127 can be attached to an I2C bus. Here is a sketch that can detect and report 
+all connected devices, try it out: http://playground.arduino.cc/Main/I2cScanner 
+* Although we have not yet discussed adding external EEPROM modules to your Arduino, 
+understanding how they work easy based on your existing knowledge. You can consider 
+the AT24C256 Serial EEPROM device, an inexpensive way to add memory to your 
+project. It uses the I2C interface, and is easy to use with the appropriate library. 
+$6
+

@@ -1,0 +1,624 @@
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+EEPROM 
+The Atmega microcontroller, as we have seen already, contains 3 types of memory: There’s 
+ﬂash (where the sketch is stored), SRAM (where temporary data are stored), and EEPROM. 
+SRAM (Static RAM) can store data for as long as power is provided. Turn oﬀ the power, and 
+everything is in the SRAM is lost. 
+Both ﬂash and EEPROM memories persist after the power is cut, so you could use either 
+one for long term data storage, a bit like a hard disk works. But here’s the diﬀerence: ﬂash 
+memory can only be changed when a new program is uploaded to the Arduino. People 
+often refer to this process as “ﬂashing”. Once ﬂashing is completed and the newly 
+uploaded sketch is in place, you cannot change anything in the ﬂash memory. 
+That’s where EEPROM comes in. EEPROM stands for “Electrically Erasable Programmable 
+Read-Only Memory”, and you can use it to store data that must be preserved even after 
+power is lost. You could use EEPROM to store conﬁguration values for your sketch that the 
+user can modify, passwords, sensor logs and things of that sort. 
+In this lecture, you will learn how to use internal and external EEPROM. As a bonus, I will 
+show you how to create a small library so that you can simplify your sketch organisation 
+and reuse utility code. 
+Demo 1: Using the Internal EERPOM 
+The Atmega328 contains 1KByte of internal EEPROM. That means that you can store and 
+persist 1024 words, where each word is made up of 8 bits in your Arduino Uno. For this 
+demo, we will not use any external hardware, just plug your Arduino to your computer and 
+you’re good to go. 
+In this ﬁrst demo, we’ll use two sketches to write and read a pin number for a basic security 
+system. The writing sketch will write the default pin in a speciﬁc internal EEPROM memory 
+location, and the reading sketch will simply go to that location and read back the pin. 
+Keeping things simple, we are not going to worry about LCD screens, a keypad for the pin 
+entry, or encryption for storing the pin securely. 
+The pin we’ll write and read is an integer. On the Atmega, integers consume two bytes, and 
+we will need to take this into account in our sketch since EEPROMs are byte-addressable. 
+This means that each byte has its own address, and we can’t simply store an integer like 
+we do with the RAM, where the compiler knows how to deal with integer (and other data-
+type) addressing. With the EEPROM, while using the basic facilities that come with the IDE, 
+we have to split an integer into two bytes, store each byte individually, and then again 
+separately retrieve the two bytes and concatenate them so that we end up with the original 
+integer. Bear with me for now, in Demo 2 we’ll simplify this process a lot. 
+#1
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+Here’s the writing sketch (Demo1_writer), let’s execute it and then go through it to explain 
+how it works. 
+#include <EEPROM.h> 
+int addr = 0; 
+void setup() 
+{ 
+  Serial.begin(9600); 
+  int myPin=1234; 
+  EEPROM.write(addr, highByte(myPin)); 
+  EEPROM.write(addr+1, lowByte(myPin)); 
+  Serial.print("My pin recorded:"); 
+  Serial.print(myPin); 
+  Serial.println("."); 
+} 
+void loop() 
+{ } 
+If we only wanted to store a byte, we would be able to just use EEPROM.write, pass an 
+address (from 0 to 1023), and the byte, and that would be all. 
+Unfortunately, the basic EEPROM library that comes with the IDE and we use in this sketch, 
+can only understand bytes, not integers or other multi-byte data types, so we have to take 
+care of some basic binary arithmetic.  
+The pin we selected, 1234, converted in binary format, looks like this: 
+00000100   11010010 
+The byte on the right is the low byte, and the byte on the left is the high byte. We need to 
+store each one individually, so we call EEPROM.write, twice: 
+  
+1. EEPROM.write(addr, highByte(myPin)); 
+   
+2. EEPROM.write(addr+1, lowByte(myPin)); 
+First, take the high byte of the pin and store it in address 0, then take the low byte of the pin 
+and store it in address 0+1 = 1.  
+That’s all, the pin is now stored in the internal EEPROM. You would do the exact same thing 
+if you wanted to store a user setting. For example, if you had built an alarm clock, the user 
+could enter an alarm time, and you would store the time components in the EEPROM to 
+safe guard against power loss.  
+Now lets have a look at how to retrieve the pin. 
+#2
+A very basic library that comes with the IDE, 
+allows your to read or write one byte at a time.
+The internal EEPROM address of the byte where 
+the sketch will write the ﬁrst byte of the pin.
+Here’s the Pin, its an integer that needs two bytes 
+of storage.
+highByte is a built-in function that 
+extracts the left-most byte (high-order) of 
+an integer, or the second-lowest byte of 
+a multi-byte data type like a double 
+(which occupies four bytes).
+Similarly to highByte, lowByte is a built-
+in function that extracts the right-most 
+byte (low-order) of an integer, or the any 
+multi-byte data type.
+high byte
+low byte
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+In this sketch (Demo1_reader), we read the two bytes we stored earlier from the EEPROM, 
+and then we concatenate them so that we can recreate the original pin. 
+#include <EEPROM.h> 
+int addr = 0; 
+void setup() 
+{ 
+  Serial.begin(9600); 
+  byte retrievePinHigh; 
+  byte retrievePinLow; 
+  retrievePinHigh = EEPROM.read(addr); 
+  retrievePinLow = EEPROM.read(addr+1); 
+  Serial.println(retrievePinHigh); 
+  Serial.println(retrievePinLow); 
+  Serial.print("My pin is:"); 
+  Serial.print((retrievePinHigh << 8) + retrievePinLow); 
+  Serial.println("."); 
+} 
+void loop() 
+{ } 
+Fetching the two bytes from the EEPROM is straight-forward. We use EEPROM.read, pass 
+the address of the byte we want to fetch, and store what is retrieved in a variable in RAM. 
+But how do we re-assemble the pin correctly? For that, we use the bitshift left operator. 
+There is also bitshift right. 
+Bitshift operators do exactly what their name says, they take a byte and move its bits left or 
+right by as many positions as we request. 
+For example, take this byte, and lets bitshift it to the left by 3 positions: 
+    11001101 
+11001101000 
+Notice how all this operator did was to add three zeros to the right side of the byte, and 
+push everything to the left. We now have a binary number with 11 bits. That’s 8 original bits, 
+and 3 inserted bits.  
+#3
+Declare the byte variables that will eventually 
+contain the two bytes of the original pin.
+Retrieve the bytes from addresses 0 and 
+1, and store them in RAM.
+Do some binary arithmetic (“<<“ bit shift 
+left) to assemble the pin from its two 
+parts.
+original
+shifted
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+If you do the opposite, i.e. bitshift to the right by 3 positions, you will end up with this 
+number: 
+11001 
+Notice how the bitshift right operator pushed the byte to the right, and this resulted to the 
+ﬁrst three bits disappearing into the binary ether, and ending up with a 5 bit number.  
+So, this expression: 
+(retrievePinHigh << 8) + retrievePinLow 
+…ﬁrst shifts the high byte by 8 positions to the left, eﬀectively creating a 16 bit word, and 
+then adds the low byte. As a result, we have the original pin reconstructed. Here is the 
+whole thing: 
+         00000100 
+00000100 00000000 
+         11010010 
+00000100 11010010 
+And there you have it, your pin has been retrieved! 
+#4
+High byte
+High byte shifted to 
+the left by 8 bits.
+Low byte
+Shifted high byte and 
+low byte added.
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+Demo 2: Gaining data type ﬂexibility with the 
+EEPROM 
+Dealing with raw bytes may seem daunting at ﬁrst, but with a bit of practice thinking in 
+bytes becomes almost second nature. Still, I ﬁnd that often such low-level implementation 
+details slow us down. You really want to build a prototype quick, not to be caught up in 
+binary arithmetic, even when it’s as simple as what we saw in Demo 1. Personally, I ﬁnd it 
+more eﬃcient for my own productivity to work at a high-level (logical) rather than having to 
+worry about the hardware too much. If your gadget qualiﬁes the prototyping phase, you can 
+always go back for a round of optimisations. So, in this demo, I’ll show you a way to 
+abstract the way that data is written to and read from the EEPROM in a bid to speed up 
+your personal productivity. 
+We will make use of the EEPROMex library, or EEPROM Extended. This library extends the 
+one that comes with the IDE so that it knows about all the common datatypes that we are 
+likely to use in Arduino sketches, not just the byte.  
+With EEPROMex, if you want to store or fetch an integer or a double, you just call the 
+appropriate method and the job is done. No need to think about bits, bytes, and bitshifting. 
+This abstraction and ﬂexibility comes at the cost of ﬂash memory - adding the library adds 
+a couple of kilobytes to your project sketch. 
+Get the library from its Github repository, install it in the Libraries folder, and restart the IDE.  
+The library is a drop-in replacement of the default EEPROM library, meaning that you can 
+just replace one for the other, and your sketch will still work. The extended library adds 
+functions for longs, ints, ﬂoats and doubles. You can also manipulate single bits (great for 
+better managing storage resources), arrays, strings, C structs, and it even provides an 
+update function that checks if a new value already exists in the EERPOM before saving it 
+again, thus extending its life span. 
+Here’s the updated write sketch (Demo2_write): 
+#include <EEPROMex.h> 
+int addr = 0; 
+void setup() 
+{ 
+  Serial.begin(9600); 
+  int myPin=1234; 
+  EEPROM.writeInt(addr, myPin); 
+  Serial.print("My pin recorded:"); 
+  Serial.print(myPin); 
+  Serial.println("."); 
+} 
+#5
+Replace EEPROM.h with EEPROMex.h
+Use EEPROM.writeInt to write an integer. No need 
+to worry about high and low bytes, and addresses 
+for each byte. Just pass the EEPROM address 
+where the integer should be stored, and the 
+integer.
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+void loop() 
+{   } 
+Once the original library has been replaced with EEPROMex.h, all we need to do is to use 
+the appropriate function depending on the data type we are working with. In the example, 
+EEPROM.writeInt will write the integer myPin to address addr. 
+Reading is just as easy: 
+#include <EEPROMex.h> 
+int addr = 0; 
+void setup() 
+{ 
+  Serial.begin(9600); 
+  int retrievePin; 
+  retrievePin = EEPROM.readInt(addr); 
+  Serial.println(retrievePin); 
+  Serial.print("My pin is:"); 
+  Serial.print(retrievePin); 
+  Serial.println("."); 
+} 
+void loop() 
+{   } 
+You only need to use the corresponding read function for whichever write function you used 
+to write a value. 
+#6
+Used EEPROM.writeInt to write and integer? then 
+use EEPROM.readInt to read it back from the 
+EEPROM.
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+Demo 3: Using an external EEPROM 
+You now know how to use the internal EEPROM, but since it’s only 1KByte in size, you may 
+wonder what you can do in order to store more data. You may remember from the SD card 
+lecture, that SD cards is a good way to store lots of data persistently. However the SD card 
+module is a bit pricey (you can get one for $2-$10 depending on its bells and whistles), and 
+then you still need to add the cost and the size of the SD card itself (over $5), and the 
+complexity of using the card itself. 
+An external EEPROM is a good alternative. You can get a 256KByte external EEPROM for 
+around $1.5, store a lot more data in it as compared to the internal capacity, and you only 
+need a tiny amount of space on your printed circuit board. So let’s check this out. 
+I am using the Atmel 
+24C256 chip, which 
+provides 256KBytes of 
+EEPROM memory. It 
+communicates with the 
+Arduino via I2C, which is 
+great, you can connect 
+several chips if your 
+memory needs grow. The 
+module I purchased on 
+eBay also makes it easy 
+to change the device 
+address by bridging the 
+pins marked A0, A1, and 
+A2.  
+Here are the connections: 
+#7
+Arduino
+EEPROM module
+5V
+VCC
+GND
+GND
+A4
+SDA
+A5
+SCL
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+To communicate with an I2C device, we need to know its I2C address. I had no idea what 
+my EEPROM’s address was, so I used an I2C device scanner sketch to ﬁnd it out. 
+I have the sketch in the course’s Github account. It isn’t too important to discuss how the 
+scanner works, we’ll cover that in a lecture dedicated to I2C. But for now it is enough to say 
+that the scanner loops through the 127 possible I2C addresses, send a message to each 
+one, and if the message is acknowledged then we assume that a device is connected and 
+listening at that address. 
+With my I2C EEPROM device only connected, I uploaded the scanner sketch, and this 
+output came out: 
+So, we now know that the EEPROM device is listening at address 50. We’ll use this 
+information in the sketches that follow. 
+To demonstrate how to use the external EEPROM, we’ll follow the pattern from Demos 1 
+and 2: there will be a sketch that writes a pin in the ROM, and one that reads it back. 
+Because the external EEPROM communicates via I2C, we will need to use the I2C protocol 
+to communicate with it. We’ll combine the two into one sketch, where the writing will take 
+place in the setup() function, and the reading in the loop() function. 
+Because I don’t want to deal with the low-level implementation details of the I2C interface 
+and its EEPROM protocol for the chip I am using (the 24C256), I decided to use some code 
+that adds a layer of abstraction. This means that instead of having to worry about the actual 
+I2C commands required to store or retrieve an integer or a byte, I can just call a function 
+like “i2c_eeprom_write_byte” with some parameters and be done with it. 
+Such code exists in the Arduino Playground, but unfortunately it is not available as a library. 
+Instead of just including it into your project, you have to copy and paste the code into your 
+#8
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+sketch. This adds baulk, makes it harder to debug, and fails in the principle of reusing utility 
+code. 
+Creating a simple library 
+I took this as an opportunity to show you how to create a small Arduino library. The code 
+that follows is the code that I want to convert into a library so that I can reuse it in my 
+sketches by simply including the name of the library.  
+You can choose to not read the next section and jump straight to the external 
+EEPROM demo. There will be a separate lecture which will be a more gentle 
+introduction to Arduino libraries. 
+Here it is: 
+void i2c_eeprom_write_byte( int deviceaddress, unsigned int eeaddress, byte data ) 
+{ 
+    int rdata = data; 
+    Wire.beginTransmission(deviceaddress); 
+    Wire.send((int)(eeaddress >> 8)); // MSB 
+    Wire.send((int)(eeaddress & 0xFF)); // LSB 
+    Wire.send(rdata); 
+    Wire.endTransmission(); 
+  } 
+  void i2c_eeprom_write_page( int deviceaddress, unsigned int eeaddresspage, byte* 
+data, byte length ) { 
+    Wire.beginTransmission(deviceaddress); 
+    Wire.send((int)(eeaddresspage >> 8)); // MSB 
+    Wire.send((int)(eeaddresspage & 0xFF)); // LSB 
+    byte c; 
+    for ( c = 0; c < length; c++) 
+      Wire.send(data[c]); 
+   Wire.endTransmission(); 
+} 
+  byte i2c_eeprom_read_byte( int deviceaddress, unsigned int eeaddress ) { 
+    byte rdata = 0xFF; 
+    Wire.beginTransmission(deviceaddress); 
+    Wire.send((int)(eeaddress >> 8)); // MSB 
+    Wire.send((int)(eeaddress & 0xFF)); // LSB 
+    Wire.endTransmission(); 
+    Wire.requestFrom(deviceaddress,1); 
+    if (Wire.available()) rdata = Wire.receive(); 
+    return rdata; 
+  } 
+#9
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+ 
+  void i2c_eeprom_read_buffer( int deviceaddress, unsigned int eeaddress, byte 
+*buffer, int length ) { 
+    Wire.beginTransmission(deviceaddress); 
+    Wire.send((int)(eeaddress >> 8)); // MSB 
+    Wire.send((int)(eeaddress & 0xFF)); // LSB 
+    Wire.endTransmission(); 
+    Wire.requestFrom(deviceaddress,length); 
+    int c = 0; 
+    for ( c = 0; c < length; c++ ) 
+      if (Wire.available()) buffer[c] = Wire.receive(); 
+  } 
+Again, don’t worry too much about the details in this code, I am including it here for the 
+sake of completeness. I am only highlighting the names of the functions (in blue) since we 
+will be calling them from our sketch later. These names make up the user interface of our 
+new library. 
+An Arduino library is made up of two ﬁles: the header ﬁle, and the implementation ﬁle. 
+The header ﬁle contains a list of functions and variables that are publicly available. The 
+implementation ﬁle contains the actual code that implements the functions. Let’s create the 
+header ﬁrst. Just choose a name, I went with EEEPROM, short for External EEPROM. 
+#10
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+Create a new folder, name it EEEPROM, and in it create a new ﬁle named EEEPROM.h: 
+#ifndef EEEPROM_h 
+#define EEEPROM_h 
+#include <Arduino.h> 
+#include <Wire.h> //I2C library 
+class EEEPROM 
+{ 
+ 
+private: 
+ 
+public: 
+ 
+ 
+EEEPROM(); 
+ 
+ 
+void i2c_eeprom_write_byte( int deviceaddress, unsigned int 
+eeaddress, byte data ); 
+ 
+ 
+void i2c_eeprom_write_page( int deviceaddress, unsigned int 
+eeaddresspage, byte* data, byte length ); 
+ 
+ 
+byte i2c_eeprom_read_byte( int deviceaddress, unsigned int eeaddress 
+); 
+ 
+ 
+void i2c_eeprom_read_buffer( int deviceaddress, unsigned int 
+eeaddress, byte *buffer, int length ); 
+}; 
+#endif 
+Think of the header ﬁle as the skeleton of our library. It’s just a declaration of what the 
+outside world should know about it, without any internal details.  
+#11
+ifndef is a compiler directive. If by any chance our 
+sketch has already included this library, then don’t 
+include it again and save some ﬂash memory 
+space.
+Deﬁne the name of this library.
+The Arduino library provides access to all Arduino 
+data types and constants.
+This library will make 
+use of Wire.h, so 
+include it.
+These are markers for the private 
+and public variables of functions. 
+We don’t have anything in private, 
+and the public section is populated 
+with the function deﬁnitions for our 
+library.
+Here are the function deﬁnitions. The ﬁrst one, EEEPROM() 
+is a constructor. Its implementation is empty at the 
+moment, but I plan to add some initialisation code in it 
+later. The rest of the deﬁnitions are fully implemented in the 
+.cpp ﬁle.
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+Let’s have a look at the implementation. Create a new ﬁle named EEEPROM.cpp and add 
+this code in it: 
+#include <Arduino.h> 
+#include <Wire.h> //I2C library 
+#include <EEEPROM.h> 
+EEEPROM::EEEPROM(){  } 
+void EEEPROM::i2c_eeprom_write_byte( int deviceaddress, unsigned int eeaddress, 
+byte data ) { 
+  int rdata = data; 
+  Wire.beginTransmission(deviceaddress); 
+  Wire.write((int)(eeaddress >> 8)); // MSB 
+  Wire.write((int)(eeaddress & 0xFF)); // LSB 
+  Wire.write(rdata); 
+  Wire.endTransmission(); 
+} 
+// WARNING: address is a page address, 6-bit end will wrap around 
+// also, data can be maximum of about 30 bytes, because the Wire library has a 
+buffer of 32 bytes 
+void EEEPROM::i2c_eeprom_write_page( int deviceaddress, unsigned int 
+eeaddresspage, byte* data, byte length ) { 
+  Wire.beginTransmission(deviceaddress); 
+  Wire.write((int)(eeaddresspage >> 8)); // MSB 
+  Wire.write((int)(eeaddresspage & 0xFF)); // LSB 
+  byte c; 
+  for ( c = 0; c < length; c++) 
+    Wire.write(data[c]); 
+  Wire.endTransmission(); 
+} 
+byte EEEPROM::i2c_eeprom_read_byte( int deviceaddress, unsigned int eeaddress ) { 
+  byte rdata = 0xFF; 
+  Wire.beginTransmission(deviceaddress); 
+  Wire.write((int)(eeaddress >> 8)); // MSB 
+  Wire.write((int)(eeaddress & 0xFF)); // LSB 
+  Wire.endTransmission(); 
+  Wire.requestFrom(deviceaddress,1); 
+  if (Wire.available()) rdata = Wire.read(); 
+  return rdata; 
+} 
+… continues … 
+#12
+The Arduino library provides access to all Arduino 
+data types and constants.
+A blank constructor - I will add some initialisation 
+code here later.
+Implementation of the ﬁrst three functions. Notice the “EEEPROM::”, 
+this just declares that the function that follows is part of the EEEPROM 
+class.
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+// maybe let's not read more than 30 or 32 bytes at a time! 
+void EEEPROM::i2c_eeprom_read_buffer( int deviceaddress, unsigned int eeaddress, 
+byte *buffer, int length ) { 
+  Wire.beginTransmission(deviceaddress); 
+  Wire.write((int)(eeaddress >> 8)); // MSB 
+  Wire.write((int)(eeaddress & 0xFF)); // LSB 
+  Wire.endTransmission(); 
+  Wire.requestFrom(deviceaddress,length); 
+  int c = 0; 
+  for ( c = 0; c < length; c++ ) 
+    if (Wire.available()) buffer[c] = Wire.read(); 
+} 
+There is one more ﬁle we need to create, it is called “keywords.txt” and it contains a list of 
+keywords that the Arduino IDE should be able to recognise and highlight in the text editor. 
+Inside the EEEPROM folder, create a new ﬁle named “keywords.txt” with these contents: 
+i2c_eeprom_write_byte 
+KEYWORD2 
+i2c_eeprom_write_page 
+KEYWORD2 
+i2c_eeprom_read_byte 
+KEYWORD2 
+i2c_eeprom_read_buffer 
+KEYWORD2 
+I am using KEYWORD2 to highlight the function names, as per the convention. Here’s what 
+the result is like in the IDE: 
+ 
+You can ﬁnd the latest version of this library on Github. Copy the EEEPROM folder into the 
+Arduino IDE libraries folder and restart to complete the import process. 
+#13
+Completes the implementation.
+These keywords (the function 
+names from the header ﬁle) will 
+be highlighted by the Arduino 
+IDE syntax highlighter.
+These keywords (the function names from the 
+header ﬁle) will be highlighted by the Arduino 
+IDE syntax highlighter. The convention is this: 
+•
+KEYWORD1 Classes, datatypes, and C++ 
+keywords  
+•
+KEYWORD2 Methods and functions 
+KEYWORD3 setup and loop functions, as 
+well as the Serial keywords  
+•
+LITERAL1 Constants  
+•
+LITERAL2 Built-in variables (unused by 
+default)
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+Using the EEEPROM library with the 24C256 EEPROM 
+Finally, let’s use the new library so that we can read and write some data from the external 
+EEPROM chip. Instead of an integer, let’s deal with a string. Here’s the sketch: 
+  #include <Wire.h> //I2C library 
+  #include <EEEPROM.h>   
+  EEEPROM eeeprom = EEEPROM(); 
+  void setup()  
+  { 
+    char somedata[] = "this is data from the eeprom"; 
+    Wire.begin(); 
+    Serial.begin(9600); 
+    eeeprom.i2c_eeprom_write_page(0x50, 0, (byte *)somedata, sizeof(somedata)); 
+    delay(10); //add a small delay 
+    Serial.println("Memory written"); 
+  } 
+  void loop()  
+  { 
+    int addr=0;  
+    byte b = eeeprom.i2c_eeprom_read_byte(0x50, 0); 
+    while (b!=0)  
+    { 
+      Serial.print((char)b); 
+      addr++; 
+      b = eeeprom.i2c_eeprom_read_byte(0x50, addr); 
+    } 
+    Serial.println(" "); 
+    delay(2000); 
+  } 
+The sketch will store the string “this is data from the eeprom” in the external EEPROM, the 
+retrieve it and print it to the console every two seconds. By including the EEEPROM.h 
+library, we have simpliﬁed the sketch a lot.  
+There is still room for improvement though. Notice how the I2C address “0x50” has to be 
+provided as a parameter every time we call one of the library functions? Can you think of a 
+way to only provide this address once by improving the way that the library is constructed 
+and used? 
+#14
+Include the EEEPROM library we just created.
+Create an EERPROM object, call it “eeeprom”.
+We will write this string (array of char) to the EEPROM.
+Call i2c_eeprom_write_page, which writes multiple 
+bytes to the EEPROM. Pass the I2C address of the 
+device (0x50), the address where the ﬁrst byte of 
+this string should be stored (0), a pointer to the array 
+of char that contains our data, and the size of the 
+array.
+We’ll read the string one byte 
+(character) at a time. Start with the 
+ﬁrst byte at memory location 0. As 
+parameters, pass the I2C address 
+of the device and the byte address 
+we want to retrieve.
+Repeat this reading block for as 
+long as there are characters to 
+read.
+Print the character that was previously read in the 
+console, then increment the byte address by one, 
+and fetch the byte in that address from the 
+EEPROM.
+
+Peter Dalmaris
+Arduino Step by Step
+EEPROM
+Conclusion 
+Try to be as frugal as possible when using EEPROM. These memories have a limited life-
+span, usually 100,000 read/write cycles. This is indeed a large number, however if you do 
+reading and writing in a loop, like when storing sensor log data every few seconds, you 
+could wear it out before you know it.  
+In general, it is a really bad idea to put write calls to the EEPROM in a loop as it is possible 
+to burn out those bytes in a few minutes. That is a big reason behind only playing with the 
+EERPOM inside the setup loop in the demos of this lecture, never inside the loop function.
+#15
+

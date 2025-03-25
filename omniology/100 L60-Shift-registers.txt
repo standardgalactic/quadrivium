@@ -1,0 +1,451 @@
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+Shift registers 
+The Arduino only has a relatively small number of digital outputs. While there are enough of 
+them to get us through the examples in this course, in most real life projects they will be not 
+enough. 
+Take, for example, the the case of a gadget that contains a character LCD screen, a couple 
+of status LED, a couple of buttons, and a couple of sensors and a Wiﬁ breakout. You will 
+need 2 pins for the screen (using the serial to parallel adaptor), 2 for the LEDs, 2 for the 
+buttons, at least 2 for the sensors, and 6 for the Wiﬁ breakout. That more or less exhausts 
+the available ports.  
+Sooner or later you will need a way to multiply the available inputs and outputs so that you 
+can connect a larger variety of peripherals.  
+In this lecture, I’ll show you how to use shift registers to multiply the available digital 
+outputs. In a later lecture I will also introduce you to I2C-driven port expanders. These 
+technologies make it possible to design ever larger and realistic gadgets using a single low 
+cost micro-controller. 
+Before getting into it, I should highlight that more available ports do not automatically 
+guarantee that you will be able to create larger gadgets. Once the input/output port 
+availability is dealt with, the next potential show stopper is memory. At 32Kbytes of ﬂash 
+memory, it becomes diﬃcult to create sketches that match the ever growing hardware they 
+are supposed to drive. So, also in a later lecture I will talk about ways to manage and 
+optimise memory use. 
+#1
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+What is a shift register? 
+Think of a shift register as a single-byte memory. Each of the bits in this memory is 
+connected to the outside world via a pin on the package of the chip that contains the 
+memory. You use a single data pin from the Arduino to write each bit, one at a time.  
+Because each bit is written individually, and all bits can be read all at once, we say that a 
+shift-register is a device that supports serial in and parallel out. 
+To support the serial transfer of bits from the Arduino to the shift register chip, we need a 
+second pin that provides a clock signal. Every time the clock ticks, one bit is transmitted 
+from the Arduino to the shift register. Once the new bit is received by the shift register, all 
+existing bits are shifter by one bit to make room for the new one. This shifting process is 
+what gave the name “shift register” to this device. Here’s a graphical way to look at this 
+process: 
+Let’s say that we’d like to store the byte 11001101 in the shift register represented by this 
+table. At start, the shift register has an undeterminable state, so I’ll represent this with a 
+question mark. 
+This is Step 0: 
+In Step 1, we’ll take the least signiﬁcant bit (ﬁrst from the right - 11001101), wait for the 
+clock to tick, and shift it in the register. We could have chosen to start with the most 
+signiﬁcant bit just the same. 
+This is Step 1:  
+Notice the grey box at the end of the register. This is an additional “overﬂow” bit memory 
+that stores the bit that was shifted into it from the bit on its left. We will be using this 
+overﬂow bit in Demo 2 when we create a circuit that uses two shift registers connected in 
+series. 
+In Step 2, we’ll take the next least signiﬁcant bit (second from the right - 11001101), wait for 
+the clock to tick, and shift it in the register. Notice that the original ﬁrst most signiﬁcant bit 
+(“1”) is greyed out to show that it has already been transmitted to the register. We now also 
+have the ﬁrst bit that shifts out of the overﬂow bit and is lost for all eternity. I’m only 
+including it here outside the register to emphasise the outcome of the shift function. 
+This is Step 2:  
+In Step 3, the same process continues: clock ticks, next bit in “11001101” is sent to the 
+shift register, and all existing bit in the register are shifted one position to the right to make 
+room for the new bit.  
+This is Step 3:   
+I will speed up the rest of the sequence: 
+#2
+?
+?
+?
+?
+?
+?
+?
+?
+1
+?
+?
+?
+?
+?
+?
+?
+?
+0
+1
+?
+?
+?
+?
+?
+?
+?
+1
+0
+1
+?
+?
+?
+?
+?
+?
+??
+?
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+This is Step 4 “11001101”: 
+This is Step 5 “11001101”: 
+This is Step 6 “11001101”: 
+This is Step 7 “11001101”: 
+This is Step 8 “11001101”: 
+And ﬁnally, the complete byte has been shifted into the shift register. You can sent single 
+bits to the register, its not necessary to do so for a whole byte (though most libraries make 
+the latter easier than the former). For example, let’s say that you wanted to sent a “0” to the 
+register, which already contains the values from the previous experiment. You would end up 
+with these new contents in the register: 
+The original least signiﬁcant bit from the ﬁrst experiment has now been shifted into the 
+overﬂow bit cell to make room for the new value at the left end of the register. 
+Another way to think about the way that this register operates is “FIFO”: First bit in is First 
+bit out. 
+I hope you have a solid understanding of this process now, it will make it easy to 
+understand what is happening with Demo 1 which follows. If you feel unclear about 
+something, read this section again or ask a question in the forum. 
+#3
+1
+1
+0
+1
+?
+?
+?
+?
+?
+???
+0
+1
+1
+0
+1
+?
+?
+?
+?
+????
+0
+0
+1
+1
+0
+1
+?
+?
+?
+?????
+1
+0
+0
+1
+1
+0
+1
+?
+?
+??????
+1
+1
+0
+0
+1
+1
+0
+1
+?
+???????
+0
+1
+1
+0
+0
+1
+1
+0
+1
+????????
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+Demo 1: Drive 8 LEDs with a single data wire 
+Normally, to drive an LED you need to connect it to one of the Arduino’s outputs. If you 
+need to drive two LEDs, then you need 2 outputs. Etc. Etc. 
+In this demo, we’ll drive LEDs by using a single data wire, with the help of a shift register. 
+Shift register chips are very cheap and made by many diﬀerent companies. A typical one is 
+the 74HC595N. This device provides 8-bit storage, plus one for the overﬂow. The particular 
+one I used is made by NXP, and you can ﬁnd it’s datasheet here. The ﬁrst thing you want to 
+look at in the datasheet is the pin out diagram so that you can see the functionality of each 
+pin. I have grabbed this from the datasheet. I deﬁne the pin functions in the table next to 
+the diagram. 
+#4
+Pin #
+Symbol
+Description
+1-7
+Q0-Q7
+Data out pins 0 to 7. Notice that Q0 is 
+on pin 15
+8
+GND
+Ground
+9
+Q7S
+This is the overﬂow bit. It will store the 
+bit shifted out of Q7.
+10
+MR 
+inverted
+Master reset. If this pin is grounded, 
+the chip is reset. We’ll keep it 
+connected to 5V.
+11
+SHCP
+Clock input. This pin will receive the 
+clock pulses from the Arduino. With 
+each clock pulse, the bits are shifted.
+12
+STCP
+Latch. Make this LOW while the bits 
+are shifting to prevent devices 
+connected to the outputs from 
+reading transient values (values are 
+“frozen” to those before shifting 
+begun). Once the bit shifting is 
+complete, make this HIGH to allow 
+the connected devices to read the 
+new values.
+13
+OE 
+inverted
+Enable or disable output pins. We will 
+keep it always connected to GND so 
+that outputs are always enabled.
+14
+DS
+The data pin. The Arduino will use this 
+pin to sent the bit values to the shift 
+register.
+15
+Q0
+Data out for bit 0.
+16
+Vcc
+Power in (5V)
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+The circuit for this demo is this: 
+We’ll use 220Ω or close resistors for each LED. Start with the 74HC595N chip on one side 
+of the breadboard, then connect the LEDs and their resistors. Then, do the wiring between 
+the LEDs and the D0-D7 pins on the chip.  
+Then, connect the chip to the Arduino like this: 
+• Chip Pin 11 to Arduino Pin 10 
+• Chip Pin 12 to Arduino Pin 9 
+• Chip Pin 14 to Arduino Pin 8 
+#5
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+Connect the 5V breadboard rail to Pins 16 and 10 on the chip, and ground to Pin 8 on the 
+chip. Chip pins 9 and 13 are not connected to anything at the moment.  
+If everything is connected properly, then once you apply power for the ﬁrst time, the LEDs 
+will light up at a random pattern. They will show whatever is stored in the shift register. Let’s 
+have a look at the sketch and see how we can change the pattern. 
+ 
+const int latchPin = 9; 
+const int clockPin = 10; 
+const int dataPin = 8; 
+void setup() { 
+  pinMode(latchPin, OUTPUT); 
+  pinMode(dataPin, OUTPUT);   
+  pinMode(clockPin, OUTPUT); 
+  Serial.begin(9600); 
+  randomSeed(analogRead(0)); 
+} 
+void loop() { 
+  byte randNumber1 = random(255); 
+  writeLeds(randNumber1); 
+  delay(100);   
+} 
+void writeLeds(byte pattern) 
+{ 
+  digitalWrite(latchPin, LOW); 
+  Serial.println(pattern,BIN); 
+  shiftOut(dataPin, clockPin, MSBFIRST, pattern); 
+  digitalWrite(latchPin, HIGH); 
+} 
+Plug in your Arduino and upload the sketch. You should see the LEDs blinking in random 
+patterns, like this (next page): 
+#6
+Set the Data, Clock and Latch pins. These are 
+pins 14, 9, and 10 respectively on the chip.
+All three pins are outputs, so conﬁgure them as 
+such.
+We’ll use an Arduino function that generates 
+pseudorandom numbers. Here, we use 
+randomSeed to initialize the generator with a 
+random value obtained from pin 0. When this pin 
+is not connected to anything, its value is as 
+random as it can get, so it is a good seed for the 
+generator.
+Create a new random number, from 0 to 255. 
+Store this as a byte. Because the maximum 
+decimal is 255, which in binary is “11111111”, we 
+ensure that a full random byte is generated. Then, 
+pass this random byte as a parameter to the 
+writeLeds function, which will pass it to the shift 
+register, and wait for 100 milliseconds.
+We are about to shift bits into 
+the register, so take the Latch 
+LOW to hide the new values 
+until we are ready to reveal 
+them (the full byte has been 
+shifted in).
+Use the shiftOut function to handle the shifting of the byte, so 
+we don’t have to worry about clock timing and bit manipulation. 
+Pass the data and clock pin numbers, indicate which bit should 
+be shifted ﬁrst (we choose Most Signiﬁcant bit First here, i.e. 
+the ﬁrst bit from the left), and the byte to be shifted out.
+With the shifting process 
+completed, we can now 
+restore the Latch value to 
+HIGH so that the new 
+values are revealed to the 
+LEDs.
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+Perhaps now you can see how a shift register can be used to allow your sketch to control 
+an arbitrary number of external devices. Instead of LEDs, you could be controlling relays or 
+transistors as switches for higher loads (that is, devices that require a lot of power to run). It 
+is even possible to use shift registers as an input, whereby the shift register reads all inputs 
+in parallel, and then shifts them out in a serial manner to a reading device (like the Arduino). 
+An example of such a parallel-in serial-out register is the SN74ALS164A (link will open it’s 
+data sheet). 
+Another consideration is power. The 74HC595N can provide less than 20mA for each 
+output pin, and in our circuit it draws this power from the Arduino’s power supply. If the 
+load placed on it exceeds a certain limit, the circuit will either not work or it will be damaged 
+if it is forced to exceed its speciﬁcations. In such situations, you can consider providing a 
+separate power supply for the 74HC595N and for it’s loads (like the LEDs). You can do this 
+with a simple transistor ampliﬁer circuit, or by segmenting the driver circuit (the 74HC595N 
+and the Arduino) from its load with relays.  
+#7
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+Demo 2: upgrade to 16 LEDs 
+In demo 2, we’ll add a second 74HC595N to our circuit and drive an impressive 16-LED 
+array, all lighting up in random patterns, while still only using a single data wire on the 
+Arduino (plus latch and clock). Here’s the circuit, it really is simpler than what it looks: 
+The circuit from Demo 1 is on the left of the breadboard. The new part on the right is made 
+of the same arrangement of LEDs and resistors, plus the second 74HC595N. Because 
+there’s so many LEDs drawing a few mA of power each at random times, there will be a 
+strain on the Arduino’s power supply. To smooth out spikes in consumption, I have added 
+an electrolytic capacitor directly on the power rails of the breadboards. The one I used in 
+my circuit is 220μF. Be careful of the polarity, it is clearly marked on the package of the 
+capacitor. If you remember, we used a capacitor in the exact same way in the servo motor 
+lecture. 
+Let’s concentrate on the second 74HC59N  (Chip 2) for a moment. The ﬁrst 74HC59N  is 
+Chip 1. Connect it like this: 
+• Chip 2 Pin 11 to Chip 1 Pin 11 
+• Chip 2 Pin 12 to Chip 1 Pin 12 
+• Chip 2 Pin 14 to Chip 1 Pin 9 Q7S (this establishes the daisy chaining of the two chips) 
+#8
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+Connect the 5V breadboard rail to Pins 16 and 10 on Chip 2, and ground to Pin 8 on Chip 2. 
+Chip 2 pins 9 and 13 are not connected to anything. 
+This is the sketch. It’s almost identical to the sketch in demo 1. The only diﬀerences are 
+highlighted below. 
+const int latchPin = 9; 
+const int clockPin = 10; 
+const int dataPin = 8; 
+void setup() { 
+ 
+pinMode(latchPin, OUTPUT); 
+ 
+pinMode(dataPin, OUTPUT);   
+ 
+pinMode(clockPin, OUTPUT); 
+ 
+Serial.begin(9600); 
+ 
+randomSeed(analogRead(0)); 
+} 
+void loop() { 
+ 
+byte randNumber1 = random(255); 
+ 
+byte randNumber2 = random(255); 
+ 
+writeLeds(randNumber1); 
+ 
+writeLeds(randNumber2); 
+ 
+delay(100);   
+} 
+void writeLeds(byte pattern) 
+{ 
+      digitalWrite(latchPin, LOW); 
+      Serial.println(pattern,BIN); 
+      shiftOut(dataPin, clockPin, MSBFIRST, pattern); 
+      digitalWrite(latchPin, HIGH); 
+} 
+The only change to the sketch is the addition of a second random byte, and a second call 
+to the writeLeds function. The ﬁrst call will transmit the ﬁrst random byte, and the second 
+call will transmit the second random byte.  
+This is what is happening: as the bits stored in the ﬁrst 74HC59N are shifted out by the bits 
+of the second byte, one by one they are pushed into the overﬂow bit cell. This is Pin 9 Q7S 
+on Chip 1. As Chip 2 has its Pin 14 (Data pin) connected to Chip 1 Pin 9, it will pick the 
+overﬂow bit and start shifting it in its own cells. Since Chip 1 and 2 share the same latch 
+and clock signals, they will be synchronised and work together as a single 16-bit shift 
+register. You can daisy chain as many 74HC59N units you like like this, the concept is the 
+same. 
+#9
+Generate a second random byte, just like in Demo 
+1. Write the second random byte to the 16-bit 
+shift register by calling writeLeds twice.
+
+Peter Dalmaris
+Shift Registers
+Arduino Step by Step
+The Demo 2 circuit in operation. 
+Conclusion 
+Shift registers operate on a very simple principle, however from experience I know it is a topic that 
+tends to confuse new makers. Hang in there, read again, experiment with the circuits, and ask if you 
+run into trouble. Once you understand the basics, you will be able to use them without much eﬀort.  
+I will come back to shift registers in an upcoming lecture on 7-segment displays.  
+As an exercise, try this: modify the sketch for Demo 1 so that you can type in a number from 0 to 255 
+and have the binary representation of that number show in on the LEDs. You will need to ﬁgure out 
+how to enter text in the console (I have shown you how to do this in a previous lecture).  
+You can also try this: modify the sketch from Demo 1 so that the number of LEDs lit depends on the 
+value coming out of a potentiometer. When the potentiometer is turn all the way to one direction, you 
+will have no LEDs lit, when it’s all the way to the other direction you will have all of the LEDs lit, and 
+accordingly for all other positions.
+#10
+

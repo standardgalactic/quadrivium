@@ -1,0 +1,190 @@
+Samba download, install and configuration 
+ 
+• 
+Samba is a Linux tool or utility that allows sharing for Linux resources such as files 
+and printers to with other operating systems 
+• 
+It works exactly like NFS but the difference is NFS shares within Linux or Unix like 
+system whereas Samba shares with other OS (e.g. Windows, MAC etc.) 
+ 
+For example, computer “A” shares its filesystem with computer “B” using Samba 
+then computer “B” will see that shared filesystem as if it is mounted as the local 
+filesystem 
+ 
+• 
+Samba shares its filesystem through a protocol called SMB (Server Message Block)  
+which was invented by IBM  
+• 
+Another protocol used to share Samba is through CIFS (Common Internet File 
+System) invented by Microsoft and also NMB (NetBios Name server) 
+ 
+• 
+CIFS became the extension of SMB and now Microsoft has introduced newer version 
+of SMB v2 and v3 that are mostly used in the industry 
+ 
+• 
+Most people, when they use either SMB or CIFS, are talking about the same exact 
+thing.  The two are interchangeable not only in discussion, but also in application – 
+i.e., a client speaking CIFS can talk to a server speaking SMB and vice versa.  Why?  
+Because CIFS is a form of SMB 
+ 
+ 
+ 
+Step by steps installation instructions 
+First please make sure to take a snapshot of your VM 
+ 
+• 
+Install samba packages 
+ 
+# Become root user 
+# yum install samba samba-client samba-common 
+ 
+• 
+Enable samba to be allowed through firewall (Only if you have firewall running) 
+ 
+# firewall-cmd --permanent --zone=public --add-service=samba 
+ 
+# firewall-cmd –reload 
+ 
+• 
+To stop and disable firewall or iptables 
+ 
+# systemctl stop firewalld 
+ 
+# systemctl stop iptables 
+ 
+# systemctl disable firewalld 
+ 
+# systemctl disable iptables 
+ 
+
+• 
+Create Samba share directory and assign permissions 
+ 
+# mkdir -p /samba/morepretzels 
+ 
+# chmod a+rwx /samba/morepretzels 
+ 
+# chown -R nobody:nobody /samba 
+ 
+• 
+Also, you need to change the SELinux security context for the samba shared 
+directory as follows: (Only if you have SELinux enabled) 
+ 
+# chcon -t samba_share_t /samba/morepretzels 
+ 
+• 
+If you want to disable SELinux, follow these instructions 
+# sestatus To check the SELinux status) 
+# vi /etc/selinux/config 
+Change 
+SELINUX=enforcing 
+To 
+SELINUX=disabled 
+# reboot 
+ 
+• 
+Modify /etc/samba/smb.conf file to add new shared filesystem (Make sure to 
+create a copy of smb.conf file) 
+Delete everything from smb.conf file and add the following parameters 
+ 
+[global] 
+        
+workgroup = WORKGROUP 
+netbios name = centos 
+security = user 
+map to guest = bad user 
+dns proxy = no 
+ 
+[Anonymous] 
+path = /samba/morepretzels 
+browsable = yes 
+writable = yes 
+guest ok = yes 
+guest only = yes 
+read only = no 
+ 
+• 
+Verify the setting 
+# testparm 
+ 
+• 
+Once the packages are installed, enable and start Samba services 
+ 
+# systemctl enable smb 
+ 
+# systemctl enable nmb 
+ 
+# systemctl start smb 
+ 
+# systemctl start nmb 
+
+• Mount on Windows client 
+o Go to start 
+o Go to search bar 
+o Type \\192.168.1.95  
+(This is my server IP, you can check your Linux  
+CentOS IP by running the command ifconfig) 
+ 
+• Mount on Linux client 
+Become root 
+# yum -y install cifs-utils samba-client 
+Create a mount point directory 
+# mkdir /mnt/sambashare 
+Mount the samba share 
+# mount -t cifs //192.168.1.95/Anonymous /mnt/sambashare/ 
+# Entry without password 
+ 
+ 
+Secure Samba Server 
+ 
+• Create a group smbgrp & user larry to access the samba server with proper 
+authentication 
+ 
+# useradd larry 
+# groupadd smbgrp 
+# usermod -a -G smbgrp larry 
+# smbpasswd -a larry 
+New SMB password:  YOUR SAMBA PASS 
+Retype new SMB password:   REPEAT YOUR SAMBA PASS 
+Added user larry 
+ 
+ 
+• Create a new share, set the permission on the share: 
+ 
+# mkdir /samba/securepretzels 
+# chown -R larry:smbgrp /samba/securepretzels 
+# chmod -R 0770 /samba/securepretzels 
+# chcon -t samba_share_t /samba/securepretzels 
+ 
+ 
+• Edit the configuration file /etc/samba/smb.conf (Create a backup copy first) 
+ 
+# vi /etc/samba/smb.conf 
+Add the following lines 
+ 
+[Secure] 
+ 
+ 
+path = /samba/securepretzels 
+ 
+ 
+valid users = @smbgrp 
+ 
+ 
+guest ok = no 
+
+ 
+ 
+writable = yes 
+ 
+ 
+browsable = yes 
+ 
+• 
+Restart the services 
+ 
+# systemctl restart smb 
+ 
+# systemctl restart nmb 
+

@@ -1,0 +1,949 @@
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+Lecture 50 
+Wiﬁ 
+In Lecture 33 and 34, you learned about the Arduino Ethernet shield, and connected your 
+Arduino to the Internet. In this lecture, we’ll again connect the Arduino to the Internet, but 
+we’ll do that using Wiﬁ, and go completely wireless! 
+There are a lot of shields and breakout boards that provide Wiﬁ functionality, with varying 
+prices. Shields that provide 802.11n capability can sell for over $100 with bells and whistles 
+like external antennas and on-board SD card modules.  
+I personally go for breakout boards whenever possible, because usually they oﬀer a lower 
+price point, a modular and smaller package, and a single function per board which makes it 
+easier to learn and integrate into to my projects. 
+For this lecture, I chose the Adafruit 
+CC3000 breakout board, with an on-board 
+ceramic antenna. This product also is It 
+comes as a shield, and with a connector 
+for an external antenna if you need 
+extended range. At around $35, it oﬀers 
+802.11a/g connectivity, very small size, a 
+nice library, and lots of documentation.  
+I will go through 3 demos in this lecture. In 
+the ﬁrst one, we’ll connect the CC3000 to 
+the Arduino and run one of the library’s 
+examples to make sure that it works and 
+that it can connect to our Wiﬁ router. In the second one, I’ll show you how to create a Wiﬁ 
+web client, whereby the Arduino will be polling a URL, and fetching a ﬁle contains 
+instructions for turning an LED on or oﬀ. The polling method has an advantage over the 
+web server method because it is not aﬀected by ﬁrewall or NAT restrictions. This means 
+that by polling an external URL to your local network, you will be able to control your 
+Arduino from anywhere in the Internet without having to conﬁgure your router to allow 
+access to the Arduino from the outside world. 
+In the last one I will show you an adapted version of Demo 2 from lecture 38, where we had 
+a web server running on the Arduino, showing us a simple user interface through which we 
+could turn an LED on and oﬀ. 
+#1
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+Demo 1: Connect the Wiﬁ module and access the 
+LAN 
+Once you receive your CC3000, you will need to ﬁrst 
+solder the header pins to it. Once you have that, your 
+module will look like this:  
+Adafruit maintains a Github repository with the latest 
+version of the library and examples. Go ahead and get it, 
+then copy the library into your Arduino IDE’s libraries 
+folder as we have done before. Remember to restart the 
+IDE once the new library has been installed. 
+The CC3000 Wiﬁ module, made by Texas Instruments, uses the SPI communications 
+interface to talk to the Arduino. On the PCB, notice the familiar pin markings CLK, MISO, 
+MOSI, and CS. We saw the exact same pins on the SD card module in lecture 45. There’s 
+two additional pins on the CC3000: IRQ and VBAT_EN (the actual marking is VBEN on the 
+PCB). 
+In the SD card module, the Arduino is responsible for initiating communication. The Arduino 
+will ask for a read or write, and the SD card module will execute it. The SD card module 
+never initiates communication. With the wiﬁ module, however, it is just as likely for the 
+module to initiate communication as it is for the Arduino. The IRQ pin (for “Interrupt 
+ReQuest”) is used by the Wiﬁ module to grab the attention of the Arduino when it has data 
+to sent. The Arduino Uno has a special pin, digital pin 3, which can detect an interrupt 
+request. When an interrupt is requested, the Arduino will stop whatever it is doing at that 
+moment and start executing a special function (part of the CC3000 library) that will deal 
+#2
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+with the interrupt. When the function is done dealing with the interrupt, the Arduino 
+continues doing whatever it was doing before the interrupt.  
+The VBAT_EN is used to start the module properly. Think of it as a reset switch. 
+Here’s the schematic and a pinout table:  
+Double-check the connections, and the plug the Arduino to your computer via the USB 
+port. A surface-mounted green LED will light up on the wiﬁ board, that’s means you’re good 
+to go! 
+Arduino 
+CC3000
+13
+SCK
+12
+MISO
+11
+MOSI
+10
+CS
+5
+VBEN
+3
+IRQ
+GND
+GND
+5V
+VIN
+#3
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+Sketch 
+Let’s look at the sketch now. The one we’ll use for this demo is one of the many samples 
+that come with the CC3000 library. Fire up the IDE and load the example: File —> Examples 
+—> Adafruit_CC3000_Library —> buildtest 
+Here is the sketch (edited to make it ﬁt), I am highlighting the interesting parts: 
+… continues next page … 
+#4
+#include <Adafruit_CC3000.h> 
+#include <ccspi.h> 
+#include <SPI.h> 
+#include <string.h> 
+#include "utility/debug.h" 
+#define ADAFRUIT_CC3000_IRQ   3 
+#define ADAFRUIT_CC3000_VBAT  5 
+#define ADAFRUIT_CC3000_CS    10 
+// Use hardware SPI. On an UNO, SCK = 13, MISO = 12, and MOSI = 11 
+Adafruit_CC3000 cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, 
+ADAFRUIT_CC3000_IRQ, ADAFRUIT_CC3000_VBAT, SPI_CLOCK_DIVIDER); 
+#define WLAN_SSID "myNetwork" 
+#define WLAN_PASS "myPassword" 
+// Security can be WLAN_SEC_UNSEC, WLAN_SEC_WEP, WLAN_SEC_WPA or WLAN_SEC_WPA2 
+#define WLAN_SECURITY WLAN_SEC_WPA2 
+void setup(void) 
+{ 
+  Serial.begin(115200); 
+  Serial.println(F("Hello, CC3000!\n"));  
+  displayDriverMode(); 
+  Serial.print("Free RAM: "); Serial.println(getFreeRam(), DEC); 
+  /* Initialise the module */ 
+  Serial.println(F("\nInitialising the CC3000 ...")); 
+  if (!cc3000.begin()) 
+  { 
+    Serial.println(F("Unable to initialise the CC3000! Check your wiring?")); 
+    while(1); 
+  } 
+  uint16_t firmware = checkFirmwareVersion(); 
+  if ((firmware != 0x113) && (firmware != 0x118)) { 
+  Serial.println(F("Wrong firmware version!")); 
+    for(;;); 
+  } 
+  displayMACAddress();
+Import the Adafruit library so that we can use the Wiﬁ module.
+Contains SPI helper functions for the CC3000.
+Import that standard SPI and String libraries.
+Implements the useful foreach() and sign() functions, used in this 
+sketch.
+Set pins for IRQ (ﬁxed) and VBAT, CS (can change).
+Initialise the CC300 object with the deﬁned pins as parameters. 
+SPI_CLOCK_DIVIDER sets the module clock speed based on the 
+type of the micro-controller used.
+Set the Wiﬁ credentials and security type. 
+Call a function that displays the type of driver used (tiny or 
+normal).
+Gets RAM remaining, great for debugging memory issues.
+Try to start the device. Assuming wiring is correct, this should work.
+Call a function that displays the ﬁrmware running in the module.
+Call a function that displays the MAC address assigned to the 
+module.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#5
+  #ifndef CC3000_TINY_DRIVER 
+    listSSIDResults(); 
+  #endif 
+ 
+  Serial.println(F("\nDeleting old connection profiles")); 
+  if (!cc3000.deleteProfiles()) { 
+    Serial.println(F("Failed!")); 
+    while(1); 
+  } 
+ 
+  char *ssid = WLAN_SSID;             /* Max 32 chars */ 
+  Serial.print(F("\nAttempting to connect to ")); Serial.println(ssid); 
+  /* NOTE: Secure connections are not available in 'Tiny' mode! */ 
+  if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) { 
+    Serial.println(F("Failed!")); 
+    while(1); 
+  } 
+  Serial.println(F("Connected!")); 
+  /* Wait for DHCP to complete */ 
+  Serial.println(F("Request DHCP")); 
+  while (!cc3000.checkDHCP()) 
+  { 
+    delay(100); 
+  }   
+  /* Display the IP address DNS, Gateway, etc. */   
+  while (! displayConnectionDetails()) { 
+    delay(1000); 
+  } 
+#ifndef CC3000_TINY_DRIVER 
+  /* Try looking up www.adafruit.com */ 
+  uint32_t ip = 0; 
+  Serial.print(F("www.adafruit.com -> ")); 
+  while  (ip  ==  0)  { 
+    if  (!  cc3000.getHostByName("www.adafruit.com", &ip))  { 
+      Serial.println(F("Couldn't resolve!")); 
+    } 
+    delay(500); 
+  }   
+  cc3000.printIPdotsRev(ip); 
+  /* Do a quick ping test on adafruit.com */   
+  Serial.print(F("\n\rPinging "));  
+  cc3000.printIPdotsRev(ip); Serial.print("...");   
+  uint8_t replies = cc3000.ping(ip, 5); 
+  Serial.print(replies); Serial.println(F(" replies")); 
+  if (replies) 
+    Serial.println(F("Ping successful!")); 
+#endif
+You can load a small-footprint driver for the Wiﬁ module. The tiny 
+driver will only load the essential API functions and save a lot of 
+RAM. See http://processors.wiki.ti.com/index.php/
+Tiny_Driver_Support. Enable tiny mode by adding this deﬁnition in 
+your code: #deﬁne CC3000_TINY_DRIVER.
+Unless running in tiny mode, call the listSSIDResults function 
+and show detected WiFi networks.
+A proﬁle is a wiﬁ network of which the device remembers its 
+credentials. Calling deleteProﬁles() deletes such networks. 
+More info: http://processors.wiki.ti.com/index.php/
+Attempt to connect to the Wiﬁ access point with the security 
+credentials as parameters.
+Go in a loop, until DHCP assigns network settings. If DHCP 
+has not responded yet, wait for 100msec before trying again.
+Show assigned IP and other connection details.
+Resolve the IP address of the host 
+www.adafruit.com. The IP address will be stored 
+to the memory address passed as the second 
+parameter (“&ip”). This is a DNS request.
+The ip variable was declared of type uint32_t, which is a 
+4-byte integer. This function will convert this integer into 
+a dot-delimited nice looking IP address like this: 
+207.58.139.247
+Ping this host and store the response in a 1-
+byte (8 bit) unsigned integer. The response 
+contains the number of packets received.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#6
+  Serial.println(F("\n\nClosing the connection")); 
+  cc3000.disconnect(); } 
+void loop(void){ 
+  delay(1000); } 
+void displayDriverMode(void){ 
+  #ifdef CC3000_TINY_DRIVER 
+    Serial.println(F("CC3000 is configure in 'Tiny' mode")); 
+  #else 
+    Serial.print(F("RX Buffer : ")); 
+    Serial.print(CC3000_RX_BUFFER_SIZE); 
+    Serial.println(F(" bytes")); 
+    Serial.print(F("TX Buffer : ")); 
+    Serial.print(CC3000_TX_BUFFER_SIZE); 
+    Serial.println(F(" bytes")); 
+  #endif 
+} 
+uint16_t checkFirmwareVersion(void) 
+{ 
+  uint8_t major, minor; 
+  uint16_t version; 
+  #ifndef CC3000_TINY_DRIVER   
+    if(!cc3000.getFirmwareVersion(&major, &minor)) { 
+      Serial.println(F("Unable to retrieve the firmware version!\r\n")); 
+      version = 0; 
+    } 
+  else 
+  { 
+    Serial.print(F("Firmware V. : ")); 
+    Serial.print(major); Serial.print(F(".")); Serial.println(minor); 
+    version = major; version <<= 8; version |= minor; 
+  } 
+#endif 
+  return version; 
+}
+Disconnect the device from the Wi-ﬁ network.
+Start of a pre-processor conditional group. 
+What follows (until the #endif directive) will be 
+compiled only if the tiny driver is used.
+Print out various driver parameters. The F() 
+function enforces storage of these static 
+(unchanging) Strings in ﬂash memory instead 
+of SRAM, therefore preserving SRAM for the 
+dynamic segments of the sketch. Reminder: 
+ﬂash memory is where the sketch is actually 
+stored when you upload it.
+End of the pre-processor conditional group.
+Retrieve the ﬁrmware version running in the 
+device, and store the major and minor versions 
+in the memory locations provided as 
+parameters.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#7
+void displayMACAddress(void){ 
+  uint8_t macAddress[6]; 
+  if(!cc3000.getMacAddress(macAddress)) 
+  { 
+    Serial.println(F("Unable to retrieve MAC Address!\r\n")); 
+  } 
+  else 
+  { 
+    Serial.print(F("MAC Address : ")); 
+    cc3000.printHex((byte*)&macAddress, 6); 
+  } 
+} 
+bool displayConnectionDetails(void){ 
+  uint32_t ipAddress, netmask, gateway, dhcpserv, dnsserv; 
+  if(!cc3000.getIPAddress(&ipAddress, &netmask, &gateway, &dhcpserv, &dnsserv)) 
+  { 
+    Serial.println(F("Unable to retrieve the IP Address!\r\n")); 
+    return false; 
+  } 
+  else 
+  { 
+    Serial.print(F("\nIP Addr: ")); cc3000.printIPdotsRev(ipAddress); 
+    Serial.print(F("\nNetmask: ")); cc3000.printIPdotsRev(netmask); 
+    Serial.print(F("\nGateway: ")); cc3000.printIPdotsRev(gateway); 
+    Serial.print(F("\nDHCPsrv: ")); cc3000.printIPdotsRev(dhcpserv); 
+    Serial.print(F("\nDNSserv: ")); cc3000.printIPdotsRev(dnsserv); 
+    Serial.println(); 
+    return true; 
+  } 
+} 
+Get the device’s MAC address. It contains 6 
+bytes, and those bytes are stored in the 
+macAddress array of bytes.
+Print the MAC address in hexadecimal 
+notation, as is common.
+Get the Wiﬁ connection parameters. The 
+parameters will be stored in the memory 
+locations passed as parameters to the 
+function.
+Print out the Wiﬁ connection parameters.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+Here is an example 
+output of this sketch: 
+#8
+void listSSIDResults(void) 
+{ 
+  uint8_t valid, rssi, sec, index; 
+  char ssidname[33];  
+  index = cc3000.startSSIDscan(); 
+  Serial.print(F("Networks found: ")); Serial.println(index); 
+  Serial.println(F("================================================")); 
+  while (index) { 
+    index--; 
+    valid = cc3000.getNextSSID(&rssi, &sec, ssidname); 
+    Serial.print(F("SSID Name    : ")); Serial.print(ssidname); 
+    Serial.println(); 
+    Serial.print(F("RSSI         : ")); 
+    Serial.println(rssi); 
+    Serial.print(F("Security Mode: ")); 
+    Serial.println(sec); 
+    Serial.println(); 
+  } 
+  Serial.println(F(“================================================")); 
+  cc3000.stopSSIDscan(); 
+}
+Search for Wiﬁ networks. The 8-byte integer 
+index will contain the total number of networks 
+found.
+Print out the parameters for the networks 
+found, starting with the last one.
+Stop scanning.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+Demo 2: Web client LED control by polling a URL 
+Great, the Wiﬁ module works, so let’s go ahead and do something useful with it. 
+Automation and remote control ﬁts well in that category. You may remember back in 
+Lecture 38 that you learned how to control an LED by setting up a simple web server on the 
+Arduino. You used your web browser to access this web server and click on buttons to turn 
+the LED on and oﬀ. We will adapt that sketch to use the Wiﬁ module instead of the Ethernet 
+shield in Demo 3, but in this demo we’ll try something diﬀerent: polling-based control. 
+In summary, we will use instructions contained in a text ﬁle, hosted by a web server 
+somewhere on the Internet. The Arduino will use the Wiﬁ module to get this ﬁle, read it’s 
+contents, and turn an LED on and oﬀ accordingly. Schematically, this is what is going to 
+happen: 
+ 
+There’s an LED connected to digital Pin 8 via a 
+#9
+2
+1
+3
+4
+Instruction: Turn LED in pin 8 ON
+There is a blank 
+line after the 
+instruction line.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+protective  1kΩ resistor. The Arduino will use the Wiﬁ module to request a copy of the ﬁle 
+titled “cc3000.txt” from the web server that is hosting it. In my demo, I am using an Amazon 
+S3 bucket, but you can use any service at all as long as you can access it with a HTTP URL 
+like “http://myserver.com/cc3000.txt”. You may remember that the instruction contained in 
+the ﬁrst line of this ﬁle is identical to the one that we learned about how to parse back in 
+lecture 38. We are not learning again how to parse this instruction, we just store it on the 
+web instead of on the Arduino! 
+The nice thing about this architecture is that is is scalable. Once you stop thinking of 
+cc3000.txt as a text ﬁle but instead as a web resource, then you have many options to 
+manipulate it. You can get the Arduino to poll a URL that is controlled by a web application 
+which creates the LED instruction based on some user entry, a schedule, environmental 
+conditions somewhere else etc.  
+I also mentioned in the introduction of this lecture that polling, as opposed to a web server 
+running on the Arduino, has the additional beneﬁt of not having to worry about local 
+network restrictions, especially ﬁrewalls and NAT. You Arduino will be able to get it’s 
+instructions by accessing a public URL, and you will be able to control your Arduino by 
+manipulating the resource at that URL. 
+Let’s have a look at the sketch, comments are embedded: 
+#10
+#include <Adafruit_CC3000.h> 
+#include <ccspi.h> 
+#include <SPI.h> 
+#include <string.h> 
+#include "utility/debug.h" 
+#include <avr/wdt.h> 
+#define ADAFRUIT_CC3000_IRQ   3 
+#define ADAFRUIT_CC3000_VBAT  5 
+#define ADAFRUIT_CC3000_CS    10 
+Adafruit_CC3000 cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, ADAFRUIT_CC3000_IRQ, 
+ADAFRUIT_CC3000_VBAT, SPI_CLOCK_DIVIDER); 
+boolean        reading      = false;  
+String         get_request  = ""; 
+#define WLAN_SSID       "mynetworkid" 
+#define WLAN_PASS       "mynetworkpassword" 
+#define WLAN_SECURITY   WLAN_SEC_WPA2 
+#define IDLE_TIMEOUT_MS  3000 
+#define WEBSITE      "arduinosbs.com.s3.amazonaws.com" 
+#define WEBPAGE      "/cc3000.txt" 
+uint32_t ip; uint32_t   t; int port = 80; 
+int connectTimeout  = 5000; 
+Adafruit_CC3000_Client www; 
+int repeat_counter = 0;
+No change compared to Demo 1, except…
+Set the host and path to the ﬁle that contains 
+the LED instruction. Also set a timeout 
+constant. We expect the server to respond 
+within 3 seconds.
+No change compared to Demo 1
+Counter keeps track of how many times the 
+ﬁle has been polled.
+Import the Watchdog library. See further down 
+for details.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#11
+void setup(void){ 
+  Serial.begin(115200); 
+  Serial.println(F("Hello, CC3000!\n"));  
+  Serial.print(F("Free RAM: ")); Serial.println(getFreeRam(), DEC); 
+  Serial.println(F("\nInitializing...")); 
+  if (!cc3000.begin())  { 
+    Serial.println(F("Couldn't begin()! Check your wiring?")); 
+    while(1);  } 
+  connect_wifi(); 
+  get_dhcp(); 
+  lookup_ip();  
+} 
+void loop(void){  
+  repeat_counter++; 
+  Serial.print(F("Free RAM: ")); Serial.println(getFreeRam(), DEC); 
+  Serial.print(F("Repeat counter: ")); Serial.println(repeat_counter); 
+  Serial.print(F("starting connection to ")); 
+  Serial.println(ip); 
+  wdt_enable(WDTO_8S); 
+  connect_tcp(); 
+  wdt_disable(); 
+  Serial.println(F("Connecting")); 
+  if (www.connected()) { 
+    Serial.println(F("Connected")); 
+    make_get_request(); 
+    Serial.println(F("Request sent")); 
+  } else { 
+    Serial.println(F("Connection failed"));     
+    return;  } 
+  Serial.println(F("-------------------------------------")); 
+  unsigned long lastRead = millis(); 
+  while (www.connected() && (millis() - lastRead < IDLE_TIMEOUT_MS)) { 
+    boolean currentLineIsBlank = true; 
+    get_request           = "";      
+    boolean sentContent    = false; 
+    while (www.available()) {    
+       char c = www.read(); 
+       Serial.print(c); 
+       if(reading && c == '\n')  
+        { reading = false;   
+          parseGetRequest(get_request); 
+          break; 
+        }   
+Enable watch dog timer (“WDT”). See detailed 
+discussion at the end of this sketch.
+Broken down the functionality from the setup 
+function in Demo 1 to individual functions in 
+order to improve readability.
+Call the connect_tcp() function. This function 
+will attempt to connect to the remote web 
+server.
+Disable watch dog timer (“WDT”). It is not 
+likely that anything else may cause the sketch 
+to freeze.
+Connection to the remote web server was 
+successful.
+Call the make_get_request function which will 
+construct and apply the HTTP GET request.
+A response from the server is expected within 
+3 seconds. The IDLE_TIMEOUT_MS constant 
+was set at the start of the sketch.
+Keeps track of the time when the 
+last GET request was made.
+The server has started sending its response, 
+let’s start parsing it.
+Grab a character 
+from the response.
+If we are currently reading, and this char is a new line, then reading is 
+ﬁnished, so lets parse the instruction. Nothing else to do here.
+Confused? Consider revising Lecture 36!
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#12
+        if(reading){  
+            get_request += c; }       
+       if (reading && c==‘\n') { 
+        break; }        
+       if (c == '\n' && currentLineIsBlank)  { 
+        reading = true; 
+       } 
+       if (c == '\n') { 
+          currentLineIsBlank = true; 
+       } else if (c != '\r') { 
+          currentLineIsBlank = false; 
+       } 
+    } 
+  } 
+  www.close(); 
+  Serial.println(F("-------------------------------------")); 
+  delay(10000); } 
+void parseGetRequest(String &str) { 
+  Serial.print(F("Parsing this string:")); 
+  Serial.println(str); 
+  int   led_index  = str.indexOf("led"); 
+  int   led_pin    = str[led_index + 3] - '0'; 
+  int   led_val    = str[led_index + 5]  - '0'; 
+  executeInstruction(led_pin, led_val); } 
+void executeInstruction(int pin, int val){    
+    Serial.println(F("Executing instruction")); 
+    pinMode(pin, OUTPUT); 
+    digitalWrite(pin, val); 
+    Serial.println(F(“Done!"));} 
+bool displayConnectionDetails(void){ 
+  uint32_t ipAddress, netmask, gateway, dhcpserv, dnsserv; 
+  if(!cc3000.getIPAddress(&ipAddress, &netmask, &gateway, &dhcpserv, &dnsserv)){ 
+    Serial.println(F("Unable to retrieve the IP Address!\r\n")); 
+    return false;  }  else  { 
+    Serial.print(F("\nIP Addr: ")); cc3000.printIPdotsRev(ipAddress); 
+    Serial.print(F("\nNetmask: ")); cc3000.printIPdotsRev(netmask); 
+    Serial.print(F("\nGateway: ")); cc3000.printIPdotsRev(gateway); 
+    Serial.print(F("\nDHCPsrv: ")); cc3000.printIPdotsRev(dhcpserv); 
+    Serial.print(F("\nDNSserv: ")); cc3000.printIPdotsRev(dnsserv); 
+    Serial.println(); 
+    return true; 
+  } 
+} 
+The HTTP response parser, continues. 
+It is essentially identical to the one 
+from Lecture 38 except for the green 
+segment. The content the parser is 
+looking for is in the body of the HTTP 
+response (not the query string like in 
+Lecture 38). The HTTP response is 
+found after the response header, and 
+is detected by looking for a new line 
+(“\n”) after a blank line.
+Close the connection to the web 
+server.
+Instruction parser, identical to the one 
+in Lecture 38.
+Execute instruction function, identical 
+to the one in Lecture 38.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#13
+void make_get_request(){ 
+    www.fastrprint(F("GET ")); 
+    www.fastrprint(WEBPAGE); 
+    www.fastrprint(F(" HTTP/1.1\r\n")); 
+    www.fastrprint(F("Host: ")); www.fastrprint(WEBSITE); www.fastrprint(F("\r
+\n")); 
+    www.fastrprint(F("\r\n")); 
+    www.println();  } 
+void connect_tcp(){ 
+  t = millis(); 
+    do { 
+    www = cc3000.connectTCP(ip, port);  }    
+  while((!www.connected()) && ((millis() - t) < connectTimeout)); 
+} 
+void connect_wifi(){ 
+ if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) { 
+    Serial.println(F("Failed!")); 
+    while(1);  } 
+  Serial.println(F(“Connected!"));  
+} 
+void get_dhcp(){ 
+  Serial.println(F("Request DHCP")); 
+  while (!cc3000.checkDHCP()) 
+  {    delay(100);  }   
+  while (! displayConnectionDetails()) { 
+    delay(1000); 
+  } 
+} 
+void lookup_ip(){ 
+  ip = 0; 
+  Serial.print(WEBSITE); Serial.print(F(" -> ")); 
+  while (ip == 0) { 
+    if (! cc3000.getHostByName(WEBSITE, &ip)) { 
+      Serial.println(F("Couldn't resolve!")); 
+    } 
+    delay(500); 
+  } 
+  cc3000.printIPdotsRev(ip);  
+}
+Get request is assembled by “printing” to the 
+remote server represented by the www object.
+Attempt to connect to the remote server if at 
+least 5 seconds (set in the connectTimeout 
+variable) have elapsed since the last connection.
+Attempt to connect to the Wiﬁ access point.
+Get network settings from the DHCP server.
+Lookup the IP address of the remote server by 
+making a DNS request.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+About the WatchDog Timer 
+The Arduino, just like a “normal” computer, occasionally may “hung” or, in other words, 
+become unresponsive. This can be a result of hardware issues, like faulty sensors or 
+communications devices, or bugs in a sketch. As I was playing around with the CC3000 
+Wiﬁ module while preparing this demo, I noticed that the Arduino would hung after a few 
+(around 20) loops. Each loop represents a poll of the control text ﬁle from the web server. I 
+discovered that the most likely cause of this behaviour was memory fragmentation. Memory 
+fragmentation occurs when data in RAM is erased and saved in a way that over some 
+period of time even though there is a lot of memory available, it is only available in small 
+chunks; this makes it almost usefulness unless you only want to store a byte or so at a 
+time. Have a look at this screenshot from the Microsoft Windows Disk Defragmenter utility: 
+http://i.stack.imgur.com/00nX7.jpg 
+The hard disk that is visualised in this map contains free space (shown in white), but that 
+space is not contiguous, so you can only store small ﬁles in it. A normal computer has the 
+resources to “defrag”, that is to re-arange the contents of the memory (or hard disk) in order 
+to create larger and more useful contiguous segments of free memory.  
+Working on this demo, I realised that the connectTCP function would, over time, fragment 
+the SRAM until the free space available could not be used, and then the ATMega would 
+freeze. 
+On the Arduino, there is no practical way to achieve defragmentation other than reseting the 
+micro-controller. To make this work, I used a feature build-in to ATMegas called Advanced 
+Watchdog Timer (http://www.atmel.com/Images/doc2551.pdf). This feature makes it 
+possible to set a timer so that if by the time the timer reaches a set limit the watchdog has 
+#14
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+not detected any activity ((heart beat”) it assumes that the micro-controller has become 
+unresponsive. The watchdog will then reset the micro-controller, and the sketch will start 
+executing with a clear slate - and a de-fragmented memory.  
+The way I set the watchdog timer is this: 
+1.
+I identiﬁed the segment of the sketch that seems to be causing fragmentation and/or is 
+aﬀected by it. I used lots of Serial.print statements to ﬁgure out where the sketch 
+hangs. In the Demo 2 sketch, this was the call to the connect_tcp() function. 
+2.
+Just before the oﬀending call, add the call to wdt_enable(WDTO_8S). This enables the 
+WatchDog Timer and sets a timer for 8 seconds. This time I think was enough for 
+nothing to happen. In other words “if 8 seconds pass with no activity, reset the device”. 
+3.
+After the oﬀending call, add the call to wdt_disable(). This disables the WatchDog Timer. 
+If anything outside this block causes my sketch to hung, I want to know about, so I 
+don’t want the WDT 
+to reset the device 
+and mask such 
+behaviour. 
+Yes, I could potentially 
+dig into the source code 
+of the CC3000 that 
+causes this problem 
+(the connectTCP 
+function), and I might 
+actually do this once I 
+can allocate some time 
+to it, however the WDT 
+oﬀers a simple and 
+cheap solution. 
+Output 
+Execute this sketch, and 
+you will get something like 
+this: 
+#15
+Device and network details.
+Connecting to Wiﬁ access point.
+IP of remote web server resolved.
+Connect and transmit HTTP request to 
+remote web server.
+Receive HTTP response and ﬁnd 
+the string that contains the 
+instruction.
+Parse the instruction and then 
+execute it.
+Re-start the HTTP GET/response 
+process.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+Demo 3: Control an LED via Wiﬁ and a web server 
+running on the Arduino 
+For this last demo, we will modify the sketch from Lecture 38 Demo 2 so that instead of 
+working with an Ethernet shield, it will work with the CC3000 Wiﬁ breakout. 
+We will use the exact same circuit as in Demo 2. Let’s go straight to the sketch and see 
+what’s diﬀerent… 
+Sketch 
+This sketch is a hybrid between the sketch in Demo 2 and that of Lecture 38 Demo 2. 
+Comments are embedded. 
+… continues next page… 
+#16
+#include <Adafruit_CC3000.h> 
+#include <ccspi.h> 
+#include <SPI.h> 
+#include <string.h> 
+#include "utility/debug.h" 
+#include <stdlib.h> 
+#define ADAFRUIT_CC3000_IRQ   3 
+#define ADAFRUIT_CC3000_VBAT  5 
+#define ADAFRUIT_CC3000_CS    10 
+define WLAN_SSID       "yournetworkssid" 
+define WLAN_PASS       “yournetworkpassword" 
+#define WLAN_SECURITY   WLAN_SEC_WPA2 
+#define LISTEN_PORT           80 
+Adafruit_CC3000 cc3000 = Adafruit_CC3000(ADAFRUIT_CC3000_CS, 
+ADAFRUIT_CC3000_IRQ, ADAFRUIT_CC3000_VBAT,SPI_CLOCK_DIV2);                        
+// Create server 
+Adafruit_CC3000_Server ledServer(LISTEN_PORT); 
+String         get_request  = ""; 
+boolean        reading      = false;  
+Inclusions and deﬁnitions as in the previous 
+examples, with the addition of LISTEN_PORT 
+which deﬁnes the TCP port on which the web 
+server will listen for connections.
+In Lecture 38, we used the 
+EthernetServer class to create the 
+server. Here, we use the custom 
+Adafruit_CC3000_Server class.
+Create the device object.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#17
+void setup() { 
+  Serial.begin(115200); 
+  Serial.println(F("\nInitializing...")); 
+  if (!cc3000.begin())  { 
+    Serial.println(F("Couldn't begin()! Check your wiring?")); 
+    while(1);  } 
+  if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) { 
+    Serial.println(F("Failed!")); 
+    while(1);  } 
+  Serial.println(F("Connected!")); 
+  Serial.println(F("Request DHCP")); 
+  while (!cc3000.checkDHCP())  { 
+    delay(100); // ToDo: Insert a DHCP timeout! 
+  }   
+  while (! displayConnectionDetails()) { 
+    delay(1000);  } 
+  ledServer.begin(); 
+  Serial.println(F("Listening for connections...")); 
+} 
+void loop() { 
+  Adafruit_CC3000_ClientRef client = ledServer.available(); 
+  String return_message;  
+  if (client) { 
+     boolean currentLineIsBlank = true; 
+     get_request           = ""; 
+     boolean sentContent    = false; 
+     while (client.available()) {    
+       char c = client.read(); 
+       if(reading && c == ' ')  
+        { reading = false;   
+          return_message = parseGetRequest(get_request); 
+          break;        } 
+       if(c == '?'){ 
+          reading = true;        }               
+       if(reading){  
+            get_request += c;         } 
+       if (reading && c=='\n')       {         
+         break;        } 
+       if (c == '\n' && currentLineIsBlank)  { 
+         break;        } 
+      }
+Start the device.
+Connect to the Wiﬁ access point.
+Get network parameters from the 
+DHCP server.
+Show network parameters leased 
+from the DHCP server.
+Start the web server
+The contents of the loop() function are 
+virtually identical to that from Lecture 
+38, Demo 2, with the exception of the 
+client object. Here we use the 
+Adafruit_CC_3000_ClientRef class 
+instead of EthernetClient.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#18
+     if (!sentContent){ 
+       construct_page(client, return_message);          
+       sentContent = true;             } 
+    delay(5); 
+    client.close(); 
+    Serial.println("client disconnected"); 
+    result = ""; 
+  } 
+} 
+void construct_page(Adafruit_CC3000_ClientRef &client, String &rmessage) 
+{ 
+    print_header(client); 
+    print_form(client); 
+    print_confirmation(rmessage, client); 
+    end_page(client); } 
+void print_header(Adafruit_CC3000_ClientRef &client) 
+{ 
+    client.println("HTTP/1.1 200 OK"); 
+    client.println("Content-Type: text/html"); 
+    client.println(); 
+    client.print("<html><head><title>");    
+    client.print("GET request example"); 
+    client.println("</title><body>"); 
+} 
+void print_confirmation(String &confirmation_message, Adafruit_CC3000_ClientRef 
+&client) 
+{ 
+  client.print("Action(s) performed: <b>"); 
+  client.print(confirmation_message); 
+  client.print("</b>"); 
+} 
+void print_form(Adafruit_CC3000_ClientRef &client) 
+{ 
+  client.println("<h2>Click buttons to turn pin 8 on or off</h2>"); 
+  client.print("<form action='/' method='GET'><p><input type='hidden' 
+name='led8'"); 
+  client.println(" value='0'><input type='submit' value='Off'/></form>"); 
+  client.print("<form action='/' method='GET'><p><input type='hidden' 
+name='led8'"); 
+  client.print(" value='1'><input type='submit' value='On'/></form>"); 
+}
+These functions are identical to the 
+ones from Lecture 38, Demo 2 with 
+one exception only: instead of 
+passing a reference to a 
+EthernetClient object, here we pass a 
+reference to an 
+Adafruit_CC3000_ClientRef object.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+#19
+String parseGetRequest(String &str) { 
+  Serial.print(" Parsing this string:"); 
+  Serial.println(str); 
+  int   led_index  = str.indexOf("led"); 
+  int   led_pin    = str[led_index + 3] - '0'; 
+  int   led_val    = str[led_index + 5]  - '0'; 
+  String return_message = ""; 
+  return_message = "Setting LED "; 
+  return_message += led_pin; 
+  return_message += " to "; 
+  return_message += led_val; 
+  executeInstruction(led_pin, led_val); 
+  return return_message; } 
+void executeInstruction(int pin, int val){   
+    pinMode(pin, OUTPUT); 
+    digitalWrite(pin, val);} 
+bool displayConnectionDetails(void){ 
+  uint32_t ipAddress, netmask, gateway, dhcpserv, dnsserv; 
+  if(!cc3000.getIPAddress(&ipAddress, &netmask, &gateway, &dhcpserv, &dnsserv))  
+{ 
+    Serial.println(F("Unable to retrieve the IP Address!\r\n")); 
+    return false;  } 
+  else  { 
+    Serial.print(F("\nIP Addr: ")); cc3000.printIPdotsRev(ipAddress); 
+    Serial.print(F("\nNetmask: ")); cc3000.printIPdotsRev(netmask); 
+    Serial.print(F("\nGateway: ")); cc3000.printIPdotsRev(gateway); 
+    Serial.print(F("\nDHCPsrv: ")); cc3000.printIPdotsRev(dhcpserv); 
+    Serial.print(F("\nDNSserv: ")); cc3000.printIPdotsRev(dnsserv); 
+    Serial.println(); 
+    return true; 
+  } 
+}
+These functions are identical to the 
+ones from Lecture 38, Demo 2.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+Using the sketch from Demo 2 in Lecture 38 as a building block, we now have the same 
+capability to control the state of an LED using a web browser but wirelessly. Running this 
+sketch generates this output in the monitor:  
+Use a web browser and go to your Arduino’s IP address, you should see the same user 
+interface as in Lecture 38, Demo 2: 
+#20
+The Arduino is listening at this IP 
+address.
+A connection from a web client was 
+made, an instruction was parsed.
+
+Peter Dalmaris
+Arduino Step by Step 
+Lecture 50
+An exercise 
+In this lecture, we covered a lot of ground in regards to using the Adafruit CC3000 wiﬁ 
+module to control our Arduino wirelessly. The module we used still has it’s supporting 
+library under development, so I expect that its features and stability will improve over time. 
+The module comes in two types, one with a build-in ceramic antenna, and one with a 
+connector for an external antenna. An external antenna can be used for projects where 
+range is important, like when you want to control your quad-copter outdoors. 
+As an exercise for this lecture, how about you try to extend the Demo 2 and Demo 3 
+examples with the ability to control more devices? For example, for Demo 2, add a couple 
+of lines in the instructions ﬁle so that you can control additional LED, or motors (you may 
+want to review Lecture 39 for this). Because polling takes place every few minutes, you 
+would use the Demo 2 sample in a project like home automation and control, where “real-
+time” is not necessary. 
+#21
+
