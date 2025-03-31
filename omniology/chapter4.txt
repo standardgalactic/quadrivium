@@ -1,0 +1,984 @@
+Table of Contents
+Chapter 4. Displaying XML in a Browser..................................................................... 1
+4.1. A Word on XPath................................................................................................................................................................ 1
+4.2. A Practical XSLT Application.............................................................................................................................................. 2
+4.3. Our CMS Project............................................................................................................................................................... 11
+4.4. Summary........................................................................................................................................................................... 23
+Chapter 4. Displaying XML in a Browser
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+This PDF is exclusively for your use in accordance with the Safari Terms of Service. No part of it may be reproduced or transmitted in any form by any means without the prior
+written permission for reprints and excerpts from the publisher. Redistribution or other use that violates the fair use priviledge under U.S. copyright laws (see 17 USC107) or that
+otherwise violates the Safari Terms of Service is strictly prohibited.
+
+Chapter 4. Displaying XML in a Browser
+270
+In Chapter 2, we went over some basic XSLT and CSS using a very simple XML document. In this
+chapter, we're going to revisit some of those concepts with a more complex document. Once we've
+taken care of that, we'll return to our CMS project and start building the display pages for our site.
+1334027
+4.1. A Word on XPath
+661753
+We've already been exposed to XSLT to a small degree. We used it to transform an XML letter to
+mother into something that could be displayed in a browser window. In this chapter, we're going
+to use a much more complex document as our starting point, and we'll learn how to use XPath.
+1334027
+Understanding XPath is the key to making effective use of XSLT . XPath is used in a variety of
+applications and technologies, however, XSLT is where its power and versatility really shine.
+1334027
+For all intents and purposes, XPath is a query language. It allows us to declaratively specify a "path"
+to an element or group of elements in an XML document. It uses a simple notation that is very
+similar to directory paths (hence the name XPath). You've already seen XPath in action within
+XSLT through some of the earlier examples.
+1334027
+When we put together a  template, we normally use XPath to establish a match . For example, we
+can always handle the root of an XML document like this:
+1334027
+<xsl:template match="/">
+With XPath, you can select all elements that have a particular tag name. For example, this template
+will match all the <title> tags in the document:
+1334027
+<xsl:template match="title">
+Chapter 4. Displaying XML in a Browser
+Page 1
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+Copyright Safari Books Online #672274
+
+Or, you could match certain elements depending on their location within an XML file. To match
+<title> tags that have a <memo> tag as their parent, you would use this expression:
+1334027
+<xsl:template match="memo/title">
+As you can see, the basic XPath syntax looks a lot like a file path on your computer. That's because
+XML documents and your computer's file system are both hierarchical in nature. But you can go a
+step further and set conditions on which elements are matched within your specified path. These
+conditions are called predicates  , and appear within square brackets following the element name
+you wish to set conditions for.
+1334027
+This example contains a predicate to make sure that it matches only <title> tags whose
+<priority> attribute is set to <hot>:
+1334027
+<xsl:template match="title[@priority='hot']">
+The @    symbol identifies priority in this example as an attribute name, not a tag name.
+1334027
+XPath also has a number of useful functions built in. For example, if you need to grab the first or
+last element of a series, you can use XPath to do so. This template will match the first <para> tag
+within each <memo> tag:
+1334027
+<xsl:template match="memo/para[first()]">
+This template will match the first <para> tag within the last <memo> tag:
+1334027
+<xsl:template match="memo[last()]/para[first()]">
+Although most practical applications are relatively simple, XPath can get quite twisty when it needs
+to be. The XPath Recommendation is quite a useful reference to these areas of complexity.
+1334027
+I've been giving you examples within an XSLT context, but XPath is used in a lot of different places,
+including  PHP 5's new SimpleXML API. We'll get into SimpleXML a little later .
+1334027
+4.2. A Practical XSLT Application
+661753
+Instead of using a simple letter to mother, let's use something a bit more complex: a book chapter.
+Book chapters provide an excellent opportunity to understand the arbitrary complexity of most
+XML documents.
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 2
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+If you were to look at a typical book chapter (like this one), you'd probably only think of it as a
+flow of information. From the perspective of an XML document designer, however, a book chapter
+can be intimidatingly complex. Chapters can have titles and sections, and those sections can have
+titles. There are paragraphs throughout—some belong to the chapter (for example, introductory
+paragraphs), but others belong to sections. Sections can contain subsections. Paragraphs can contain
+text in italics, bold text, and other inline markup. In fact, one could even have different types of
+paragraphs, like notes, warnings, and tips. We mustn't forget that chapters can also hold non-textual
+content, in the form of images, graphs, and other visual materials. There are lots of possibilities for
+displaying these kinds of information.
+1334027
+Here's what a very short chapter might look like:
+1334027
+chapter.xml
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="chapter2html.xsl"?>
+<chapter id="example">
+  <title>XML Example</title>
+  <para type="intro">This is an introductory paragraph. It doesn't
+    belong to any of the sections.</para>
+  <section>
+    <title>Main Section</title>
+    <para type="intro">This is the <b>first</b> paragraph of the
+      first section.</para>
+    <para>Second paragraph.</para>
+    <para type="note">This is a note!</para>
+    <para type="warning">Don't even think about turning the page
+      yet!</para>
+    <section>
+      <title>Subsection</title>
+      <para type="intro">Looks like we started another section
+        here!</para>
+    </section>
+  </section>
+  <section>
+    <title>Another Section</title>
+    <para type="intro">And the chapter continues…</para>
+  </section>
+</chapter>
+This sample file could go on and on, but I think you get the idea. Now it's time to try to parse this
+document and make sense of it. We'll perform some simple tasks first, then extend our knowledge
+as we go.
+1334027
+4.2.1. A First Attempt at Formatting
+672274
+Now , let's create the corresponding XSL file, chapter2html.xsl . This file will contain all the
+instructions we will use to transform the XML elements in the chapter file we have just seen into
+XHTML . As we saw in Chapter 2, an XSL file that generates XHTML should begin as follows:
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 3
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+chapter2xhtml.xsl (excerpt)
+<xsl:stylesheet version="1.0"
+  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+  xmlns="http://www.w3.org/1999/xhtml">
+  <xsl:output method="xml" indent="yes" omit-xml-declaration="yes"
+    media-type="application/xhtml+xml" encoding="iso-8859-1"
+    doctype-public="-//W3C//DTD XHTML 1.0 Transitional//EN"
+    doctype-system=
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"/>
+Now  , let's start matching elements. The first thing we want to do is to match the root of our
+document. We can use this template to output the basic tags required to produce an XHTML
+document:
+1334027
+chapter2xhtml.xsl (excerpt)
+  <xsl:template match="/">
+    <html>
+      <head>
+        <title>A Book Chapter</title>
+        <meta http-equiv="content-type"
+            content="application/xhtml+xml; charset=iso-8859-1"/>
+      </head>
+      <body>
+        <xsl:apply-templates/>
+      </body>
+    </html>
+  </xsl:template>
+Remember that, in XPath notation, / by itself stands for the root of your document, so we can rest
+assured that this template will only match once for each document that this style sheet transforms.
+1334027
+The <apply-templates> element then goes looking for other elements to match, so let's write
+some templates for those that it is likely to find. At this stage there's nothing we really want to
+output for the <chapter> element that we haven't already written out for the document root above,
+so we'll let the XSLT processor handle that with its default behavior for now. Let's instead
+concentrate on the elements inside the chapter:
+1334027
+chapter2html.xsl (excerpt)
+  <xsl:template match="title">
+    <h1><xsl:apply-templates/></h1>
+  </xsl:template>
+  <xsl:template match="para">
+    <p><xsl:apply-templates/></p>
+  </xsl:template>
+  <xsl:template match="b">
+Chapter 4. Displaying XML in a Browser
+Page 4
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+    <b><xsl:apply-templates/></b>
+  </xsl:template>
+Nothing could be simpler, right? We've matched all of our elements and for each we have output
+HTML tags as needed. Viewed in a browser  , our output will look something like that shown in
+Figure 4-1.
+1334027
+Figure 4-1. Viewing the chapter example in Firefox.
+Chapter 4. Displaying XML in a Browser
+Page 5
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Looks pretty good, doesn't it? But, isn't there something missing? Of course there is. In our XSLT
+file, we are treating all <para> and <title> elements the same, regardless of where they appear
+in the XML document. That ain't right!
+1334027
+4.2.2. Using XPath to Discern Element Context
+672274
+The <title>   element near the top of the document is the chapter title, and should be handled
+differently from the   <title> elements in the different nested sections. Likewise, <para>
+elements that denote warnings or introductions should be handled differently from other paragraphs.
+1334027
+Let's handle the <title> elements first. Chapter titles should be formatted with <h1> tags. Other
+<title> elements, which serve as nested section titles, should use incrementally smaller headings
+(<h2>, <h3>, and so on) in accordance with their level of nesting.
+1334027
+To distinguish between these different <title> types, you can use XPath notation. To pick out
+<title> elements that are children of the <chapter> tag, we can use the XPath expression
+chapter/title . To pick out <title> elements in top-level sections, we can use chapter/
+section/title, and so forth.
+1334027
+So here's an effective set of templates to handle the titles in our document:
+1334027
+chapter2html.xsl (excerpt)
+  <xsl:template match="chapter/title">
+    <h1><xsl:apply-templates/></h1>
+  </xsl:template>
+  <xsl:template match="chapter/section/title">
+    <h2><xsl:apply-templates/></h2>
+  </xsl:template>
+  <xsl:template match="chapter/section/section/title">
+    <h3><xsl:apply-templates/></h3>
+  </xsl:template>
+  <xsl:template match="chapter/section/section/section/title">
+    <h4><xsl:apply-templates/></h4>
+  </xsl:template>
+Figure 4-2 shows how this code displays in the browser  .
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 6
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Figure 4-2. Viewing the chapter example with XPath. (Part 1)
+We're getting closer!
+1334027
+4.2.3. Matching Attribute Values with XPath
+672274
+What   about the paragraphs? Unlike the titles, they are not distinguishable by their placement in
+the document alone. Instead, the document uses the <type> attribute to distinguish normal
+paragraphs from introductions, tips, and warnings.
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 7
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Luckily, XPath lets us specify matches based on attribute values, too. In XPath , we use a predicate
+(a condition in square brackets) to match an attribute value. To isolate <intro> paragraphs, for
+example, we would use the XPath expression <para[@type='intro']>.
+1334027
+We should definitely take advantage of this ability and distinguish each of our paragraph types
+visually. Let's italicize all introductory paragraphs, and put gray boxes around notes and warnings.
+We can also make sure that warnings are displayed in red text.
+1334027
+Now, we've already seen a template that can take care of normal paragraphs, which have no
+<type> attribute:
+1334027
+chapter2html.xsl (excerpt)
+  <xsl:template match="para">
+    <p><xsl:apply-templates/></p>
+  </xsl:template>
+Our template for introductory paragraphs is quite similar:
+1334027
+chapter2html.xsl (excerpt)
+  <xsl:template match="para[@type='intro']" priority="1">
+    <p><i><xsl:apply-templates/></i></p>
+  </xsl:template>
+Note the <priority> attribute on this template. Since an introductory paragraph would match
+both XPath expressions, para and para[@type='intro'], we need to give some indication
+as to which of the two templates should be used   . By default, XSL templates have a priority between
+-0.5 and 0.5, depending on the XPath expression in the <match> attribute. To make sure our
+introductory paragraphs will use this second template, we therefore assign a priority of <1>. Normal
+paragraphs will continue to use the first template, since they don't match the higher-priority second
+template.
+1334027
+With what we've just learned in mind, here are the templates for warnings and notes. Notice that
+we've added a <style> attribute to the opening <p> tag in each template to provide the desired
+style information for these paragraph types.[1]
+1334027
+[1] In a practical application, you should instead put these style properties in a CSS file and <link> it to the HTML document. These templates would then use <class> attributes
+on the <p> tags to invoke the appropriate formatting.
+Chapter 4. Displaying XML in a Browser
+Page 8
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+chapter2html.xsl (excerpt)
+  <xsl:template match="para[@type='warning']" priority="1">
+    <p style="background-color: #cccccc; border: thin solid;
+        width:300px; color:#ff0000;">
+      <xsl:apply-templates/>
+    </p>
+  </xsl:template>
+  <xsl:template match="para[@type='note']" priority="1">
+    <p style="background-color: #cccccc; border: thin solid;
+        width:300px;">
+      <b><xsl:apply-templates/></b>
+    </p>
+  </xsl:template>
+Figure 4-3 shows the end result displayed in Firefox.
+1334027
+4.2.4. Using <value-of> to Extract Information
+672274
+You'll notice the page title is the rather nondescript phrase, "A Book Chapter".  How can we modify
+our template to display the actual chapter title in this spot instead?
+1334027
+When you need to pull a simple piece of information out of the XML document without messing
+around with templates to process the element(s) that house it, you can use a  <value-of> element
+to grab what you want with an XPath expression:
+1334027
+chapter2html.xsl (excerpt)
+  <xsl:template match="/">
+    <html>
+      <head>
+        <title><xsl:value-of select="/chapter/title"/></title>
+        <meta http-equiv="content-type"
+            content="application/xhtml+xml; charset=iso-8859-1"/>
+      </head>
+      <body>
+        <xsl:apply-templates/>
+      </body>
+    </html>
+  </xsl:template>
+As you can see, the <select>  attribute is an XPath expression that searches for the value of the
+<title> within the <chapter>. With <value-of>, we can print that value out. Now our file
+displays something like the results shown in Figure 4-4. Notice the title bar of the browser window,
+which now contains the title of the chapter.
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 9
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Figure 4-3. Viewing the chapter example with XPath. (Part 2)
+Chapter 4. Displaying XML in a Browser
+Page 10
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Figure 4-4. Viewing the chapter example with XPath. (Part 3)
+4.3. Our CMS Project
+661753
+In the  preceding chapters, we gathered requirements for our XML files, administration tool, and
+display components. In this chapter, I'd like to spend some time building the display pages for our
+project—the homepage, other internal pages, news sidebars, search widgets, and more.
+1334027
+Before we do that, though, let's recap the list of requirements we gathered for the display pages:
+Chapter 4. Displaying XML in a Browser
+Page 11
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+1334027
+• The display side of our Website will only display articles and other content that has a status of "live."
+• The search engine will retrieve articles by keywords, headlines, and descriptions, and only display those pieces that have a status of
+"live."
+• The Website will display a list of authors by which site visitors can browse, but it only displays those authors who have live articles
+posted on the site.
+4.3.1. Why Start with the Display Side?
+672274
+You may be asking yourself, "Why is Tom starting with the display side? We haven't even built
+the admin tool for all the content it will display."
+1334027
+That's a good question. I decided to start with the display side because:
+1334027
+• It's much simpler than the admin tool, and gives us a chance to build some straightforward XML tools with PHP without having to get
+bogged down in detail.
+• It means that we have to work from our requirements. Remember, we took the time to specify what each file would look like; now, all
+we have to do is work from these specs. As long as we continue to work from our specifications, everything will work together once
+it's done.
+So, let's get started with our display pages. We'll begin with an include file that we can use on all
+of our pages.
+1334027
+4.3.2. Creating a Common Include File
+672274
+Because  our Website will entail some complex interaction between PHP and XML , it's a good
+idea to store your most needed functions and variables in a separate file, then include that file in
+all your other pages.
+1334027
+We're going to create this include file and start to add some information to it:
+1334027
+common.inc.php
+<?php
+session_start();
+$fileDir = $_SERVER['DOCUMENT_ROOT'] . '/xml/';
+?>
+This file will eventually contain many necessary variables that we'll use later in the project.
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 12
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Before we go on to create a rudimentary homepage, let's create an include file that contains a search
+widget.
+1334027
+4.3.3. Creating a Search Widget Include File
+672274
+All of our public display pages will offer a search widget, so it's a good idea to create a file that
+contains the needed form elements:
+1334027
+search.inc.php
+<form id="searchWidget" method="post" action="doSearch.php">
+  Search site:
+  <input name="term" type="text" id="term" />
+  <input name="search" type="submit" id="search" value="Search" />
+</form>
+As with our common include file, we'll be using the PHP include command to include this form on
+all of our pages. In this case, we do so because it lowers maintenance costs: we only have to edit
+the form once to affect the whole site.
+1334027
+Notice that the action is set to a file called doSearch.php. We will work on that file soon—it's the
+file that will process XML and return search results to site visitors.
+1334027
+4.3.4. Building the Homepage
+672274
+The most important page on the site is the homepage. That's where most of your visitors will likely
+begin, so you'll want to display as much information as you possibly can to interest them in going
+further.
+1334027
+From a structural point of view, the pages of our site will consist of three <div> tags: a page header,
+a navigation menu, and the content area.
+1334027
+The header will hold global navigation elements. Like our search widget file, this navigation will
+be an include file—after all, we want to reuse these elements on other pages of the site.
+1334027
+For the homepage of our site, the navigation menu will contain our search widget and a list of
+current news items. In the main content area, we'll display our homepage copy along with links to
+articles and other content on the site.
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 13
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+We'll go through these sections one at a time. But, before we do, let's take a quick look at the
+appearance of our site's homepage—it's shown in Figure 4-5.
+1334027
+Figure 4-5. The appearance of the homepage.
+4.3.5.1. Building the Top Navigation Include File
+661753
+Our   top navigation will be placed in an include file. It will contain an image of the site's logo (hot-
+linked to the homepage for easy navigation), and a list of links that take users to each of the pages
+on the site.
+1334027
+This include  file will make use of PHP 5's new SimpleXML functions. The great thing about the
+SimpleXML API is that it greatly simplifies the way you interact with, and extract information
+from, an XML document. Although a detailed look at SimpleXML will have to wait until Chapter
+7, we'll cover the basics here.
+Chapter 4. Displaying XML in a Browser
+Page 14
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+1334027
+Simply put, the simplexml_load_file function loads our entire XML document into a hierarchy of
+objects, which allows us to grab elements using PHP's familiar arrow notation. Imagine, for
+example, that you had this very simple XML document:
+1334027
+<person>
+  <name>Tom</name>
+  <age>33</age>
+</person>
+After loading this XML document into a variable called $person, you would be able to examine
+the <name> element with $person->name. Likewise, you would be able to examine the
+<age> element with $person->age. If you're familiar with object oriented programming in
+PHP, you'll get the hang of it very quickly.
+1334027
+An even easier way to access XML elements with SimpleXML is to use an XPath query . You can
+pass a SimpleXML object just about any XPath statement, and it will retrieve the elements you
+need.
+1334027
+We'll get into a lot more detail later on, but for right now you can rest assured that at least one part
+of your job has been made easier!
+1334027
+Let's take a look at the code that   will build the navigation bar at the top of the page. Then, we'll
+walk through it:
+1334027
+navtop.inc.php
+<div id="navTop">
+<a href="index.php"><img src="images/logo.gif" border="0"
+    width="160" height="170" alt="Triple Dog Dare Media" /></a>
+<?php
+include_once 'common.inc.php';
+$handle = opendir($fileDir);
+while (($file = readdir($handle)) !== FALSE) {
+  if (is_dir($fileDir . $file)) continue;
+  if (!eregi("^webcopy.*\.xml$", $file)) continue;
+  $webcopy = simplexml_load_file($fileDir . $file);
+  if (count($webcopy->xpath('/webcopy[status="live"]'))) {
+    $id = htmlentities($webcopy['id']);
+    $label = htmlentities($webcopy->navigationlabel);
+    echo "<a href=\"innerpage.php?id={$id}\">{$label}</a> ";
+  }
+}
+?>
+</div>
+Chapter 4. Displaying XML in a Browser
+Page 15
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Our first task is fairly simple: open the xml directory and find every XML file whose name begins
+with webcopy:
+1334027
+navtop.inc.php (excerpt)
+$handle = opendir($fileDir);
+while (($file = readdir($handle)) !== FALSE) {
+  if (is_dir($fileDir . $file)) continue;
+  if (!eregi("^webcopy.*\.xml$", $file)) continue;
+Remember, $fileDir is a variable set by common.inc.php to let this and other scripts on our site
+know where to find the XML files.
+1334027
+Note: This code uses a regular expression  to match the required file name pattern. For the lowdown on
+regular expressions in PHP, see Kevin Yank's book Build Your Own Database Driven Website Using PHP
+& MySQL (SitePoint), or refer to the PHP Manual.
+With our Web copy XML files in hand, we'll load every such file using SimpleXML. Although this
+may seem like an expensive way to do things, you'll find that SimpleXML is extremely fast. We
+simply use the simplexml_load_file function to load the contents of each file into memory:
+1334027
+navtop.inc.php (excerpt)
+  $webcopy = simplexml_load_file($fileDir . $file);
+Once we have the desired file loaded into the $webcopy variable, we can start to look at the XML
+document it contains. In this case, we're only interested in the files whose status is "live," so we
+use SimpleXML to check that the <status>  element does indeed contain a text value of
+live:
+1334027
+navtop.inc.php (excerpt)
+  if (count($webcopy->xpath('/webcopy[status="live"]'))) {
+Here, we're using SimpleXML's xpath  method to check if the <webcopy> element at the root of
+the document contains a <status> element with a value of live. The method returns an array
+of elements that match the criteria specified; in this case that array will either contain a reference
+to the <webcopy> element in the file (if the <status> is live), or it will be empty. We use
+PHP's count function to check.
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 16
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+If the file passes the test, we pull out the value of the <webcopy> element's <id> attribute and
+the value contained in the nested <navigationlabel> element.
+1334027
+navtop.inc.php (excerpt)
+    $id = htmlentities($webcopy['id']);
+    $label = htmlentities($webcopy->navigationlabel);
+As you can see, attributes  are referenced as elements in an array ($webcopy['id']), while
+nested elements are referenced as object properties ($webcopy->navigationlabel).
+1334027
+With these values in hand, we can print out appropriate links for our page navigation:
+1334027
+navtop.inc.php (excerpt)
+    echo "<a href=\"webcopy.php?id={$id}\">{$label}</a>
+Let's move on to the rest of the homepage.
+1334027
+4.3.5.2. Building the Bottom Half of the Homepage
+661753
+Remember  when I said that our homepage would be made up of three <div> tags? Well, we've
+just taken care of the first—the page header. Let's now talk about the remaining two <div>s that
+sit beneath the first.
+1334027
+The file for our homepage will be called index.php. This file includes both the common.inc.php and
+navtop.inc.php files as needed. It then goes on to produce the   secondary navigation and content
+<div>s (navSide and mainContent, respectively).
+1334027
+index.php
+<?php
+include_once 'common.inc.php';
+$file = $fileDir . 'homepage.xml';
+$homePage = simplexml_load_file($file);
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title><?php echo htmlentities($homePage->headline); ?></title>
+  <meta http-equiv="Content-Type"
+      content="text/html; charset=iso-8859-1" />
+  <link rel="stylesheet" href="xmlcms.css" type="text/css" />
+Chapter 4. Displaying XML in a Browser
+Page 17
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+</head>
+<body>
+<?php
+include 'navtop.inc.php';
+?>
+<div id="navSide">
+  <?php
+  include 'search.inc.php';
+  include 'news.inc.php';
+  ?>
+</div>
+<div id="mainContent">
+  <?php
+  echo '<h1>' . htmlentities($homePage->headline) . '</h1>';
+  echo '<p><small>' . htmlentities($homePage->description) .
+      '</small></p>';
+  echo $homePage->body;
+  ?>
+</div>
+</body>
+</html>
+It looks really simple, doesn't it? In this file, we're using a variety of includes and PHP functions
+to do a lot of the dirty work for us. We'll also use this approach when we want to build the other
+display pages for articles, Web copy, and the like.
+1334027
+The only part that is somewhat complicated is the first few lines:
+1334027
+index.php (excerpt)
+<?php
+include_once 'common.inc.php';
+$file = $fileDir . 'homepage.xml';
+$homePage = simplexml_load_file($file);
+?>
+…
+<title><?php echo htmlentities((string)$homePage->headline);
+  ?></title>
+In this code, we open the file called homepage.xml in the xml  directory, and then echo out the
+contents of the <headline> element as the page title.
+1334027
+For the left-side navigation   <div>, we will use two includes:
+1334027
+index.php (excerpt)
+<div id="navSide">
+  <?php
+  include 'search.inc.php';
+  include 'news.inc.php';
+  ?>
+</div>
+Chapter 4. Displaying XML in a Browser
+Page 18
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+The first include is the search widget that we built earlier on. The second should produce a listing
+of live news items, but we haven't built that yet.
+1334027
+For the most part, our news include file will be very similar in structure to the code we used in
+navtop.inc.php. All we're doing is extracting news items that have a <status> of live:
+1334027
+news.inc.php (excerpt)
+<?php
+include_once 'common.inc.php';
+$handle = opendir($fileDir);
+echo '<p>';
+while (($file = readdir($handle)) !== FALSE) {
+  if (is_dir($fileDir . $file)) continue;  
+  if (!eregi('^news.*\.xml$', $file)) continue;
+  $news = simplexml_load_file($fileDir . $file);
+  if (count($news->xpath('/news[status="live"]'))) {
+    $id = htmlentities($news['id']);
+    $label = htmlentities($news->headline);
+    echo "<a href=\"innerpage.php?id={$id}\">{$label}</a><br />";
+  }
+}
+echo '</p>';
+?>
+Now that we've completed the left side of the homepage, it's time to pull together the right side of
+the page. This area will display the headline and body copy that's stored for the homepage in a file
+called homepage.xml. Since we've already loaded this file to obtain the page title, we can continue
+using the $homePage variable to pull out the values we need:
+1334027
+index.php (excerpt)
+<div id="mainContent">
+  <?php
+  echo '<h1>' . htmlentities($homePage->headline) . '</h1>';
+  echo '<p><small>' . htmlentities($homePage->description) .
+      '</small></p>';
+  echo $homePage->body;
+  ?>
+</div>
+</body>
+</html>
+Chapter 4. Displaying XML in a Browser
+Page 19
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+4.3.5.3. Writing the Style Sheet
+661753
+This isn't a book about CSS page layout, so I won't dwell on the details of the site's style sheet. For
+the sake of completeness, however, here's the code, which ensures our pages are laid out the way
+we intended:
+1334027
+xmlcms.css
+body {
+  color: #000;
+  background: #fff;
+  font-family: Helvetica, Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+#navTop {
+  margin: 12px 12px 0 12px;
+  border: 1px solid #999;
+  padding: 2px;
+}
+#navSide {
+  position: absolute; 
+  width: 250px; 
+  min-height: 400px; 
+  left: 12px; 
+  background-color: #ccc; 
+  border: 1px solid #999;
+  margin-top: -1px;
+  padding: 2px;
+}
+#mainContent {
+  margin: 8px 8px 8px 280px;
+}
+4.3.5. Creating an Inner Page
+672274
+We  have the homepage all roughed out. Now, we need to build another template that will handle
+the display of the rest of the site's content. We'll get this work started now, and come back to it later
+as necessary.
+1334027
+For now, all we have to do is make a copy of index.php and call it innerpage.php—this will maintain
+the same includes and layout as our homepage. We'll make a few minor changes to this new
+template, in particular, to the code that is used to extract information from the correct file in the
+xml directory.
+1334027
+An id variable will be passed in the query string, which will correspond to the filename of the
+XML file that contains the associated content. So the ID webcopy3 will correspond to a file named
+webcopy3.xml in the xml directory.
+Chapter 4. Displaying XML in a Browser
+Page 20
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+1334027
+Since we're using input from the browser (the id variable) as a filename in our script, we must be
+sure to check that the value passed is not a security risk. Otherwise, we could find our script turned
+against us as a clever hacker submits a value that points to some sensitive file on the system. For
+our purposes, a regular expression that verifies  that the variable contains an alphanumeric string
+(only numbers and letters) will suffice.
+1334027
+With these considerations in mind, here's the code that loads the XML file associated with the
+supplied ID:
+1334027
+innerpage.php (excerpt)
+<?php
+include_once 'common.inc.php';
+if (!isset($_GET['id']) or !eregi('^[a-z0-9]+$', $_GET['id']))
+  return;
+$file = $fileDir . $_GET['id'] . '.xml';
+$inner = simplexml_load_file($file);
+?>
+With the file loaded, we must pull out the values inside for display in the template. In this instance,
+we're using a single template file to display two different types of content: news items
+(news123.xml) and Web copy (webcopy123.xml). If you refer back to Chapter 2, where we defined
+these XML formats, you'll see that the Web copy has <navigationlabel> and <body>
+elements that news items do not. We'll have to detect these to make sure our template displays the
+right thing.
+1334027
+The best way to do this with the SimpleXML API  is to use an XPath query. For example, we want
+to use the <navigationlabel> element for the page title, but if no such element exists we want
+to fall back on the <headline> element. Here's the code:
+1334027
+innerpage.php (excerpt)
+<title>
+<?php
+if (count($inner->xpath('navigationlabel'))) {
+  echo htmlentities($inner->navigationlabel);
+} elseif (count($inner->xpath('headline'))) {
+  echo htmlentities($inner->headline);
+}
+?>
+</title>
+With all this in mind, you should be in a position to understand the complete template at a glance.
+1334027
+Chapter 4. Displaying XML in a Browser
+Page 21
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+innerpage.php
+<?php
+include_once 'common.inc.php';
+if (!isset($_GET['id']) or !eregi('^[a-z0-9]+$', $_GET['id']))
+  return;
+$file = $fileDir . $_GET['id'] . '.xml';
+$inner = simplexml_load_file($file);
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>
+<?php
+if (count($inner->xpath('navigationlabel'))) {
+  echo htmlentities($inner->navigationlabel);
+} elseif (count($inner->xpath('headline'))) {
+  echo htmlentities($inner->headline);
+}
+?>
+</title>
+<meta http-equiv="content-type"
+    content="text/html; charset=iso-8859-1" />
+<link rel="stylesheet" href="xmlcms.css" type="text/css" />
+</head>
+<body>
+<?php
+include 'navtop.inc.php';
+?>
+<div id="navSide">
+  <?php
+  include 'search.inc.php';
+  include 'news.inc.php';
+  ?>
+</div>
+<div id="mainContent">
+  <?php
+  echo '<h1>' . htmlentities($inner->headline) . '</h1>';
+  echo '<p><small>' . htmlentities($inner->description) .
+      '</small></p>';
+  if (count($inner->xpath('body'))) {
+    echo $inner->body;
+  }
+  ?>
+</div>
+</body>
+</html>
+That's really all we need at the moment—we have the foundations of a Website working already!
+We don't have much formatting yet, nor a working search engine, but the display side is coming
+together quite nicely.
+1334027
+What does our sample site look like so far? Well, since we haven't created any XML documents
+yet, yours might not work at all. On my system, however, I've inserted a number of files, which
+I've supplied for you in the code archive for this chapter, and the site looks like that shown in Figure
+4-6.
+1334027
+Over the next few chapters, we'll create XML documents with an administration tool, and the project
+will really start to come together.
+Chapter 4. Displaying XML in a Browser
+Page 22
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+1334027
+4.4. Summary
+661753
+In this chapter, we got a closer look at XSLT as we roughed out the display pages we'll need for
+our project. In Chapter 5, we'll look even more closely at XSLT, as we learn some of the more
+programmatic aspects of the language, such as loops, variables, and branches. We'll also fill in the
+elements we'll need for the display side, such as a working search engine, some formatting rules,
+and other details.
+1334027
+Figure 4-6. Displaying the CMS project so far.
+Chapter 4. Displaying XML in a Browser
+Page 23
+Return to Table of Contents
+Chapter 4. Displaying XML in a Browser
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+

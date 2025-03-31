@@ -1,0 +1,1589 @@
+Table of Contents
+Chapter 7. Manipulating XML with PHP....................................................................... 1
+7.1. Using SAX........................................................................................................................................................................... 2
+7.2. Using DOM......................................................................................................................................................................... 6
+7.3. Using SimpleXML............................................................................................................................................................. 12
+7.4. When to Use the Different Methods.................................................................................................................................. 19
+7.5. Our CMS Project............................................................................................................................................................... 19
+7.6. Summary........................................................................................................................................................................... 33
+Chapter 7. Manipulating XML with PHP
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+This PDF is exclusively for your use in accordance with the Safari Terms of Service. No part of it may be reproduced or transmitted in any form by any means without the prior
+written permission for reprints and excerpts from the publisher. Redistribution or other use that violates the fair use priviledge under U.S. copyright laws (see 17 USC107) or that
+otherwise violates the Safari Terms of Service is strictly prohibited.
+
+Chapter 7. Manipulating XML with PHP
+768
+In previous chapters, we processed XML on the client-side, using DOM and XSLT. Now, we're
+going to learn how to process XML on the server side  , using such tools as SAX, DOM, and
+SimpleXML.
+1334027
+Generally speaking, there are two ways to handle XML processing: the Document Object Model
+(DOM) , which we have already seen, and the Simple API for XML (SAX) . With the DOM, you
+build a hierarchical tree structure to which you can refer repeatedly. With SAX, you treat XML
+documents as a series of events—one event per element or attribute—and respond to those events
+as the document is parsed.
+1334027
+Each approach has its pros and cons. DOM builds memory-intensive trees, but, once they're built,
+the DOM provides plenty of tools to navigate, process, and manipulate those tree structures . SAX
+is only really good at handling your XML documents in a linear fashion, which means less
+flexibility; however, it is fast and easy to learn.
+1334027
+PHP 5.0 provides a third approach to handling XML processing—an approach that we've already
+seen in action. SimpleXML builds a hierarchical object structure like the DOM. The difference is
+that this structure is optimized for extracting and processing information, whereas the DOM
+provides a more general-purpose, heavy API for manipulating the structure of the tree.
+1334027
+In this chapter, we'll cover SAX, DOM, and SimpleXML, in that order. By the end of these
+discussions, you should have a good understanding of how the different APIs can be used to handle
+XML documents.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 1
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+Copyright Safari Books Online #672274
+
+7.1. Using SAX
+661753
+Imagine  that you build an XML document, then break it apart and lay it end to end on an assembly
+line. You can see processing instructions, start tags, content, end tags, and so on, all laid out before
+you in a long line.
+1334027
+You hit a button and your document starts to move down the assembly line, past a guy with a
+bullhorn. Every time a tag, comment, entity, processing instruction, or chunk of text (character
+data) goes by, the guy with the bullhorn shouts out, "I see a ______!" That's pretty much what
+happens with the SAX parser.
+1334027
+Unfortunately, to do anything interesting with SAX, you have to hand-roll your own functions to
+handle start tags, end tags, and character data, by taking immediate action in response to each. If
+you want to store any information from the document in a temporary data structure for later use,
+you have to figure that out for yourself—SAX won't do it for you. They don't call it the Simple API
+for XML for nothing!
+1334027
+So, why would you use SAX? It might be especially handy in the following situations :
+1334027
+• You're dealing with a large XML document that would take up too much memory if it were turned into a DOM tree.
+• You need to get your parser up and running quickly.
+• You're doing a limited amount of processing, or processing that is very straightforward and linear (i.e. translating particular XML
+elements into HTML elements).
+• You don't need to modify the original XML document.
+Given the right circumstances (a large XML document, for instance), SAX will run circles around
+DOM. However, it's important to understand that, in some cases, it really is more appropriate to
+use a tree structure—we'll discuss those cases a little later.
+1334027
+The default SAX parser for PHP is Expat,  a C library that's durable, tried and true, and is enabled
+by default in most PHP installations. You don't need to install any additional libraries—everything
+is built into PHP already. How do you use it? Let's step through a very quick tutorial.
+1334027
+The first step is to create a simple XML file for processing. Here's the file we'll use in this section:
+1334027
+keyword-data.xml
+<?xml version="1.0" encoding="iso-8859-1"?>
+<keywords>
+Chapter 7. Manipulating XML with PHP
+Page 2
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+  <keyword>XML</keyword>
+  <keyword>PHP</keyword>
+  <keyword>Perl</keyword>
+  <keyword>JavaScript</keyword>
+  <keyword>ASP</keyword>
+</keywords>
+Great—now, we're ready to code some PHP! Before we begin, though, it's a good idea to have an
+idea of the end result we want to achieve. In this case, we want to transform this list of keyword
+elements into an HTML bullet list, as illustrated in Figure 7-1.
+1334027
+Figure 7-1. A SAX-processed list of keywords.
+7.1.1. Creating Handlers
+672274
+Before   we can do anything else with SAX in PHP, we have to create the functions that "handle"
+the start tags, end tags, and character data. These functions will be called by the SAX parser as it
+processes the XML—we don't call these functions ourselves.
+1334027
+Our first handler, which we'll call start_element , will be responsible for handling all the start tags
+in our XML document. We could name this handler anything we liked; as you'll see in a moment,
+we will tell PHP the names of the handlers we've created for it.
+1334027
+The handler function for start tags must accept three arguments: a reference to the SAX parser
+(which we'll create shortly), the name of the element whose start tag has been encountered, and an
+array of the element's attributes (and their values).
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 3
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+As you can see below, the handler in this case is nothing more than a switch statement that looks
+for an XML tag name, and responds by outputting the appropriate HTML code.
+1334027
+saxdemo.php (excerpt)
+function start_element($parser, $element_name, $element_attrs) {
+  switch ($element_name) {
+    case 'KEYWORDS':
+    echo '<h1>Keywords</h1><ul>';
+    break;
+    case 'KEYWORD':
+    echo '<li>';
+    break;
+  }
+}
+Note: By default, the SAX parser in PHP performs a process called case folding  , in which any lowercase
+characters in tag or attribute names are replaced with their uppercase equivalents before they are handed
+to your handler functions. This is why the element names 'KEYWORDS' and 'KEYWORD' in this example
+are all in uppercase. If it really bugs you, the PHP Manual contains some information on how to disable case
+folding, but it's easier just to go with the flow and write your code to accommodate it.
+We'll call our next handler function end_element . This handler is called to respond to end tags in
+the document, and uses the same switch statement structure we saw above to output the appropriate
+HTML code when each end tag is detected.
+1334027
+saxdemo.php (excerpt)
+function end_element($parser, $element_name) {
+  switch ($element_name) {
+    case 'KEYWORDS':
+    echo '</ul>';
+    break;
+    case 'KEYWORD':
+    echo '</li>';
+    break;
+  }
+}
+Finally, we need a way to handle character data. Let's create a character_data function that prints
+out the value of every node it sees. Remember that in XML, "character data" is the name given to
+any text that's not markup; this handler would print out all the stuff that resides between an element's
+start and end tags.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 4
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+saxdemo.php (excerpt)
+function character_data($parser, $data) {
+  echo htmlentities($data);
+}
+Now that we've defined our custom tag and content handling functions, it's time to instantiate our
+parser and get to work.
+1334027
+7.1.2. Creating the Parser and Processing the XML
+672274
+The next steps are relatively easy—most of the heavy lifting is handled by our handler functions.
+All we have to do is create our parser and tell it which functions we've created to handle start tags,
+end tags, and character data :
+1334027
+saxdemo.php (excerpt)
+$parser = xml_parser_create();
+xml_set_element_handler($parser, 'start_element', 'end_element');
+xml_set_character_data_handler($parser, 'character_data');
+Once we've done that, we can use the standard PHP fopen function to open our XML document:
+1334027
+saxdemo.php (excerpt)
+$fp = fopen('keyword-data.xml', 'r')
+    or die ("Cannot open keyword-data.xml!");
+With the XML document in hand, we can use a simple while loop to read in manageable chunks
+(4KB is a reasonable size), and run them through the parser with the xml_parse function. If there's
+an error at any point, we use PHP's die function  to print out the error message supplied by
+xml_error_string based on the error number given by xml_get_error_code.
+xml_get_current_line_number is used to point to the specific line where the error occurred.
+1334027
+saxdemo.php (excerpt)
+while ($data = fread($fp, 4096)) {
+  xml_parse($parser, $data, feof($fp))
+      or die(sprintf('XML ERROR: %s at line %d',
+          xml_error_string(xml_get_error_code($parser)),
+          xml_get_current_line_number($parser)));
+}
+Once we're done with our loop, we free the parser with xml_parser_free .
+Chapter 7. Manipulating XML with PHP
+Page 5
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+1334027
+saxdemo.php (excerpt)
+xml_parser_free($parser);
+That was a lot to take in, so let's step though the tasks again:
+1334027
+1. Create handlers for start tags, end tags, and character data.
+2. Initiate your parser.
+3. Register your custom handlers with the parser.
+4. Open the XML file.
+5. Loop through the file, sending each chunk of data through the parser.
+6. Use built-in error trapping to detect problems.
+7. Free up the parser once you're done.
+As you can see, the SAX approach is very simple and straightforward. However, it lacks some of
+the more powerful features of other approaches, like DOM. 
+1334027
+7.2. Using DOM
+661753
+Now that you know something about SAX, it's time to understand how PHP's DOM functionality
+works.  The DOM is a robust, complex piece of engineering designed to handle a raft of
+contingencies. In fact, being able to handle anything you throw at it is the major strength of DOM.
+Its major weakness is that it's very complex and can be overwhelming—not to mention that it can
+really bog down your resources if you load a large document into memory.
+1334027
+We've already discussed the use of DOM on the client side. On the server side, we're talking about
+the same DOM—luckily for us, it's a standardized interface. The easiest way to talk about DOM
+on the server is to compare it with what we already know about SAX. You know from the previous
+section that you can use SAX to process XML documents in a linear fashion.
+1334027
+PHP's DOM  functionality takes a different approach. It loads an XML document into memory and
+converts it into its own hierarchical object structure, providing two very important features that
+SAX does not. The first is that the XML structure can be manipulated in memory, allowing nodes
+to be added, removed, changed, and rearranged. The second is that DOM allows the document to
+be inspected again and again, in random-access fashion, instead of just linearly.
+1334027
+Let's reuse our simple XML file from the SAX section so we can make an apples-to-apples
+comparison:
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 6
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+keyword-data.xml
+<?xml version="1.0" encoding="iso-8859-1"?>
+<keywords>
+  <keyword>XML</keyword>
+  <keyword>PHP</keyword>
+  <keyword>Perl</keyword>
+  <keyword>JavaScript</keyword>
+  <keyword>ASP</keyword>
+</keywords>
+Now that we have a file, let's create a DOM parser and load our XML.
+1334027
+7.2.1. Creating a DOM Parser
+672274
+To  create our parser, we create a DOMDocument object. Before we use it, we'll turn its whitespace
+handling feature off to prevent spaces, tabs, and line breaks between tabs from being treated as text
+nodes:
+1334027
+domdemo.php (excerpt)
+$doc = new DOMDocument();
+$doc->preserveWhiteSpace = false;
+Next, we load our XML document and grab a reference to our document element :
+1334027
+domdemo.php (excerpt)
+$doc->load("keyword-data.xml");
+$root = $doc->documentElement;
+7.2.2. Retrieving Elements
+672274
+Once we've created the parser and loaded our XML file, we can retrieve information from the
+document. One of the easiest ways to work with the DOM is to retrieve elements using the
+getElementsByTagName method.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 7
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+The getElementsByTagName method allows you to grab all elements contained within another
+element that have a particular name. We can use this method to grab all the individual
+<keyword> elements in the sample document and store them in an array :
+1334027
+domdemo.php (excerpt)
+$keywords = $root->getElementsByTagName('keyword');
+Since we called the method on the root element of the document, the $keywords array now
+contains every <keyword> element in the XML document. We can now iterate through the
+$keywords array to make sure each element is valid. We can then perform some processing on
+that element.
+1334027
+domdemo.php (excerpt)
+echo '<ul>';
+foreach ($keywords as $kw) {
+  echo '<li>' . htmlentities($kw->nodeValue) . '</li>';
+}
+echo '</ul>';
+The result would appear in the Web browser as shown in Figure 7-2.
+1334027
+Figure 7-2. Keyword processing example.
+So far, the results are identical to those we achieved with SAX. The main difference is the approach
+taken: in SAX, we had to create custom handlers to handle different tags as they rolled off the
+Chapter 7. Manipulating XML with PHP
+Page 8
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+assembly line one after the other; with DOM, we get to access the different levels of a hierarchical
+node structure in any order we like.
+1334027
+There's one additional point that can be made about working with XML and DOM  . If you want
+to change what is output, or the format of your XML changes, it's usually easier to keep up with
+these alterations in DOM than in SAX.
+1334027
+For example, imagine each of our <keyword> elements had a <status> attribute, like this:
+1334027
+keyword-data2.xml (excerpt)
+<?xml version="1.0" encoding="iso-8859-1"?>
+<keywords>
+  <keyword status="live">XML</keyword>
+  <keyword status="in progress">PHP</keyword>
+  <keyword status="live">Perl</keyword>
+  <keyword status="live">Javascript</keyword>
+  <keyword status="in progress">ASP</keyword>
+</keywords>
+Now, we want to print out each <keyword>'s <status> along with the keyword itself. To do
+this, we need only make a simple change:
+1334027
+domdemo2.php (excerpt)
+echo '<ul>';
+foreach ($keywords as $kw) {
+  echo '<li>' . htmlentities($kw->nodeValue) .
+      ' (' . htmlentities($kw->getAttribute('status')) . ')</li>';
+}
+echo '</ul>';
+This small alteration prints as shown in Figure 7-3.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 9
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Figure 7-3. Tweaking the keyword listing.
+If we wanted to print out only the live keywords, all we'd have to do would be to add a simple if
+test   :
+1334027
+domdemo3.php (excerpt)
+echo '<ul>';
+foreach ($keywords as $kw) {
+  if ($kw->getAttribute('status') == 'live') {
+    echo '<li>' . htmlentities($kw->nodeValue) . '</li>';
+  }
+}
+echo '</ul>';
+This displays as shown in Figure 7-4.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 10
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Figure 7-4. Displaying only live keywords.
+7.2.3. Creating Nodes
+672274
+As  I mentioned earlier, the DOM allows you to add new nodes, and manipulate existing ones. Let's
+create a new <keyword> element and add it to our existing DOM structure.
+1334027
+We can add a new node using the create_element  method of the DOMDocument object. All we
+have to do is pass in the name of our new node, and optionally its node value (the text it should
+contain):
+1334027
+domdemo4.php (excerpt)
+$newKW = $doc->createElement('keyword', 'XSLT');
+Once that's done, we have to attach the new keyword node to our DOM structure. We can do so
+using the appendChild method, but we must be careful to tell the DOM exactly where we're adding
+the node.
+1334027
+In our case, the job is very easy. All we have to do is add our new keyword element to our established
+$root variable (remember, this variable represents our document's root element—in this case,
+<keywords>).
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 11
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+domdemo4.php (excerpt)
+$root->appendChild($newKW);
+With a modified document in hand, you can now do several things with it. The most common is to
+output the XML code of the modified document, either to a file on the server, or to the Web browser.
+1334027
+7.2.4. Printing XML from DOM
+672274
+Printing  a DOM structure as XML code is fairly straightforward. All we have to do is use the
+saveXML method of the DOMDocument. By setting the formatOutput property of the object to
+true first, you can produce neatly indented XML code.
+1334027
+domdemo4.php (excerpt)
+$doc->formatOutput = true;
+echo '<p>Updated XML source code:</p>';
+echo '<pre>' . htmlentities($doc->saveXML()) . '</pre>';
+We've barely scratched the surface of DOM functionality with this quick discussion. We'll get into
+it a lot more in this and later chapters, though—especially as we'll need it to create XML documents
+on-the-fly. 
+1334027
+7.3. Using SimpleXML
+661753
+Before  the introduction of SimpleXML in PHP 5, developers could only manipulate and process
+XML with SAX and DOM. Both of those approaches were solid, but both required the developer
+to have a thorough understanding of what he or she was getting into.
+1334027
+Then, along came SimpleXML. As the name implies, SimpleXML seeks to simplify the way a PHP
+developer interacts with, processes, and manipulates XML data. What makes it so wonderful?
+Basically, SimpleXML loads XML data into a hierarchy of objects and arrays of objects. It then
+allows you to access that array using familiar methods like foreach loops and array indexes.
+1334027
+To put it another way, the developers behind SimpleXML recognized the fact that a large part of
+XML usage concerns the extraction and processing of information, so they made those types of
+operations very easy.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 12
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+As we saw in Chapter 4, SimpleXML assigns each tag in an XML file a property that matches its
+element name  . Take a look at this very simple XML document:
+1334027
+<document>
+  <msg>Hello</msg>
+</document>
+Here, we'd be able to access the value of the <msg> tag using PHP's   object oriented arrow notation
+as follows:
+1334027
+echo $xml->msg;
+Note: There's a huge drawback to this approach! If your XML element names change for any reason, you'll
+have to go back and change your SimpleXML logic to match the new names. The best way to avoid problems
+like this is to make sure your XML documents are already stable and structured the way you need them. If
+you do make changes to the XML after you start coding PHP, be sure to go back and change your code to
+match.
+Let's go over each of the major features of SimpleXML.
+1334027
+7.3.1. Loading XML Documents
+672274
+SimpleXML  has to work on something, so the first thing you need to do is identify the XML you
+want to process. SimpleXML can either load a file into memory or work on XML code in the form
+of a PHP string.
+1334027
+To open a file, use the simplexml_load_file function, like this:
+1334027
+sxmldemo.php (excerpt)
+$keywords = simplexml_load_file('keyword-data2.xml');
+You could also provide your XML as a variable, then load that variable into memory using the
+simplexml_load_string function:
+1334027
+sxmldemo2.php (excerpt)
+Chapter 7. Manipulating XML with PHP
+Page 13
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+$xml = <<<XML
+<?xml version="1.0" encoding="iso-8859-1"?>
+<keywords>
+  <keyword status="live">XML</keyword>
+  <keyword status="in progress">PHP</keyword>
+  <keyword status="live">Perl</keyword>
+  <keyword status="live">JavaScript</keyword>
+  <keyword status="in progress">ASP</keyword>
+</keywords>
+XML;
+$keywords = simplexml_load_string($xml);
+Note: The PHP string containing the XML code in the above example is declared using heredoc syntax   .
+If you're unfamiliar with this syntax, you can read about it in the PHP Manual.
+Regardless of the approach you take here, the result will be a hierarchy of objects and arrays called
+$keywords. We can now access different parts of that structure using standard PHP object and
+array syntax.
+1334027
+7.3.2. The XML Element Hierarchy
+672274
+When  an XML element contains multiple child elements with the same name (as does our
+<keywords> element in this example), those children are stored as an array in the object hierarchy.
+We can therefore use array indexes to access the information we need. For example, we can use
+this syntax to access the various keywords stored in our XML document:
+1334027
+echo $keywords->keyword[0]; // prints "XML"
+echo $keywords->keyword[1]; // prints "PHP"
+Notice that in each case, we use the $keywords object, which represents the root element of the
+document, followed by the arrow operator, and the name of the child node we're interested in (in
+this case, <keyword>). As this is an array, we use keyword[0] to access the first
+<keyword> element. To access the second, we use keyword[1], and so on.
+1334027
+Sometimes, you'll want to obtain all the values in an XML element array created by SimpleXML.
+As you might suspect, you can use a simple PHP foreach  loop to do this:
+1334027
+sxmldemo.php/sxmldemo2.php (excerpt)
+echo '<ul>';
+foreach ($keywords->keyword as $kw) {
+  echo '<li>' . htmlentities($kw) . '</li>';
+Chapter 7. Manipulating XML with PHP
+Page 14
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+}
+echo '</ul>';
+When an element contains only one child element of a given type, however, no array is created.
+Instead, you can access the element directly. Let's say that our XML file wasn't quite as simple as
+it is. Let's suppose that it had another level of elements—child nodes of each <keyword> element.
+Here's what that might look like:
+1334027
+<keywords>
+  <keyword status="live">
+    <name>XML</name>
+    <url>http://www.example.com/xml/</url>
+  </keyword>
+  <keyword status="in progress">
+    <name>PHP</name>
+    <url>http://www.example.com/php/</url>
+  </keyword>
+  …
+</keywords>
+If we wanted to print out the <name> and <url> element values for the first <keyword>, here's
+how we could do it:
+1334027
+echo $keywords->keyword[0]->name; // "XML"
+echo $keywords->keyword[0]->url; // "http://www.example.com/xml/"
+It doesn't get any easier than that! SimpleXML is so much easier than working with a DOM structure
+or declaring custom SAX handler functions.
+1334027
+As we have just seen, SimpleXML element objects may be used where strings are required and
+they will behave as strings, containing the text value that the corresponding XML element contains
+. It is important to be aware, however, that these objects are not in fact strings. This distinction
+comes into effect in cases where a string is not required, and therefore PHP will not perform the
+conversion for you. Here's an example:
+1334027
+if ($keywords->keyword[0] == 'XML') {
+  echo 'The first keyword is XML.';
+}
+Looking at our sample XML document, we would expect this if statement to execute and display
+the message, but it won't because $keywords->keyword[0] is an object, and is therefore not
+equal to the string 'XML'. In order to make this code behave as expected, you must perform the
+conversion yourself by casting the object to a string:
+1334027
+if ((string)$keywords->keyword[0] == 'XML') {
+  echo 'The first keyword is XML.';
+}
+If you're not a PHP guru, it can be a little hard to figure out when you have to cast to a string and
+when PHP will do it for you. The examples in this book should help somewhat, but if in doubt, cast
+Chapter 7. Manipulating XML with PHP
+Page 15
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+the value to a string yourself—that way you'll always be sure PHP is treating the value as you
+intended.
+1334027
+7.3.3. XML Attribute Values
+672274
+You   can access the value of an attribute by treating the element object as an array, and using the
+attribute's name as an array key.
+1334027
+For example, to print out the value of the first <keyword> element's <status> attribute, we
+could use the following:
+1334027
+echo $keywords->keyword[0]['status']; // prints "live"
+As with element values, however, things become tricky when you try to compare attribute values
+to PHP strings, as they are actually objects at heart. For example, imagine you want to display only
+"live" keywords. You might assume that it would be as easy as this:
+1334027
+foreach ($keywords->keyword as $kw) {
+  if ($kw['status'] == 'live') { // wrong!
+    echo '<li>' . htmlentities($kw) . '</li>';
+  }
+}
+The above code snippet looks reasonable. However, PHP can't compare apples to oranges—in this
+case, objects to a strings—so none of the keywords will be displayed.
+1334027
+To  make this work, we have to cast our attribute object to a string:
+1334027
+sxmldemo3.php (excerpt)
+foreach ($keywords->keyword as $kw) {
+  if ((string)$kw['status'] == 'live') {
+    echo '<li>' . htmlentities($kw) . '</li>';
+  }
+}
+Let's call this "the hard way." An easier method of filtering the values you retrieve from an XML
+document exists, thanks to XPath.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 16
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+7.3.4. XPath Queries
+672274
+There   is another way to filter XML elements based on an attribute's value; it involves using the
+xpath method we saw in Chapter 4. You'll recall that this method allows us to pass XPath queries
+into SimpleXML and receive the results in the form of an array.
+1334027
+The easiest way to grab all the <keyword> elements that have their <status> attribute set to
+<live> is to run the following XPath query from the <keyword> element in our document:
+1334027
+keyword[@status="live"]
+This query will look at all <keyword> elements that are children of the current element, and
+extract those that have a <status> of <live>. Here's how to do it with SimpleXML:
+1334027
+sxmldemo4.php (excerpt)
+foreach ($keywords->xpath('keyword[@status="live"]') as $kw) {
+  echo '<li>' . htmlentities($kw) . '</li>';
+}
+What does our XPath query buy us? For one thing, we no longer have to perform a string comparison
+inside PHP: XPath takes care of that for us. If you're familiar with database development in PHP,
+this kind of operation is similar to letting your SQL statement do the work of filtering database
+values before returning them to your script. Furthermore, our code is now a bit simpler to look at,
+and hopefully, easier to maintain.
+1334027
+Granted, you may look at the second construction and say to yourself, "That's so much more
+complicated then casting an object to a string for comparison purposes."
+1334027
+Well, some say tomayto, some say tomahto. And in Texas, some say tuhmayter.
+1334027
+7.3.5. Using SimpleXML to Update XML
+672274
+If you're already beginning to like SimpleXML, I have some good news! SimpleXML allows you
+to update values in a straightforward fashion. Let's say we wanted to change the third keyword in
+our example from PHP to JSP. Here's how we'd do it:
+1334027
+$keywords->keyword[2] = 'JSP';
+Chapter 7. Manipulating XML with PHP
+Page 17
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+To change the value of an attribute, we would simply add the appropriate attribute name as an array
+key:
+1334027
+$keywords->keyword[2]['status'] = 'live';
+To save or print out the updated XML code, we'd use the asXML method:
+1334027
+echo $keywords->asXML();
+7.3.6. Fixing SimpleXML Shortcomings with DOM
+672274
+As  elegant and simple as SimpleXML is, it does have a few shortcomings. For one thing, it's not
+possible (at the time of writing) to add new nodes to an XML document, just change the values of
+existing ones. Nor is it possible to delete nodes. Style sheets cannot easily be attached to your XML
+for transformational purposes. And finally, as you've seen, the PHP code is highly dependent on
+the names of the XML tags—if they change, updating the code can be a real headache.
+1334027
+However, SimpleXML has a very handy feature that allows it to interoperate  with other PHP XML
+functionality. Namely, this functionality allows you to import DOM documents and convert them
+into SimpleXML data structures.
+1334027
+What's the benefit of that? The functionality allows you to do some of the heavy lifting using native
+DOM functionality in PHP; you can then convert it to SimpleXML and do the rest of your work
+there.
+1334027
+To see this in action, let's start by loading up an XML document with DOM and making a change
+to it that we couldn't do with SimpleXML:
+1334027
+sxmldemo5.php (excerpt)
+$doc = new DOMDocument();
+$doc->preserveWhiteSpace = false;
+$doc->load("keyword-data2.xml");
+$root = $doc->documentElement;
+$newKW = $doc->createElement('keyword', 'JSP');
+$newKW->setAttribute('status', 'live');
+$root->appendChild($newKW);
+With a new element added to the DOM structure, we can use the simplexml_import_dom function
+to import it into a SimpleXML data structure. We can then use the SimpleXML API to do whatever's
+required—for example, to search for and display nodes with a certain attribute value.
+Chapter 7. Manipulating XML with PHP
+Page 18
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+1334027
+sxmldemo5.php (excerpt)
+$keywords = simplexml_import_dom($doc);
+echo '<ul>';
+foreach ($keywords->xpath('keyword[@status="live"]') as $kw) {
+  echo '<li>' . htmlentities($kw) . '</li>';
+}
+echo '</ul>';
+This will display the list of keywords with a <status> of <live>, including "JSP", which was
+added using DOM. 
+1334027
+7.4. When to Use the Different Methods
+661753
+You might   be wondering when it's appropriate to use SAX, DOM, and/or SimpleXML. Here are
+a few rules of thumb:
+1334027
+• If you have a very simple XML document that needs only linear processing, and you don't need to modify the document, SAX is a
+good candidate.
+• If you need to process a more complex XML document, but only to extract information, SimpleXML is a good choice.
+• If you need to create XML documents from scratch, or make heavy modifications to existing documents, use DOM. 
+7.5. Our CMS Project
+661753
+It's  now time to create the administrative side of our CMS. Our administrative tools will allow
+authorized users to log in to the CMS and administer the different parts of the Website. In this
+chapter, I'll walk you through building the following functionality:
+1334027
+• login/verification page
+• administrative index (from which CMS users gain access to other pages)
+• article create page
+• article edit page
+• article delete page
+Once we're done with these pages, we're going to continue our discussion of the administrative tool
+in Appendix B, mostly because a lot of it is fairly repetitive and can be sidelined. That discussion
+includes:
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 19
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+• news create/edit/delete pages
+• binary file create/edit/delete pages
+• category create/edit/delete pages
+• admin create/edit/delete pages
+All pages in the administration area reside in the admin directory of the site.
+1334027
+Note: All of the PHP scripts in this book assume you have the magic quotes feature of PHP disabled. This
+can be done by setting the magic_quotes_gpc option in your server's php.ini file to Off.If this feature is left
+on, you'll find a lot of unwanted backslashes (\) appearing in your content as you manipulate it using the
+administration scripts we'll develop in this section and in Appendix B.
+7.5.1. The Login Page
+672274
+The  login page is very simple. It involves a basic HTML <form> that allows administrators to
+enter a username and password. Any complexity comes from structuring the HTML so that it can
+be styled effectively using CSS.
+1334027
+login.php
+<?php
+session_start();
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>Please Log In</title>
+<meta http-equiv="Content-Type"
+    content="text/html; charset=iso-8859-1">
+<link rel="stylesheet" type="text/css" href="../xmlcms.css" />
+<link rel="stylesheet" type="text/css" href="login.css" />
+</head>
+<body>
+<form class="login" action="verify.php" method="post">
+<h1>Please log in</h1>
+<div class="fields">
+  <label for="username">User name</label>
+  <input type="text" id="username" name="username" class="text" />
+  <label for="password">Password</label>
+  <input type="password" id="password" name="password"
+      class="password" />
+</div>
+<div class="actions">
+  <input type="submit" value="Submit" />
+  <input type="reset" value="Reset" />
+</div>
+<p class="error"><?php echo $_SESSION['error']; ?></p>
+</form>
+Chapter 7. Manipulating XML with PHP
+Page 20
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+</body>
+</html>
+In addition to the basic site style sheet (xmlcms.css), this page also uses a style sheet especially for
+laying out the login form. Again , this isn't a book on CSS, so we won't spend time on the details
+of this file, but here is the code for completeness:
+1334027
+login.css
+form.login {
+  width: 290px;
+  margin: 1em auto;
+  padding: 4px;
+  background: #ccc;
+}
+form.login h1 {
+  text-align: center;
+  font-size: medium;
+  background: #fff;
+  margin: 1px;
+}
+form.login .fields {
+  text-align: right;
+}
+form.login label {
+  float: left;
+  width: 130px;
+  text-align: right;
+}
+form.login .actions {
+  text-align: center;
+}
+form.login input.text, form.login input.password {
+  width: 150px;
+  margin-bottom: 1px;
+}
+form.login .error {
+  color: red;
+  margin: 0;
+  padding: 0;
+}
+Getting back to the login page itself, notice that the form's <action> is set to a page called
+verify.php   . The PHP logic on this page needs to check the entered values against a list of
+administrators that's kept in admin.xml.
+1334027
+Note: For the purposes of the examples in this book and its code archive, we have placed the XML files that
+contain the content, categories, authors, and administrative users in a subdirectory of the main site. But,
+although we have gone to some length to protect sensitive information in those files (encrypting the
+passwords of our administrators, for example), it's still a good idea to protect those files from direct access
+over the Web by casual visitors to your site.To protect these files, you can either configure your Web server
+to prevent browsers from accessing the directory, or you can move the directory out of your site's Web-
+accessible directory structure. In the latter case, you'll need to adjust the common.inc.php file to point to the
+directory's new location, so that all of the scripts on the site can still find the XML files.
+Chapter 7. Manipulating XML with PHP
+Page 21
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+Note: As we've seen, the password values stored in admin.xml are encrypted for added security. To use the
+sample admin.xml file included in the code archive for this book, you need to know that the initial password
+of all three administrators stored in that file (joe, bill, and tom) is password.
+If there's a match, the PHP code will set a session variable and redirect the user to the administration
+index page. If not, PHP sends the user back to the login.php page, with a special session variable
+($_SESSION['error']) containing an error message for display.
+1334027
+Here is the code. Notice that we're using SimpleXML in this case, because it's the fastest way to
+load the information from admin.xml.
+1334027
+verify.php
+<?php
+include_once '../common.inc.php';
+$admins = simplexml_load_file($fileDir . 'admin.xml');
+foreach ($admins->admin as $admin) {
+  if ($_POST['username'] == (string)$admin->username and
+      crypt($_POST['password'], (string)$admin->password) ==
+      (string)$admin->password) {
+    $_SESSION['login'] = true;
+    header('location: index.php');
+    exit;
+  }
+}
+$_SESSION['error'] = 'Wrong user name or password. Try again.';
+header('location: login.php');
+?>
+Notice that, since we'll be encrypting our passwords in admin.xml, we have to take the password
+provided by the user, encrypt it the same way, and then compare that user input to the password
+that's stored in the XML file. If you're unfamiliar with PHP's crypt function, you can read all about
+it in the PHP Manual.
+1334027
+As anyone could enter a URL for one of the administration pages, we must add an extra piece of
+security to protect those pages' content. At the top of each page, we need to check to see if the value
+of the session variable $_SESSION['login'] is set to true. If it isn't, we'll send the user back
+to the login.php page. As we'll be reusing this functionality, it's a good idea to place this check
+inside an include file:
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 22
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+security.inc.php
+<?php
+include_once '../common.inc.php';
+if (@$_SESSION['login'] !== true) {
+  header('location: login.php');
+  $_SESSION['error'] = 'You must log in before you can access
+      administration pages.';
+  exit;
+}
+?>
+Tip: When you are first setting up your site, you may not yet have any administrators set up. But then how
+are you supposed add administrators if you can't log in? To add your first administrator accounts, you'll want
+to disable security by simply commenting out the contents of security.inc.php, so that the file doesn't do
+anything. You'll then be able to browse the admin pages freely, and add an administrator or two. You can
+then re-enable security and log in using one of the accounts you created.
+The last thing we need is a logout page, which we can link to so that users can log out of the site
+before they leave their computer:
+1334027
+logout.php
+<?php
+include_once '../common.inc.php';
+$_SESSION['login'] = false;
+header('location: index.php');
+?>
+7.5.2. The Admin Index Page
+672274
+The  first page of our administration tool provides access to all site functionality and content,
+including administrative users, articles, news items and other content types.
+1334027
+The code for this page is very concise. All we want to do is provide links to each of the major parts
+of the administration tool.
+1334027
+index.php
+Chapter 7. Manipulating XML with PHP
+Page 23
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+<?php
+include 'security.inc.php';
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type"
+    content="text/html; charset=iso-8859-1" />
+<title>Welcome to the Admin Index Page</title>
+<link rel="stylesheet" type="text/css" href="../xmlcms.css" />
+</head>
+<body>
+<h1>Welcome to the Admin Index Page</h1>
+<p>
+  <a href="articletool.php">Manage Articles</a><br />
+  <a href="newstool.php">Manage News Items</a><br />
+  <a href="admintool.php">Manage Administrators</a>
+</p>
+<p><a href="logout.php">Log out</a></p>
+</body>
+</html>
+Each of the areas represented by those links will have the same functionality. Each area will allow
+CMS users to create, edit, and delete items. Let's go through each of these tasks in turn for the first
+area—articles.
+1334027
+7.5.3. Working with Articles
+672274
+Our  article administration area will allow CMS users to create new articles, edit existing ones, and
+delete them as required. Since articles are the most important part of our site, we'll start with them,
+then move on to news items and site administrators in Appendix B.
+1334027
+For the main page of our article administration area, we'll need a list of all the articles on the site.
+You should be relatively familiar with the PHP code required to do this by now:
+1334027
+articletool.php
+<?php
+include 'security.inc.php';
+include_once '../common.inc.php';
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type"
+    content="text/html; charset=iso-8859-1" />
+<title>Article Index</title>
+<link rel="stylesheet" type="text/css" href="../xmlcms.css" />
+</head>
+Chapter 7. Manipulating XML with PHP
+Page 24
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+<body>
+<h1>Article Index</h1>
+<p><a href="articletool_create.php">Create New Article</a></p>
+<p><a href="index.php">Cancel</a></p>
+<ul>
+<?php
+$handle = opendir($fileDir);
+while (($file = readdir($handle)) !== FALSE) {
+  if (is_dir($fileDir . $file)) continue;  
+  if (!eregi("^article.*\.xml$", $file)) continue;
+  
+  $articleFile = simplexml_load_file($fileDir . $file);
+  echo '<li>' . htmlentities($articleFile->headline);
+  echo ' <a href="articletool_edit.php?id=' . $articleFile['id'] .
+      '">edit</a>';
+  echo ' <a href="doArticleDelete.php?id=' . $articleFile['id'] .
+      '">delete</a></li>';
+}
+?>
+</ul>
+</body>
+</html>
+7.5.4.1. Creating New Articles
+661753
+The  article creation page is very important—it allows site administrators to create new XML articles
+on the site using a simple Web form interface. Each of the form fields maps to an element in the
+XML document structure we first planned in Chapter 1 and revisited in Chapter 3.
+1334027
+As a refresher, here's what one of our articles should look like when it's created:
+1334027
+<?xml version="1.0" encoding="iso-8859-1"?>
+<article id="article12499300388912">
+  <authorid>1</authorid>
+  <categoryid>1</categoryid>
+  <headline>Using XML with PHP</headline>
+  <description>PHP offers many ways to work with XML</description>
+  <pubdate>2004-06-26</pubdate>
+  <status>live</status>
+  <keywords>XML PHP SAX DOM SimpleXML</keywords>
+  <body><![CDATA[
+    <h1>Using XML with PHP</h1>
+    <p>PHP is very powerful. It offers many ways to work with
+      XML.</p>
+  ]]></body>
+</article>
+In particular, be aware of the need to generate a unique ID, and to fill in all the various pieces of
+metadata  .
+1334027
+Let's create a form that contains fields for all of this information. We start out with the familiar
+check to make sure that the user is logged in:
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 25
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+articletool_create.php (excerpt)
+<?php
+include 'security.inc.php';
+include_once '../common.inc.php';
+?>
+We follow that with the start of our HTML, including a link to a new style sheet named
+forms.css  , which will contain the rules to lay out large administration forms like this one:
+1334027
+articletool_create.php (excerpt)
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type"
+    content="text/html; charset=iso-8859-1" />
+<title>Create a New Article</title>
+<link rel="stylesheet" type="text/css" href="../xmlcms.css" />
+<link rel="stylesheet" type="text/css" href="forms.css" />
+</head>
+<body>
+Finally, we create our form. Most of it is made up of plain form fields, but for selecting an author
+and category we need dynamic listings, which we extract from the appropriate files using
+SimpleXML .
+1334027
+articletool_create.php (excerpt)
+<h1>Create a New Article</h1>
+<p><a href="articletool.php">Cancel</a></p>
+<form action="doArticleCreate.php" method="post">
+<div class="fields">
+  <p>
+    <label for="headline">Headline</label>
+    <input type="text" id="headline" name="headline"
+        class="text" />
+  </p>
+  <p>
+    <label for="author">Author</label>
+    <select id="authorid" name="authorid">
+      <?php
+      $authors = simplexml_load_file($fileDir . 'authors.xml');
+      foreach ($authors->author as $author) {
+        echo '<option value="' . htmlentities($author['id']) .
+            '">' . htmlentities($author->name) . '</option>';
+      }
+      ?>
+    </select>
+Chapter 7. Manipulating XML with PHP
+Page 26
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+  </p>
+  <p>
+    <label for="category">Category</label>
+    <select id="categoryid" name="categoryid">
+      <?php
+      $cats = simplexml_load_file($fileDir . 'categories.xml');
+      foreach ($cats->category as $cat) {
+        echo '<option value="' . htmlentities($cat['id']) . '">' .
+            htmlentities($cat['label']) . '</option>';
+      }
+      ?>
+    </select>
+  </p>
+  <p>
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="in progress">In Progress</option>
+      <option value="live">Live</option>
+    </select>
+  </p>
+  <p>
+    <label for="keywords">Keywords</label>
+    <input type="text" id="keywords" name="keywords" class="text"
+    />
+  </p>
+  <p>
+    <label for="description">Description</label>
+    <textarea id="description" name="description"></textarea>
+  </p>
+  <p>
+    <label for="body">Article Body (HTML)</label>
+    <textarea id="body" name="body"></textarea>
+  </p>
+</div>
+<div class="actions">
+  <input type="submit" value="Add Article" />
+  <input type="reset" value="Reset" />
+</div>
+</form>
+</body>
+</html>
+Here's  the CSS code that performs the layout of this imposing form:
+1334027
+forms.css
+form .actions {
+  text-align: center;
+}
+form p {
+  clear: left;
+  margin: 1px 0;
+}
+form label {
+  float: left;
+  width: 15%;
+  padding-right: 10px;
+  text-align: right;
+}
+input.text, input.password, select {
+  width: 300px;
+}
+textarea {
+  width: 70%;
+Chapter 7. Manipulating XML with PHP
+Page 27
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+  height: 4em;
+}
+textarea#body {
+  height: 30em;
+}
+The form's <action> is set to the doArticleCreate.php page, which uses DOM functions to create
+an XML article from the information in the form. Because this is a little complex, I'll go over the
+code in pieces.
+1334027
+The first part of the file initializes our new XML document, setting the version and creating the
+root element, <article>.
+1334027
+doArticleCreate.php (excerpt)
+<?php
+include 'security.inc.php';
+include_once '../common.inc.php';
+$doc = new DOMDocument();
+$root = $doc->createElement('article');
+$root = $doc->appendChild($root);
+Next, we add an <id> attribute to the <article> node. The ID will be the word article
+followed by a timestamp . On the off-chance that more than one article is created in the same second,
+we check for an existing file with the same ID in its name, and increment the timestamp by one
+until a non-clashing ID is found.
+1334027
+doArticleCreate.php (excerpt)
+$timestamp = date('YmdHis');
+do {
+  $id = 'article' . $timestamp++;
+} while (file_exists($fileDir . $id . '.xml'));
+$root->setAttribute('id', $id);
+Now that we've created the root, it's time to create each of that element's children, in the correct
+order. The first is <authorid>. Notice that the <authorid> element is a child of
+<article>, and that the ID itself is a child of <authorid>.
+1334027
+doArticleCreate.php (excerpt)
+$author = $doc->createElement('authorid');
+$root->appendChild($author);
+Chapter 7. Manipulating XML with PHP
+Page 28
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+$atext = $doc->createTextNode($_POST['authorid']);
+$author->appendChild($atext);
+We use the same technique to generate the <categoryid>, <headline>,
+<description>, <status>, and <keywords> elements. The value of <pubdate> is
+generated on-the-fly by the script, but otherwise it's the same.
+1334027
+doArticleCreate.php (excerpt)
+$cat = $doc->createElement('categoryid');
+$root->appendChild($cat);
+$ctext = $doc->createTextNode($_POST['categoryid']);
+$cat->appendChild($ctext);
+$head = $doc->createElement('headline');
+$root->appendChild($head);
+$htext = $doc->createTextNode($_POST['headline']);
+$head->appendChild($htext);
+$desc = $doc->createElement('description');
+$root->appendChild($desc);
+$dtext = $doc->createTextNode($_POST['description']);
+$desc->appendChild($dtext);
+$pub = $doc->createElement('pubdate');
+$root->appendChild($pub);
+$pubtext = $doc->createTextNode(date('Y-m-d'));
+$pub->appendChild($pubtext);
+$stat = $doc->createElement('status');
+$root->appendChild($stat);
+$stext = $doc->createTextNode($_POST['status']);
+$stat->appendChild($stext);
+$key = $doc->createElement('keywords');
+$root->appendChild($key);
+$ktext = $doc->createTextNode($_POST['keywords']);
+$key->appendChild($ktext);
+Next, we process the body text. Remember that we are planning to store our article body information
+as HTML, which means it will contain a bunch of tags. If we use DOM, as we have so far, to output
+this value as text, it'll work just fine, but the resulting XML file will be difficult to read, with
+character entities like   <lt> and <gt> scattered throughout.
+1334027
+As mentioned in Chapter 1, to keep the code readable we will instead store the body text as a
+CDATA section within our XML file, so that special characters within do not have to be converted
+to character entities. Instead of using createTextNode, we'll use createCDATASection . We'll place
+all the HTML text from the form inside that command.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 29
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+doArticleCreate.php (excerpt)
+$body = $doc->createElement('body');
+$root->appendChild($body);
+$cdata = $doc->createCDATASection($_POST['body']);
+$body->appendChild($cdata);
+Next, we write this entire XML tree to a file, using the ID generated earlier as a filename:
+1334027
+doArticleCreate.php (excerpt)
+$filename = $fileDir . $id . '.xml';
+$doc->save($filename);
+Finally, now that we're finished with all of this, we need to send the user back to articletool.php,
+where they should see the newly-created file listed in the master article list.
+1334027
+doArticleCreate.php (excerpt)
+header('location: articletool.php');
+7.5.4.2. Editing an XML Article
+661753
+Generally  speaking, editing an XML article is much the same as creating an article, except that
+you have to load an existing article's values into the form, and write the submitted changes out to
+the file.
+1334027
+Let's start with the code for the form page. The first part should be pretty familiar to you—it verifies
+that the user has logged in.
+1334027
+articletool_edit.php (excerpt)
+<?php
+include 'security.inc.php';
+include_once '../common.inc.php';
+Next, we open the file for the document the user wishes to edit. Because we won't be modifying
+the file just yet, we can use SimpleXML to open the file and pull out the information we need.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 30
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+articletool_edit.php (excerpt)
+if (!isset($_GET['id']) || $_GET['id'] == '' ||
+    !file_exists($fileDir . $_GET['id'] . '.xml')) {
+  header('location: articletool.php');
+  exit;
+}
+$file = simplexml_load_file($fileDir . $_GET['id'] . '.xml');
+?>
+Now, we simply have the markup for a form very similar to the one in articletool_create.php, except
+that this time we pull the existing value for each field out of the $file variable.
+1334027
+articletool_edit.php (excerpt)
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type"
+    content="text/html; charset=iso-8859-1" />
+<title>Edit Article</title>
+<link rel="stylesheet" type="text/css" href="../xmlcms.css" />
+<link rel="stylesheet" type="text/css" href="forms.css" />
+</head>
+<body>
+<h1>Edit Article</h1>
+<p><a href="articletool.php">Cancel</a></p>
+<form action="doArticleUpdate.php" method="post">
+<input type="hidden" name="id"
+    value="<?php echo htmlentities($_GET['id']); ?>" />
+<div class="fields">
+  <p>
+    <label for="headline">Headline</label>
+    <input type="text" id="headline" name="headline" class="text"
+        value="<?php echo htmlentities($file->headline); ?>" />
+  </p>
+  <p>
+    <label for="author">Author</label>
+    <select id="authorid" name="authorid">
+      <?php
+      $authors = simplexml_load_file($fileDir . 'authors.xml');
+      foreach ($authors->author as $author) {
+        if ((string)$author['id'] == (string)$file->authorid) {
+          echo '<option value="' . htmlentities($author['id']) .
+              '" selected="selected">' .
+              htmlentities($author->name) . '</option>';
+        } else {
+          echo '<option value="' . htmlentities($author['id']) .
+              '">' . htmlentities($author->name) . '</option>';
+        }
+      }
+      ?>
+    </select>
+  </p>
+  <p>
+    <label for="category">Category</label>
+    <select id="categoryid" name="categoryid">
+      <?php
+      $cats = simplexml_load_file($fileDir . 'categories.xml');
+      foreach ($cats->category as $cat) {
+        if ((string)$cat['id'] == (string)$file->categoryid) {
+          echo '<option value="' . htmlentities($cat['id']) .
+Chapter 7. Manipulating XML with PHP
+Page 31
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+              '" selected="selected">' .
+              htmlentities($cat['label']) . '</option>';
+        } else {
+          echo '<option value="' . htmlentities($cat['id']) .
+              '">' . htmlentities($cat['label']) . '</option>';
+        }
+      }
+      ?>
+    </select>
+  </p>
+  <p>
+    <label for="status">Status</label>
+    <select id="status" name="status">
+      <option value="in progress"
+          <?php if ((string)$file->status == 'in progress')
+          echo 'selected="selected"'?>>In Progress</option>
+      <option value="live"
+          <?php if ((string)$file->status == 'live')
+          echo 'selected="selected"'?>>Live</option>
+    </select>
+  </p>
+  <p>
+    <label for="keywords">Keywords</label>
+    <input type="text" id="keywords" name="keywords" class="text"
+value="<?php echo htmlentities($file->keywords); ?>" />
+  </p>
+  <p>
+    <label for="description">Description</label>
+    <textarea id="description" name="description">
+<?php echo htmlentities($file->description); ?></textarea>
+  </p>
+  <p>
+    <label for="body">Article Body (HTML)</label>
+    <textarea id="body" name="body">
+<?php echo htmlentities($file->body); ?></textarea>
+  </p>
+</div>
+<div class="actions">
+  <input type="submit" value="Update Article" />
+  <input type="reset" value="Reset" />
+</div>
+</form>
+</body>
+</html>
+The doArticleUpdate.php file that processes this form is very similar to the doArticleCreate.php
+script:
+1334027
+doArticleUpdate.php
+<?php
+include 'security.inc.php';
+include_once '../common.inc.php';
+$doc = new DOMDocument();
+$root = $doc->createElement('article');
+$root = $doc->appendChild($root);
+$id = $_POST['id'];
+$root->setAttribute('id', $id);
+Chapter 7. Manipulating XML with PHP
+Page 32
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+
+…
+$filename = $fileDir . $id . '.xml';
+unlink($filename);
+$doc->save($filename);
+header('location: articletool.php');
+?>
+7.5.4.3. Deleting an XML Article
+661753
+Deleting   an XML file is very simple. When an ID is passed to the doArticleDelete.php page, it
+deletes the corresponding file and send the user back to the articletool.php page:
+1334027
+doArticleDelete.php
+<?php
+include 'security.inc.php';
+include_once '../common.inc.php';
+$filename = $fileDir . $_GET['id'] . '.xml';
+unlink($filename);
+header('location: articletool.php');
+?>
+At this point, we've built a login page, an administrative index, and pages for the addition, editing,
+and deletion of articles. We'll discuss the rest of our administrative pages in Appendix B. Don't be
+surprised if we reuse the code from these initial administrative pages to quickly knock up the rest
+of the administration tool!   
+1334027
+7.6. Summary
+661753
+We've learned a lot about using SAX, DOM, and SimpleXML functionality in PHP in this chapter.
+With this, and your knowledge of client-side processing, you should be well-armed to handle most
+XML processing tasks. In the second part of this chapter, we created the administrative forms we'll
+need to manage our Website articles.
+1334027
+In the next chapter, we'll discuss RSS and RDF, two standards that are commonly used for making
+headlines and other feeds of information available to third parties in XML format.
+1334027
+Chapter 7. Manipulating XML with PHP
+Page 33
+Return to Table of Contents
+Chapter 7. Manipulating XML with PHP
+No Nonsense XML Web Development With PHP By Thomas Myer ISBN: 097524020X Publisher: SitePoint
+Prepared for Matias Eli Sie, Safari ID: el.matia@gmail.com
+Print Publication Date: 7/1/2005
+User number: 672274 Copyright 2006, Safari Books Online, LLC.
+Reproduction, transmission and/or redistribution in any form by any means without the prior written permission from the publisher is prohibited.
+

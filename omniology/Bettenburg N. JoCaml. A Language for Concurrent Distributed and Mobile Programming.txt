@@ -1,0 +1,429 @@
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Seminar: Advanced Functional Programming
+JoCaml: A Language for Concurrent Distributed and Mobile
+Programming
+Nicolas Bettenburg
+Universität des Saarlandes
+Saarbrücken
+22.03.2006
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Overview
+1
+Introduction
+Concurrent Programming
+About JoCaml
+2
+Concurrent Programming
+New Language features
+Synchronization and Control
+Example: A Reference Cell
+3
+Distributed Programming
+Distributed Model
+Nameserver and Mobility
+Termination
+4
+Summary
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Concurrent Programming
+Concurrency: Deﬁnition and Concerns
+Concurrency
+Property of systems which consist of computations that execute
+overlapped in time, and which may permit the sharing of
+common resources between these computations.
+Multiple Concurrency Models
+Lock-Based Approach
+Transactional Memory (as seen in Seminar)
+Race Conditions, Deadlocks, Starvation
+Debugging, Correctness
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+About JoCaml
+New Approach: JoCaml
+Underlying Concurrency Model: Join Calculus (1996)
+Based on Objective Caml
+Statically typed language
+Byte-code compiler (code mobility)
+Good system programming support
+Efﬁcient Garbage Collector
+sequential, call-by-value evaluation, deterministic
+Extension maintains original language features.
+JoCaml extends OCaml with support
+for lightweight-concurrency
+Message Passing
+Message-based Synchronization
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+New Language features
+Expressions
+Expressions
+Executed synchronously.
+Every Ocaml expression is a Jocaml expression
+#
+l e t
+x=1 in
+p r i n t ( x ) ;
+p r i n t ( x +1);
+; ;
+=> 12
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+New Language features
+Processes
+Processes
+Executed asynchronously
+No result value
+Communicate by sending messages on channels.
+# spawn { echo 1
+} ; ;
+can also be w r i t t e n
+as
+# spawn { echo 2
+} ; ;
+# spawn { echo 1 |
+echo
+2 } ; ;
+=> 12 ( or 21
+! ! )
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+New Language features
+Channels
+Uni-Directional Channels
+Synchronous, in expressions, send and await answer
+(block).
+Asynchronous, in processes, send message.
+#
+l e t
+def my_chan_sync x = p r i n t _ i n t
+x ;
+reply ; ;
+val my_chan_sync :
+i n t −> u n i t
+#
+l e t
+def my_chan_asynch !
+x = p r i n t _ i n t
+x ;
+; ;
+val my_chan_async << int >>
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Synchronization and Control
+Synchronization and Concurrency Control
+Synchronization by Pattern Matching
+Join patterns extend port name deﬁnitions with synchronization.
+#
+l e t
+def
+f r u i t !
+f
+|
+cake !
+c = p r i n t _ s t r i n g ( f ^"
+"^ c ) ;
+; ;
+# spawn {
+f r u i t
+orange
+|
+f r u i t
+apple
+|
+cake sacher } ; ;
+Synchronization Barriers
+Represent explicit synch-points also know as rendez-vous.
+#
+l e t
+def sync1
+( )
+|
+sync2
+( ) = reply
+to sync1
+|
+reply
+to sync2 ; ;
+# spawn { f o r
+i =0 to 9 do sync1 ( ) ;
+p r i n t _ i n t
+1 done ; } ; ;
+# spawn { f o r
+i =0 to 9 do sycn2 ( ) ;
+p r i n t _ i n t
+2 done ; } ; ;
+=> 12121212121212121212
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Example: A Reference Cell
+A reference cell
+# type
+’a
+j r e f
+= { set :
+’a −> u n i t ;
+get :
+u n i t −>
+’a }
+#
+l e t
+def new_ref u =
+#
+l e t
+def
+state !
+v
+|
+get
+( ) = state v
+|
+reply v
+#
+or
+state !
+v
+|
+set w = state w |
+reply
+#
+in
+state u |
+reply { get=get ;
+set=set }
+#
+l e t
+r0 = new_ref 0
+; ;
+type
+’a
+j r e f
+= {
+set :
+’a−>u n i t ;
+get :
+unit −>’a }
+val
+new_ref
+:
+’b −>
+’b
+j r e f
+val
+r0
+:
+in
+j r e f
+internal state of cell = content
+lexical scoping keeps state internal
+content stored as message v on channel state
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Distributed Model
+Distributed Model in JoCaml
+Distributed Programming
+Distributed Programming is the execution of computations on
+one or more machines that share their resources.
+Any machine may join or quit the computation.
+At any time, every process or expression is running on a
+given machine.
+They may migrate from on machine to another.
+System-Level processes communicate via TCP/IP over the
+network.
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Nameserver and Mobility
+Nameserver
+The Nameserver
+Used to bootstrap a distributed computation. A built-in library
+that exchanges a few channel names.
+Needed since JoCaml has lexical scoping.
+Function to register a channel in a global table.
+Function to look-up a value in the global table.
+# spawn {
+l e t
+def
+f
+x = reply x∗x
+in Ns . r e g i s t e r
+" square "
+f
+vartype ;
+} ; ;
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Nameserver and Mobility
+Mobility: Locations and Mobility
+Locations
+Represent units of mobility.
+#
+l e t
+loc
+here
+#
+def square x = reply x∗x
+#
+and cubic x = reply
+( square x )∗x
+# do { p r i n t _ i n t
+( square
+2 ) ;
+}
+; ;
+#
+l e t
+loc
+mobile
+# do {
+#
+l e t
+there = Ns . lookupo
+" here "
+vartype
+in go there ;
+#
+l e t
+sqr = Ns . lookup
+" square "
+vartype
+in
+#
+l e t
+def sum ( s , n ) =
+#
+reply
+( i f
+n=0 then s else sum ( s+sqr n , n−1))
+in
+#
+p r i n t _ s t r i n g
+(sum( 0 , 5 ) ) ;
+}
+; ;
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Termination
+Termination and Failure (Recovery)
+Some parts of distributed computation may fail.
+Detect failures and take adequate measures
+Cleanly report the problem
+Abort related parts of computation
+Make another attempt on a different machine
+a location can run a halt() process
+a location can detect if another location has halted
+Up to the programmer to deﬁne locations as suitable units
+of failure recovery !
+Up to the programmer to provide a recovery mechanism !
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Summary
+Summary
+Based on Join Calculus
+Nice extension of OCaml
+Idea of join calculus also applicable to other languages like
+C Sharp.
+Different Model than Memory Transactions. (atomic vs.
+joins)
+Programmer has to consider concurrency while writing
+application.
+Distributed Programming based on concurrency.
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Literature
+List of References
+F. Le Fessant, C. Fournet, L. Maranget and A. Schmitt:
+JoCaml: a Language for concurrent
+Distributed and Mobile Programming. [AFPS
+2002]
+C. Fournet and G. Gonthier: The join calculus: a
+language for distributed mobile
+programming. [APPSEM 2000, LNCS vol 2395 p.
+268-332]
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
+Introduction
+Concurrent Programming
+Distributed Programming
+Summary
+Questions
+Questions
+Thank you for your listening.
+Questions?
+Nicolas Bettenburg
+Seminar: Advanced Functional Programming
+
