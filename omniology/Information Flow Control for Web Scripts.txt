@@ -1,0 +1,1087 @@
+Information Flow Control for Web Scripts
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+iMinds-DistriNet,
+KU Leuven,
+3001 Leuven, Belgium.
+firstname.lastname@cs.kuleuven.be
+Abstract. Modern web applications heavily rely on JavaScript code ex-
+ecuting in the browser. These web scripts are useful for instance for im-
+proving the interactivity and responsiveness of web applications, and for
+gathering web analytics data. However, the execution of server-provided
+code in the browser also brings substantial security and privacy risks.
+Web scripts can access a fair amount of sensitive information, and can
+leak this information to anyone on the Internet. This tutorial paper dis-
+cusses information ﬂow control mechanisms for countering these threats.
+We formalize both a static, type-system based and a dynamic, multi-
+execution based enforcement mechanism, and show by means of exam-
+ples how these mechanisms can enforce the security of information ﬂows
+in web scripts.
+Keywords: web scripts, JavaScript, security, information ﬂow control
+1
+Introduction
+Modern interactive web applications heavily rely on browser-side scripts in lan-
+guages such as JavaScript, for instance to propose completions while a user is
+typing into a text ﬁeld. These scripts are usually event-driven programs that can
+react to user interface events such as key presses or mouse clicks, or to network
+events such as the arrival of HTTP responses. While handling events, scripts can
+display output to the user or send output on the network in the form of HTTP
+requests.
+Listing 1.1 shows a simpliﬁed example of such a program that interactively
+proposes possible completions for a string that the user is typing into a textﬁeld.
+The ﬁrst three lines declare an event handler for the key up event. That
+handler takes the current contents of the textﬁeld with ID ﬁeld1, and invokes
+a helper function that computes the possible completions (for instance by con-
+tacting a remote server). These possible completions are ﬁnally displayed in the
+text area with ID suggestions.
+While browser-side scripts are very useful for building responsive interactive
+web applications, they also come with substantial security and privacy risks.
+Scripts have, and need, access to both user information and to remote HTTP
+servers. The completion example above can only perform its function if it can
+
+2
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+Listing 1.1. Suggesting completions
+1 window.onkeyup = function(e) {
+2
+suggestions.value = completions(ﬁeld1.value);
+3
+}
+4
+5 function completions(s) {
+6 // return possible completions of s
+7 }
+read what the user is typing, and if it can contact the remote server to retrieve
+possible completions. Unfortunately, a consequence of these capabilities of scripts
+is that they are commonly used to leak private information to untrusted network
+servers [18, 26]. To illustrate these risks, Listing 1.2 shows an example of a script
+that implements a simple key logger in JavaScript. It installs an event handler
+to monitor key presses, and leaks every keystroke to hacker.com, using the
+jQuery ajax() function that sends an HTTP request to the URL provided as a
+parameter. The similarity of this example with the earlier completion example
+shows that it is a thin line between useful and dangerous scripts. The fact that
+many web sites include scripts from third parties [25] further ampliﬁes the need
+for protective countermeasures.
+Listing 1.2. Keylogger
+1 var u = ’http://hacker.com/?=’;
+2 window.onkeypress = function(e) {
+3
+var leak = e.charCode;
+4
+$.ajax(u + leak);
+5 }
+Researchers have realized that mechanisms for information ﬂow security are a
+promising countermeasure for web script-related threats, since such mechanisms
+allow the scripts to have access to private information but at the same time
+prevent it from leaking that information to untrusted servers.
+Information ﬂow security can be enforced statically or dynamically. The pur-
+pose of this tutorial article is to explain the essence of two techniques for en-
+forcing information ﬂow security for event-driven programs: a static technique
+based on typing, and a dynamic technique based on secure multi-execution.
+The remainder of this tutorial paper is structured as follows. First, in Sec-
+tion 2, we deﬁne a formal scripting language that is a simple model of JavaScript.
+Then, in Section 3, we deﬁne information ﬂow control and give both examples
+of scripts that are information ﬂow secure and scripts that are insecure. Sec-
+tions 4 and 5 deﬁne a static, respectively dynamic enforcement mechanism for
+
+Information Flow Control for Web Scripts
+3
+information ﬂow security and illustrate the mechanisms by means of examples.
+Section 6 provides a brief overview of the existing research in this area, and
+Section 7 concludes.
+2
+Formal Model of Web Scripts
+2.1
+Syntax
+For the purpose of this tutorial paper, we use a very simple model of a web
+scripting language, strongly inspired by the model language introduced by Bo-
+hannon et al. [8]. The syntax is speciﬁed in Figure 1. We assume certain given
+disjoint sets of identiﬁers: GVars is the set of identiﬁers for mutable global vari-
+ables, Chan is the set of identiﬁers for communication channel names, and Var
+is the set of identiﬁers for bound variables.
+n ∈
+Z
+(Integer number literals)
+⊙∈
+{+, −, =, <}
+(Primitive operations on numbers)
+r ∈
+GVars
+(Global mutable variables)
+ch ∈
+Chan
+(I/O Channels)
+x ∈
+Var
+(Variables)
+p ::=
+h; p
+(Reactive Programs)
+|
+·
+h ::=
+on ch(x) c
+(Event handlers)
+c ::=
+skip
+(Commands)
+|
+c; c
+|
+r := e
+|
+if e then c else c
+|
+while e do c
+|
+output e on ch
+e ::=
+n
+(Expressions)
+|
+r
+|
+x
+|
+e ⊙e
+Fig. 1. Formal syntax of our web scripting language
+A program p is essentially a list of handlers, where each handler h speciﬁes
+a command c to be executed on occurrence of an input event on channel ch.
+An input event always carries a single integer value, and that integer value is
+bound to the formal parameter x before the command c is executed. The syntax
+
+4
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+of commands is standard, with syntactic forms for the empty command (skip),
+sequential composition, assignment to global variables, conditional and looping
+constructs, and performing output on a channel. Expressions e are standard
+integer arithmetic expressions that can refer to formal parameters x declared in
+a handler deﬁnition, or to global variables r.
+In examples we will assume the existence of I/O channels such as KeyPress,
+Network, Display, MouseClick, . . . Scripts can output integers on these channels
+with the output command. For instance, output 10 on Network will output the
+integer 10 on the Network channel. They can react to inputs arriving on these
+channels by declaring event handlers. For instance, key presses are modeled
+as input events on the KeyPress channel carrying a single integer value that
+represents the scan code of the key that was pressed. For simplicity, we assume
+that all input events carry a single integer value, and that all output events are
+outputs of a single integer value.
+As an example, the JavaScript key logger program from Listing 1.2 is ren-
+dered in our model language as:
+on KeyPress(x) output x on Network
+This script declares an event handler that upon each key press sends the key
+scan code on the network.
+If we want to distinguish diﬀerent network destinations (for instance com-
+munication to the same network origin the web page was loaded from and
+other network origins) we can use two separate channel identiﬁers Network and
+SameOriginNetwork. The completions example from Listing 1.1 could then be
+rendered as:
+on KeyPress(x) output x on SameOriginNetwork
+We could even use parameterized channel names such as Network(o) with o
+an origin of the form http://www.kuleuven.be for instance.
+2.2
+Semantics
+To deﬁne the semantics of the model language, we deﬁne stores µ (assigning
+a current (integer) value to all global variable names) and outputs o (either
+the special “no output” constant · or an output of a number n on channel ch
+(outch(n)) (Figure 2). For updating of the store, we use the notation µ[r 7→n]:
+it denotes the store equal to µ except that the global variable r now maps to
+the value n.
+Using stores, we deﬁne a big-step operational semantics judgement for ex-
+pressions µ ⊢e ↓n (in store µ, expression e evaluates to value n). This deﬁnition
+is completely standard (Figure 3).
+Programs are event-driven. The judgement (p)(i) ⇓c deﬁnes formally what
+command c program p will execute to handle the input event i. It is deﬁned
+by the rules in Figure 4. Essentially, this looks up the handler for handling the
+input event, and substitutes the integer n received on the input channel for the
+
+Information Flow Control for Web Scripts
+5
+µ ∈
+Ref →Z
+(Stores)
+o ::=
+·
+(Outputs)
+|
+outch(n)
+i ::=
+inch(n)
+(Input Events)
+ev ::=
+i | o
+(Reactive Events)
+Fig. 2. Semantic structures
+µ ⊢n ↓n
+(E-Expr-Lit)
+µ ⊢r ↓µ(r)
+(E-Expr-Ref)
+µ ⊢e1 ↓n1
+µ ⊢e2 ↓n2
+µ ⊢e1 + e2 ↓n1 + n2
+(E-Expr-Plus)
+µ ⊢e1 ↓n1
+µ ⊢e2 ↓n2
+µ ⊢e1 −e2 ↓n1 −n2
+(E-Expr-Minus)
+µ ⊢e1 ↓n1
+µ ⊢e2 ↓n2
+n1 ̸= n2
+µ ⊢e1 = e2 ↓0
+(E-Expr-Eq1)
+µ ⊢e1 ↓n1
+µ ⊢e2 ↓n2
+n1 = n2
+µ ⊢e1 = e2 ↓1
+(E-Expr-Eq2)
+µ ⊢e1 ↓n1
+µ ⊢e2 ↓n2
+n1 ̸< n2
+µ ⊢e1 < e2 ↓0
+(E-Expr-Lt1)
+µ ⊢e1 ↓n1
+µ ⊢e2 ↓n2
+n1 < n2
+µ ⊢e1 < e2 ↓1
+(E-Expr-Lt2)
+Fig. 3. Semantics of expressions
+
+6
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+formal parameter x in that handler. If no handler is deﬁned in the program p
+for input i on this channel, we have (p)(i) ⇓skip .
+(on ch(x) do c; p)(inch(n)) ⇓[x 7→n]c
+(p)(inch(n)) ⇓c
+ch ̸= ch′
+(on ch′(x) do c′; p)(inch(n)) ⇓c
+(·)(inch(n)) ⇓skip
+Fig. 4. Determining the event handling command
+Finally, the semantics of commands is given as a small-step operational se-
+mantics judgement (µ, c)
+o→(µ′, c′) (executing command c in store µ produces
+an updated store µ′ and new command c′ producing output o). They are deﬁned
+by the rules in Figure 5.
+The initial program state is (µ0, skip) where µ0 maps all global variables on 0.
+A program state is passive if it has the form (µ, skip). We say a program is well-
+formed if it has no unbound variables (i.e. the only variable x ∈Var occurring
+in the body of a handler is the formal parameter of the handler – of course, the
+handler can also use global variables r ∈GVars) . It is straightforward to prove
+that well-formed programs that are not in a passive state can always make a
+deterministic step. The only non-deterministic transitions are transitions that
+consume a new input, and these are only possible from a passive state.
+An execution of a script is a ﬁnite or inﬁnite sequence of events ev:
+ev = (µ0, skip)
+ev0
+−−→(µ1, c1)
+ev1
+−−→(µ2, c2)
+ev2
+−−→. . .
+We say an execution is event-complete if it ends in a passive state: this means
+that all the input events the program has received have been fully handled, and
+that the only way to further extend the execution is by giving it a new input
+event.
+2.3
+Examples
+Consider the following script:
+on KeyPress(x) total := total + x;
+on MouseClick(x) output total on Display
+The script keeps a running total of the key scan codes of all key presses it has
+seen, and on a MouseClick input event, it displays the total on the Display
+channel. This models a simple JavaScript calculator.
+
+Information Flow Control for Web Scripts
+7
+(µ, (skip; c)) ·→(µ, c)
+(E-Stmt-SeqSkip)
+(µ, c1)
+o→(µ′, c′
+1)
+(µ, (c1; c2))
+o→(µ′, (c′
+1; c2))
+(E-Stmt-Seq)
+µ ⊢e ↓n
+(µ, (r := e)) ·→(µ[r 7→n], skip)
+(E-Stmt-Assign)
+µ ⊢e ↓n
+n ̸= 0
+(µ, if e then c1 else c2) ·→(µ, c1)
+(E-Stmt-If1)
+µ ⊢e ↓n
+n = 0
+(µ, if e then c1 else c2) ·→(µ, c2)
+(E-Stmt-If2)
+µ ⊢e ↓n
+n ̸= 0
+(µ, while e do c) ·→(µ, (c; while e do c))
+(E-Stmt-While1)
+µ ⊢e ↓n
+n = 0
+(µ, while e do c) ·→(µ, skip)
+(E-Stmt-While2)
+µ ⊢e ↓n
+(µ, output e to ch)
+outch(n)
+−−−−−→(µ, skip)
+(E-Stmt-Out)
+(p)(inch(n)) ⇓c
+(µ, skip)
+inch(n)
+−−−−→(µ, c)
+(E-Input)
+Fig. 5. Semantics of commands
+
+8
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+The following is an example execution of the script. We denote a memory µ
+as the set that has an element r 7→µ(r) for every global variable r that has a
+non-zero value in µ. Hence, µ0 is denoted as the empty set {}.
+({}, skip)
+inKeyPress(10)
+−−−−−−−−→({}, total := total + 10)
+·−→
+({total 7→10}, skip)
+inKeyPress(20)
+−−−−−−−−→({total 7→10}, total := total + 20)
+·−→
+({total 7→30}, skip)
+inMouseClick(0)
+−−−−−−−−→({total 7→30}, output total on Display)
+outDisplay(30)
+−−−−−−−−→({total 7→30}, skip)
+For the remainder of this paper, we will usually not show the silent actions (·)
+in example executions.
+As a second example, consider again the key logger script:
+on KeyPress(x) output x on Network
+The following is an example execution of the script.
+({}, skip)
+inKeyPress(10)
+−−−−−−−−→({}, output 10 on Network)
+outNetwork(10)
+−−−−−−−−→({}, skip)
+inKeyPress(20)
+−−−−−−−−→({}, output 20 on Network)
+outNetwork(20)
+−−−−−−−−→({}, skip)
+inMouseClick(0)
+−−−−−−−−→({}, skip)
+Key press events get echoed on the network, while a mouse click event is just
+silently absorbed (there is no handler for these events).
+3
+Information ﬂow control
+3.1
+Introduction
+Web scripts can receive and send information on a variety of channels.
+They need to receive information from both sensitive and less sensitive chan-
+nels. For instance, a script may need to read a password from the user in order
+to estimate the strength of the password (clearly a sensitive piece of informa-
+tion). Scripts may also need to receive advertisements to be displayed from the
+network (an example of a script reading less sensitive information).
+
+Information Flow Control for Web Scripts
+9
+Scripts also need to send information both to trustworthy output channels
+as well as to less trustworthy output channels. For instance, in a web based doc-
+ument processor, scripts will send document content to the site hosting the doc-
+ument processing application (an output to a trustworthy channel). But scripts
+may also collect user interaction data to be sent to a web analytics site (outputs
+to a less trustworthy channel).
+The key idea of information ﬂow control is to allow scripts to perform all
+these inputs and outputs, as long as no information received from a sensitive
+input channel leaks to a non-trustworthy output channel. Let us assume for the
+sake of the following examples that:
+– Display is a trustworthy output channel: the outputs on that channel can
+only be seen by a trusted observer – the user of the web application.
+– Network is a non-trustworthy output channel: the outputs can possibly be
+seen by untrusted obervers, for instance attackers.
+– KeyPress is a sensitive input channel: we do not want untrusted observers
+to know anything about what keys we press.
+– MouseClick is a non-sensitive input channel: we do not care that information
+leaks about when and where we click the mouse.
+To enforce information ﬂow control, these assumptions are formalized in a
+policy that assigns a security label to each of the channels. These security labels
+should be thought of as conﬁdentiality levels. For the purpose of this paper, we
+use only two such levels: H for high conﬁdentiality and L for low conﬁdentiality.
+The set of security labels is an ordered set: for our two element set, H > L.
+For input channels, the label deﬁnes the level of conﬁdentiality of information
+received on that channel. Hence, in our examples the label of KeyPress will be H
+and the label of MouseClick will be L.
+For output channels, the label deﬁnes the trustworthiness of the observers
+of the output channel. A H observer is trusted and it is OK if that observer
+sees information of conﬁdentiality levels H or L. A L observer is untrusted and
+should only ever see information of level L.
+With these intuitions in mind, we can discuss some examples of secure and
+insecure scripts.
+Consider again the JavaScript calculator:
+on KeyPress(x) total := total + x;
+on MouseClick(x) output total on Display
+This script is secure: it reads sensitive information from KeyPress but only
+discloses it to the trustworthy Display channel.
+On the other hand, the key logger script:
+on KeyPress(x) output x on Network
+is an example of an insecure script. It discloses information read from a H
+input channel (KeyPress) to a L output channel (Network). The variant of
+
+10
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+the script that outputs these key presses to a trustworthy network channel
+SameOriginNetwork would be secure.
+The key logger script above has a blatant leak: it just copies information from
+a H channel to a L channel and hence is obviously insecure. But it is important
+to note that scripts can also leak information in more subtle ways. Consider for
+instance the following script:
+on KeyPress(x) r := x;
+on MouseClick(x) output r on Network
+This script leaks information from KeyPress to Network by ﬁrst storing the
+information in memory, and sending it out at a later moment in time. Hence
+this script is also insecure, but in a somewhat less obvious way.
+Leaks can be even more indirect. Consider for instance:
+on KeyPress(x) if x = 100 then r := 1 else skip;
+on MouseClick(x) output r on Network
+This script leaks whether the user ever pressed a key with scan code 100: it
+outputs 1 on the Network in case it has ever seen a KeyPress(100) event. Hence,
+it is also insecure but in an even more indirect way. Flows of information that, as
+in the example above, leak information by using the control ﬂow of the program
+are often called implicit ﬂows.
+The objective of information ﬂow security is to formalize the distinction be-
+tween secure and insecure programs that we informally discussed in this section,
+and to develop enforcement mechanisms that prevent such insecure information
+leaks. We want to prevent both explicit and implicit ﬂows.
+3.2
+Formal deﬁnitions
+The notion of information ﬂow security discussed above can be formalized as
+noninterference, which roughly says that there should not be two executions of
+the program that (1) receive the same L inputs, but (2) produce diﬀerent L
+outputs. The intuition is that if L outputs are always the same given the same
+L inputs, then the L outputs could not have been inﬂuenced in any way by the
+H inputs, and hence do not leak any information about the H inputs.
+To make this formal for web scripts, we need a few deﬁnitions. We assume as
+given a policy that assigns security labels to channels in the form of a function
+lbl from Chan to {L, H}.
+For a sequence of events ev = ev 1 · · · ev n, we deﬁne
+– ⌊ev⌋I the subsequence of all input events.
+– ⌊ev⌋O the subsequence of all output events.
+– ⌊ev⌋I,L the subsequence of all input events inch(n) such that lbl(ch) = L.
+– ⌊ev⌋O,L the subsequence of all output events outch(n) such that lbl(ch) = L.
+
+Information Flow Control for Web Scripts
+11
+Deﬁnition 1. A program p is noninterferent iﬀfor any two event-complete ex-
+ecutions ev 1 and ev 2 it holds that:
+⌊ev 1⌋I,L = ⌊ev 2⌋I,L =⇒⌊ev 1⌋O,L = ⌊ev 2⌋O,L
+I.e. any two event-complete executions that receive the same L inputs will pro-
+duce the same L outputs.
+Example 1. The key logger script:
+on KeyPress(x) output x on Network
+is insecure according to this deﬁnition, because of the following two event-
+complete executions.
+ev 1 =
+({}, skip)
+inKeyPress(10)
+−−−−−−−−→({}, output 10 on Network)
+outNetwork(10)
+−−−−−−−−→({}, skip)
+ev 2 =
+({}, skip)
+inKeyPress(20)
+−−−−−−−−→({}, output 20 on Network)
+outNetwork(20)
+−−−−−−−−→({}, skip)
+For these two executions, ⌊ev 1⌋I,L = ⌊ev 2⌋I,L (both executions have no L input
+events), but ⌊ev 1⌋O,L ̸= ⌊ev 2⌋O,L (both executions have diﬀerent L outputs on
+Network).
+Example 2. Also the script with the more subtle leaks:
+on KeyPress(x) if x = 100 then r := 1 else skip;
+on MouseClick(x) output r on Network
+can be seen to be insecure by considering the following two event-complete exe-
+cutions (we do not show the silent output events):
+ev 1 = ({}, skip)
+inKeyPress(10)
+−−−−−−−−→({}, skip)
+inMouseClick(10)
+−−−−−−−−−→({}, output 0 on Network)
+outNetwork(0)
+−−−−−−−→({}, skip)
+ev 2 = ({}, skip)
+inKeyPress(100)
+−−−−−−−−→({r 7→1}, skip)
+inMouseClick(10)
+−−−−−−−−−→({}, output 1 on Network)
+outNetwork(1)
+−−−−−−−→({}, skip)
+It is easy to check that ⌊ev 1⌋I,L = ⌊ev 2⌋I,L but ⌊ev 1⌋O,L ̸= ⌊ev 2⌋O,L.
+3.3
+Enforcement
+Roughly speaking, there are two classes of approaches to enforce noninterference.
+We can statically check that a program is secure, by using techniques such as
+type systems or program veriﬁcation. Or we can dynamically enforce that no
+information leaks by using techniques such as monitoring or multi-execution.
+In the following two sections, we focus on one static enforcement technique
+(based on typing) and on one dynamic technique (based on multi-execution).
+
+12
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+4
+Static enforcement
+The idea of using static techniques to check noninterference was pioneered in
+the seventies by Denning and Denning [14]. There is a huge body of literature
+on static enforcement of information ﬂow security. The survey by Sabelfeld and
+Myers [30] provides an excellent overview. We illustrate static enforcement by
+means of typing by showing a type system that is very similar to a type system
+proposed by Bohannon et al. [8].
+Types are just security labels (hence, in our case, there are only two types:
+H and L). Programmers have to declare a type for every global variable and the
+type checker will enforce that the information stored in global variables of type
+L will only depend on L information.
+We ﬁrst deﬁne a typing judgment for expressions (Figure 6). The intuition
+is that the type l of an expression e is an upper bound for the level of the
+information that could have inﬂuenced e. The judgement (x : lc) ⊢e : l deﬁnes
+the type l of expression e in context (x : lc). The context (x : lc) deﬁnes the level
+of the bound variable x; for an expression that is part of a handler deﬁnition on
+a channel ch, the variable bound by the handler will get as type the level of the
+channel ch.
+lc ≤l
+(x : lc) ⊢x : l
+(T-Expr-Var)
+(x : lc) ⊢n : l
+(T-Expr-Lit)
+lbl(r) ≤l
+(x : lc) ⊢r : l
+(T-Expr-Ref)
+(x : lc) ⊢e1 : l1
+(x : lc) ⊢e2 : l2
+l1 ≤l
+l2 ≤l
+(x : lc) ⊢e1 ⊙e2 : l
+(T-Expr-Op)
+Fig. 6. Typing of expressions
+The type system is polymorphic: an expression can have multiple types. Any
+type that is an upper bound for the level of the information that could have
+inﬂuenced e is a valid type. With our restriction to two security levels H and L,
+expressions can either have the H type, or both the L and H type. This simple
+form of polymorphism in the type system will make some of the typing rules for
+commands simpler.
+The rule (T-Expr-Var) says that a variable assumed to have level lc in the
+context can be given as type any level above or equal to lc, and rule (T-Expr-
+Ref) says that global variables can be given as type any level above or equal
+to the level assigned to them by the programmer. Literals can have any level
+(T-Expr-Lit), and in a binary expression, the level of the result can be any
+level that is above or equal to the levels of the two operands (T-Expr-Op).
+Next we turn to typing of commands (Figure 7). We deﬁne a typing judge-
+ment (x : lc) ⊢c : l, expressing that command c is well-typed with type l in
+
+Information Flow Control for Web Scripts
+13
+context (x : lc). The intuition is that the type of a command is a lower bound
+for the level of the side-eﬀects (either assignments to global variables or outputs
+on channels) that a command can have. Hence typing is again polymorphic. In
+our system, a well-typed command can have both type H and L, meaning it
+deﬁnitely only performs H side eﬀects, or a well-typed command can have type
+L only, if the command possibly performs some L side eﬀect.
+(x : lc) ⊢skip: l
+(T-Cmd-Skip)
+(x : lc) ⊢c1 : l1
+(x : lc) ⊢c2 : l2
+l ≤l1
+l ≤l2
+(x : lc) ⊢(c1; c2) : l
+(T-Cmd-Seq)
+(x : lc) ⊢e : le
+le ≤lbl(ch)
+l ≤lbl(ch)
+(x : lc) ⊢output e to ch : l
+(T-Cmd-Out)
+(x : lc) ⊢e : le
+le ≤lbl(r)
+l ≤lbl(r)
+(x : lc) ⊢(r := e) : l
+(T-Cmd-Assign)
+(x : lc) ⊢e : le
+(x : lc) ⊢c1 : l1
+(x : lc) ⊢c2 : l2
+l ≤l1
+l ≤l2
+le ≤l1
+le ≤l2
+(x : lc) ⊢if e then c1 else c2 : l
+(T-Cmd-If)
+(x : lc) ⊢e : le
+(x : lc) ⊢c : l′
+l ≤l′
+le ≤l′
+(x : lc) ⊢while e do c : l
+(T-Cmd-While)
+Fig. 7. Typing of commands
+Rule (T-Cmd-Skip) says that skip can be given any level. The sequential
+composition of two commands must have a level that is below or equal to the lev-
+els of the two commands that are composed (T-Cmd-Seq). Rule (T-Cmd-Out)
+ensures two things. First, for an output command, the level of the expression
+that is output must be below or equal to the level of the channel on which it
+is output. Since le is an upper bound for the level the information that could
+have inﬂuenced e, this ensures no information leaks with this output. Second,
+the level l of the command itself must be a lower bound for the eﬀects, and
+hence musy be below or equal to the level of the output channel. The rule for
+assignments (T-Cmd-Assign) is very similar: assignment to global variables is
+an eﬀect that is similar to the eﬀect of producing output. The rules for condi-
+tionals (T-Cmd-If) and (T-Cmd-While) make sure that no information leaks
+through the control ﬂow and are needed to prevent implicit ﬂows. Parts of the
+program that can only be reached dependent on information of level le (like the
+branches of an if-statement or the body of a while-statement) should only have
+eﬀects that have le as lower bound. In other words, there should be no L eﬀects
+in parts of the program whose reachability depends on H information.
+Finally, we turn to programs (Figure 8). Each declared handler on ch(x) c
+
+14
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+⊢·
+(T-Pgm-Empty)
+(x : lbl(ch)) ⊢c : lbl(ch)
+⊢p
+on ch(x) c; p
+(T-Pgm)
+Fig. 8. Typing of programs
+must be type-checked in a context that assigns the label of the channel ch to
+the bound variable x, and the side-eﬀects of the resulting commands must be
+bounded by that same label; a H input event should not lead to L side eﬀects.
+Example 3. Consider again the JavaScript calculator:
+on KeyPress(x) total := total + x;
+on MouseClick(x) output total on Display
+If we deﬁne lbl(total) = H, this script passes type checking. The expression
+total + x gets type H and the assignment total := total + x can be given both
+types H and L (both these are lower bounds for the single eﬀect of assigning to
+total). In a similar way, the output command in the second handler can be given
+both types H and L.
+Example 4. The key logger script:
+on KeyPress(x) output x on Network
+does not type check. The expression x must be given type H because it arrives
+on a H channel (rules (T-Pgm) and (T-Expr-Var)). As a consequence, the
+output command fails to type check as the level of Network is L and rule (T-
+Cmd-Out) requires that the type of the expression being output is below or
+equal to the level of the output channel.
+For similar reasons, the script below also does not type check:
+on KeyPress(x) r := x;
+on MouseClick(x) output r on Network
+The ﬁrst handler can only be type checked of r is given type H by deﬁning
+lbl(r) = H. But then the second handler can not be type checked for the same
+reason as above.
+Example 5. Finally, let us consider an example with conditionals. The program
+below:
+on KeyPress(x) if x = 100 then r := 1 else skip;
+on MouseClick(x) output r on Network
+can not be type checked. Since the conditional of the if-statement depends on
+H information (x has type H), eﬀects in the then and else branch must be
+bounded below by H (rule(T-Cmd-If)) . Hence, the r variable must be made H
+by deﬁning lbl(r) = H. But then the second handler can not type check anymore.
+
+Information Flow Control for Web Scripts
+15
+One can prove that any program that type checks is noninterferent.
+Theorem 1. Suppose we are given a policy lbl that assigns security levels to
+I/O channels, and suppose that lbl can be extended to assign security levels to
+global variables such that ⊢p, then p is noninterferent under that policy.
+We refer the reader to [8] for a proof.
+Note that the type system is conservative. It is easy to come up with example
+programs that are noninterferent but that fail to type check. For instance:
+on KeyPress(x) r := x;
+on MouseClick(x) output r −r on Network
+is noninterferent since the expression r −r always evaluates to 0. But the type
+system will treat the expression as H. The fact that type systems (and other
+static approaches) reject some good programs is one of the main motivations to
+also consider dynamic methods that can be more permissive [31].
+5
+Dynamic enforcement
+The ﬁrst attempts at dynamically enforcing information ﬂow also date back to
+the seventies [16], but for many years static enforcement techniques were con-
+sidered more promising. The impression was that dynamic mechanisms are not
+a good match for information ﬂow security, as they monitor only a single exe-
+cution, and the deﬁnition of noninterference talks about two executions. Hence,
+for many years the emphasis was on the development of static methods.
+In the last decade, we have seen a renewed interest in dynamic methods [31].
+The most obvious dynamic approach is monitoring where the enforcement mech-
+anism monitors an execution and blocks it as soon as it detects an information
+leak. Such a monitor for JavaScript was for instance developed by Hedin and
+Sabelfeld [17]. An alternative approach is the approach of secure multi-execution
+(SME) [15]. We illustrate dynamic enforcement by means of a secure multi-
+execution mechanism that is very close to the mechanism proposed by Bielova
+et al. [6].
+The core idea of SME for reactive systems is to maintain two executions of
+the program (one for each security level, i.e. a low (L) and a high (H) execution),
+and to implement the following rules on the I/O performed by these executions.
+L input events are handled by both executions, and H input events are only
+handled by the H execution. Outputs on L channels are only performed in the
+L execution and outputs on H channels only in the H execution.
+It is relatively easy to see that executing a program under this SME regime
+will guarantee non-interference: the execution that does output at level L only
+sees inputs of level L and hence the output could not have been inﬂuenced by
+inputs of level H.
+Similarly, it is relatively easy to see that non-interferent programs run un-
+modiﬁed: if L outputs indeed only depend on L inputs, then the L execution
+
+16
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+lbl(ch) = H
+(p)(inch(n)) ⇓c
+((µL, skip), (µH, skip))
+inch(n)
+====⇒((µL, skip), (µH, c))
+(New-H-Input)
+lbl(ch) = L
+(p)(inch(n)) ⇓c
+((µL, skip), (µH, skip))
+inch(n)
+====⇒((µL, c), (µH, c))
+(New-L-Input)
+(µL, cL)
+o→(µ′
+L, c′
+L)
+o =· ∨lbl(o) = H
+((µL, cL), (µH, cH)) ·=⇒((µ′
+L, c′
+L), (µH, cH))
+(L-Internal)
+(µL, cL)
+o→(µ′
+L, c′
+L)
+lbl(o) = L
+((µL, cL), (µH, cH))
+o=⇒((µ′
+L, c′
+L), (µH, cH))
+(L-Output)
+(µH, cH)
+o−→(µ′
+H, c′
+H)
+o =· ∨lbl(o) = L
+((µL, skip), (µH, cH)) ·=⇒((µL, skip), (µ′
+H, c′
+H))
+(H-Internal)
+(µH, cH)
+o−→(µ′
+H, c′
+H)
+lbl(o) = H
+((µL, skip), (µH, cH))
+o=⇒((µL, skip), (µ′
+H, c′
+H))
+(H-Output)
+Fig. 9. Semantics of SME.
+will still perform the same outputs. The H execution gets all events and behaves
+exactly as the program would behave without SME so also the H outputs will
+remain the same. The only net eﬀect that SME has on noninterferent programs
+is that – depending on how both executions are scheduled – outputs may happen
+in a diﬀerent order (but outputs at the same security level remain in the same
+order). This is the precision property of SME. Rafnsson et al.[27] have shown
+that, if the program is noninterferent and low and high executions are scheduled
+correctly, then even ordering of outputs remains the same. However, in many
+cases it is suﬃcient to maintain order only within security levels. For instance,
+in the case of web scripts, if graphical outputs to the browser user are H and
+outputs to the network are L, it is suﬃcient to maintain order per security level.
+That is, the relative order of graphical outputs in relation to networks outputs
+is not important. This observation allows for simple schedulers which, for each
+input event, ﬁrst perform the low execution (if the input event was low), and
+then the high execution. In this paper we focus on the case where the scheduler
+is simple, and only maintain output order per security level.
+We formalize SME for web scripts by deﬁning how to execute a script under
+SME. A program state under SME contains two program states of the original
+program ((µL, cL), (µH, cH)), the state of the L execution (µL, cL) and the state
+of the H execution (µH, cH). We deﬁne the judgement ((µL, cL), (µH, cH))
+ev
+⇒
+((µ′
+L, c′
+L), (µ′
+H, c′
+H)) in Figure 9.
+The rules (New-H-Input) and (New-L-Input) formalize that H inputs are
+only given to the H execution and L inputs are given to both executions. Then
+rules (L-Internal) and (L-Output) are applicable until the L execution is
+
+Information Flow Control for Web Scripts
+17
+ﬁnished with the current input event. These rules let the L execution run but
+suppress any H output events.
+When the L execution is done, rules (H-Internal) and (H-Output) kick
+in. The H execution can now run, but L outputs will be suppressed.
+The initial program state is ((µ0, skip), (µ0, skip)) and a program state is
+passive if it has the form ((µ, skip), (µ, skip)). We deﬁne the notions of execution
+under SME and event-complete execution under SME in the obvious way (similar
+to how they were deﬁned for the standard semantics in Section 2.2).
+Note that SME does not detect insecure scripts, it automatically ﬁxes them
+as they execute.
+Example 6. Consider again the key logger script:
+on KeyPress(x) output x on Network
+If this script is executed under SME, the occurrence of an input event on the
+KeyPress channel will be handled by the H execution only (rule New-H-Input).
+When that execution performs the output command on the Network channel,
+this output will be suppressed (rule H-Internal). SME ﬁxes this example by
+never performing any of the insecure outputs.
+Example 7. Consider again the script with the more subtle leaks:
+on KeyPress(x) if x = 100 then r := 1 else skip;
+on MouseClick(x) output r on Network
+For this script, inputs on the KeyPress channel are only delivered to the H
+execution (rule New-H-Input). Hence the value of the global variable r can
+become 1 in µH, but it will always remain 0 in µL. On occurrence of an input on
+the MouseClick channel, this input is delivered to both executions (rule New-
+L-Input). The L execution runs ﬁrst and outputs a 0 on Network. Then the H
+execution runs, but when it performs the output on Network (that could be 0
+or 1 in this execution), this output is suppressed (rule H-Internal).
+So we see that SME again ﬁxes this example. The program becomes equiva-
+lent to the secure program that always outputs 0 to Network on a mouse click:
+on KeyPress(x) if x = 100 then r := 1 else skip;
+on MouseClick(x) output 0 on Network
+The main security theorem about SME says that any script, when executed
+under the SME regime, is non-interferent.
+Theorem 2. Any program is noninterferent when executed under the SME se-
+mantics.
+For a proof, we refer the reader to [6].
+Of course, since SME can change the behaviour of programs, we have to
+check that it does not change the behaviour of secure programs. We do not want
+an enforcement mechanism to do arbitrary changes to the semantics of secure
+programs. Fortunately, secure programs are more or less untouched.
+
+18
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+Example 8. Consider again the (secure) JavaScript calculator:
+on KeyPress(x) total := total + x;
+on MouseClick(x) output total on Display
+If we execute this script under SME, the behaviour remains the same. Key presses
+are only delivered to the H execution, and the total is correctly computed in µH
+(The value of total remains 0 in µL). When an input arrives on the MouseClick
+channel, it is delivered to both executions (rule New-L-Input). The output
+produced on the Display channel by the L execution is suppressed (rule L-
+Internal). The (correct) output produced by the H execution is performed
+(rule H-Output). We see that SME leaves the behaviour of this secure program
+untouched.
+However, with the simple scheduling approach of ﬁrst running the L execution
+and then running the H execution, it might happen that the order of outputs is
+changed even for secure programs.
+Example 9. Consider the (secure) program:
+on MouseClick(x) output x on Display; output x on Network
+If we execute this script under SME, an input that arrives on the MouseClick
+channel, is delivered to both executions (rule New-L-Input). The L execution
+runs ﬁrst (rules H-Internal and H-Output can only ﬁre once the L execution
+has ﬁnished; they state that the L execution must be passive). The output
+produced on the Display channel by the L execution is suppressed (rule L-
+Internal), and the output on the Network channel is performed. Then the H
+execution runs. It performs the output on the Display channel, and the output
+on the Network channel is suppressed. The net eﬀect is that the order of the
+Display and Network outputs is reversed.
+Fortunately, this kind of reordering is the only change that SME does to
+secure programs. The precision theorem for SME says that the output, when
+projected on an arbitrary security level, remains the same. So the relative order
+of outputs on diﬀerent security levels is the only thing that can change. For an
+exact statement of the theorem, and a proof, we refer the reader to [6].
+If even this kind of reordering is undesirable, it is possible to schedule the L
+and H executions in a more interleaved way so that absolute ordering of outputs
+can be maintained for secure programs. We refer the reader to [37] for details.
+6
+Related work
+Information ﬂow security is an established research area, and too broad to survey
+here. For many years, it was dominated by research into static enforcement tech-
+niques. We point the reader to the well-known survey by Sabelfeld and Myers [30]
+for a discussion of general, static approaches to information ﬂow enforcement.
+
+Information Flow Control for Web Scripts
+19
+Several static or hybrid techniques speciﬁcally for information ﬂow security in
+web scripts or in browsers have been proposed. Bohannon et al. [8, 7] deﬁne a
+notion of non-interference for reactive systems, and show how a model browser
+can be formalized as such a reactive system. Chugh et al. [10] have developed
+a novel multi-stage static technique for enforcing information ﬂow security in
+JavaScript. Just et al. [19] propose a hybrid combination of dynamic informa-
+tion ﬂow tracking and a static analysis to capture implicit ﬂows within full
+(excluding exceptions) JavaScript programs, including programs calling eval.
+Dynamic techniques have seen renewed interest in the last decade. Le Guer-
+nic’s PhD thesis [22] gives an extensive survey up to 2007, but since then, signif-
+icant new results have been achieved. Recent works propose run time monitors
+for information ﬂow security, often with a particular focus on on the web scripts.
+Sabelfeld et al. have proposed monitoring algorithms that can handle DOM-
+like structures [29], dynamic code evaluation [2] and timeouts [28]. In a recent
+paper, Hedin and Sabelfeld [17] propose dynamic mechanisms for all the core
+JavaScript language features. Austin and Flanagan [3] have developed alterna-
+tive, sometimes more permissive techniques.
+Secure multi-execution (SME) was developed independently by several re-
+searchers [21, 36, 15]. Khatiwala et al. [21] proposed a technique called Data
+Sandboxing. They partition a program in two programs at source code level and
+use system call interposition to implement the SME I/O rules. In followup work,
+Capizzi et al. [9] avoid the need for source level partitioning by means of shadow
+executions: they run two executions of processes for the H (secret) and L (public)
+security level to provide strong conﬁdentiality guarantees. Devriese and Piessens
+[15] independently came up with the closely related technique they called SME,
+and they were the ﬁrst to prove the strong soundness and precision guarantees
+that SME oﬀers.
+These initial results were improved and extended in several ways: Kashyap
+et al. [20], generalize the technique of secure multi-execution to a family of
+techniques that they call the scheduling approach to non-interference, and they
+analyze how the scheduling strategy can impact the security properties oﬀered.
+Barthe et al.[5] propose a program transformation that simulates SME. Bielova
+et al. [6] propose a variant of secure multi-execution suitable for reactive systems
+such as browsers. An implementation of SME in a real browser was done by De
+Groef et al. [12, 13]. Austin and Flanagan [4] propose a more eﬃcient implemen-
+tation technique called multi-faceted evaluation. In a recent paper, Rafnsson
+and Sabelfeld [27] extend SME in several ways by showing (1) how to support
+policies that can distinguish presence of messages from content of messages, (2)
+how to perform declassiﬁcation under SME and (3) how to make SME precise
+(or transparent in their terminology) even for observers that can observe more
+than one level. An alternative, more black-box approach to declassiﬁcation was
+developed by Vanhoef et al. [33].
+Information ﬂow security is one promising approach to web script security,
+but two other general-purpose approaches have been applied to script security
+as well: isolation and taint-tracking.
+
+20
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+Isolation or sandboxing based approaches develop techniques where scripts
+can be included in web pages without giving them (full) access to the surround-
+ing page and the browser API. Several practical systems have been proposed,
+including Webjail [32], ADSafe [11], Caja [24], and JSand [1]. Maﬀeis et al. [23]
+formalize the key mechanisms underlying these techniques and prove they can
+be used to create secure sandboxes. They also discuss several other existing pro-
+posals, and we point the reader to their paper for a more extensive discussion
+of work in this area. Isolation is easier to achieve than non-interference, but it
+is also more restrictive: often access needs to be denied to make sure the script
+cannot leak the information, but it would be perfectly ﬁne to have the script use
+the information locally in the browser.
+Taint tracking is an approximation to information ﬂow security, that only
+takes explicit ﬂows into account. Several authors have proposed taint track-
+ing systems for web security. Two representative examples are Xu et al. [35],
+who propose taint-enhanced policy enforcement as a general approach to miti-
+gate implementation-level vulnerabilities, and Vogt et al. [34] who propose taint
+tracking to defend against cross-site scripting.
+7
+Conclusions
+Information ﬂow control is a widely studied information security mechanism. It
+makes sure that programs can not leak sensitive information that they receive for
+processing to output channels that might be observable by opponents that should
+not learn such sensitive information. Information ﬂow control is an interesting
+security mechanism for web scripts, since these scripts need to process sensitive
+information as well as need to communicate over untrustworthy output channels.
+We have described two information ﬂow control mechanisms for web scripts,
+one static mechanism based on typing, and one dynamic mechanism based on
+multi-execution. We have explained the intuitions behind these mechanisms and
+illustrated them on examples.
+Acknowledgments. This research is partially funded by the Research Fund
+KU Leuven, by the EU FP7 projects WebSand, Strews and NESSoS, and by
+the IWT project SPION. With the ﬁnancial support from the Prevention of
+and Fight against Crime Programme of the European Union (B-CCENTRE).
+Mathy Vanhoef and Dominique Devriese hold a PhD fellowship of the Research
+Foundation - Flanders (FWO). Willem De Groef holds a PhD grant from the
+Agency for Innovation by Science and Technology in Flanders (IWT).
+References
+1. Agten, P., Van Acker, S., Brondsema, Y., Phung, P.H., Desmet, L., Piessens,
+F.: JSand: Complete Client-Side Sandboxing of Third-Party JavaScript without
+Browser Modiﬁcations. In: Proceedings of the Annual Computer Security Appli-
+cations Conference. pp. 1–10 (2012)
+
+Information Flow Control for Web Scripts
+21
+2. Askarov, A., Sabelfeld, A.: Tight Enforcement of Information-Release Policies for
+Dynamic Languages. In: Proceedings of the IEEE Computer Security Foundations
+Symposium. pp. 43–59 (2009)
+3. Austin, T.H., Flanagan, C.: Permissive Dynamic Information Flow Analysis. In:
+Proceedings of the ACM SIGPLAN Workshop on Programming Languages and
+Analysis for Security. pp. 3:1–3:12 (2010)
+4. Austin, T.H., Flanagan, C.: Multiple Facets for Dynamic Information Flow. In:
+Proc. of the ACM SIGPLAN-SIGACT Symposium on Principles of Programming
+Languages. pp. 165–178 (2012)
+5. Barthe, G., Crespo, J.M., Devriese, D., Piessens, F., Rivas, E.: Secure Multi-
+Execution through Static Program Transformation. Proceedings of the Interna-
+tional Conference on Formal Techniques for Distributed Systems pp. 186–202
+(2012)
+6. Bielova, N., Devriese, D., Massacci, F., Piessens, F.: Reactive non-interference for
+a browser model. In: Proc. of the International Conference on Network and System
+Security. pp. 97–104 (2011)
+7. Bohannon, A., Pierce, B.C.: Featherweight ﬁrefox: Formalizing the core of a web
+browser. In: Proceedings of the 2010 USENIX Conference on Web Application
+Development. pp. 11–11. WebApps’10, USENIX Association, Berkeley, CA, USA
+(2010)
+8. Bohannon, A., Pierce, B.C., Sj¨oberg, V., Weirich, S., Zdancewic, S.: Reactive Non-
+interference. In: Proceedings of the ACM Conference on Computer and Commu-
+nications Security. pp. 79–90 (2009)
+9. Capizzi, R., Longo, A., Venkatakrishnan, V., Sistla, A.: Preventing Information
+Leaks through Shadow Executions. In: Proc. of the Annual Computer Security
+Applications Conference. pp. 322–331 (2008)
+10. Chugh, R., Meister, J.A., Jhala, R., Lerner, S.: Staged Information Flow for
+JavaScript. ACM SIGPLAN Notices 44(6), 50–62 (2009)
+11. Crockford, D.: Adsafe. http://www.adsafe.org/ (December 2009)
+12. De Groef, W., Devriese, D., Nikiforakis, N., Piessens, F.: FlowFox: a Web Browser
+with Flexible and Precise Information Flow Control. In: Proc. of the ACM Con-
+ference on Computer and Communications Security. pp. 748–759 (2012)
+13. De Groef, W., Devriese, D., Nikiforakis, N., Piessens, F.: Secure multi-execution
+of web scripts: Theory and practice. Journal of Computer Security (2014)
+14. Denning, D.E., Denning, P.J.: Certiﬁcation of programs for secure information
+ﬂow. Commun. ACM 20(7), 504–513 (Jul 1977)
+15. Devriese, D., Piessens, F.: Noninterference Through Secure Multi-Execution. In:
+Proc. of the IEEE Symposium on Security and Privacy. pp. 109–124 (2010)
+16. Fenton, J.S.: Memoryless subsystems. Comput. J. 17(2), 143–147 (1974)
+17. Hedin, D., Sabelfeld, A.: Information-Flow Security for a Core of JavaScript. In:
+Proc. of the IEEE Computer Security Foundations Symposium. pp. 3–18 (2012)
+18. Jang, D., Jhala, R., Lerner, S., Shacham, H.: An Empirical Study of Privacy-
+Violating Information Flows in JavaScript Web Applications. In: Proc. of the ACM
+Conference on Computer and Communications Security. pp. 270–283 (2010)
+19. Just, S., Cleary, A., Shirley, B., Hammer, C.: Information Flow Analysis for
+JavaScript. In: Proc. of the ACM SIGPLAN International Workshop on Program-
+ming Language and Systems Technologies for Internet Clients. pp. 9–18 (2011)
+20. Kashyap, V., Wiedermann, B., Hardekopf, B.: Timing- and Termination-Sensitive
+Secure Information Flow: Exploring a New Approach. In: Proc. of the IEEE Con-
+ference on Security and Privacy. pp. 413–428 (2011)
+
+22
+Willem De Groef, Dominique Devriese, Mathy Vanhoef, and Frank Piessens
+21. Khatiwala, T., Swaminathan, R., Venkatakrishnan, V.: Data Sandboxing: A Tech-
+nique for Enforcing Conﬁdentiality Policies. In: Proceedings of the Annual Com-
+puter Security Applications Conference (ACSAC). pp. 223–234 (2006)
+22. Le Guernic, G.: Conﬁdentiality Enforcement Using Dynamic Information Flow
+Analyses. Ph.D. thesis, Kansas State University (2007)
+23. Maﬀeis, S., Mitchell, J.C., Taly, A.: Object Capabilities and Isolation of Untrusted
+Web Applications. In: Proceedings of the IEEE Symposium on Security and Pri-
+vacy. pp. 125–140 (2010)
+24. Miller, M.S., Samuel, M., Laurie, B., Awad, I., Stay, M.: Caja: Safe ac-
+tive content in sanitized javascript. http://google-caja.googlecode.com/files/
+caja-spec-2008-01-15.pdf (January 2008)
+25. Nikiforakis, N., Invernizzi, L., Kapravelos, A., Van Acker, S., Joosen, W., Kruegel,
+C., Piessens, F., Vigna, G.: You Are What You Include: Large-scale Evaluation of
+Remote JavaScript Inclusions. In: Proc. of the ACM Conference on Computer and
+Communications Security. pp. 736–747 (2012)
+26. Nikiforakis, N., Kapravelos, A., Joosen, W., Kruegel, C., Piessens, F., Vigna, G.:
+Cookieless monster: Exploring the ecosystem of web-based device ﬁngerprinting.
+In: Proceedings of the 34th IEEE Symposium on Security & Privacy. pp. 541–555
+(May 2013)
+27. Rafnsson, W., Sabelfeld, A.: Secure multi-execution: ﬁne-grained, declassiﬁcation-
+aware, and transparent. In: Proc. of the IEEE Computer Security Foundations
+Symposium (CSF) (2013)
+28. Russo, A., Sabelfeld, A.: Securing Timeout Instructions in Web Applications. In:
+Proceedings of the IEEE Computer Security Foundations Symposium. pp. 92–106
+(2009)
+29. Russo, A., Sabelfeld, A., Chudnov, A.: Tracking Information Flow in Dynamic Tree
+Structures. In: Proceedings of the European Symposium on Research in Computer
+Security. pp. 86–103 (2009)
+30. Sabelfeld, A., Myers, A.C.: Language-Based Information-Flow Security. IEEE
+Journal on Selected Areas of Communications 21(1), 5–19 (January 2003)
+31. Sabelfeld, A., Russo, A.: From dynamic to static and back: Riding the roller coaster
+of information-ﬂow control research. In: Ershov Memorial Conference. pp. 352–365
+(2009)
+32. Van Acker, S., De Ryck, P., Desmet, L., Piessens, F., Joosen, W.: Webjail: Least-
+privilege integration of third-party components in web mashups. In: ACSAC
+(2011), https://lirias.kuleuven.be/handle/123456789/316291
+33. Vanhoef, M., De Groef, W., Devriese, D., Piessens, F., Rezk, T.: Stateful declassiﬁ-
+cation policies for event-driven programs. In: Proc. of the IEEE Computer Security
+Foundations Symposium (CSF) (2014)
+34. Vogt, P., Nentwich, F., Jovanovic, N., Kirda, E., Kr¨ugel, C., Vigna, G.: Cross
+Site Scripting Prevention with Dynamic Data Tainting and Static Analysis. In:
+Proceedings of the Network & Distributed System Security Symposium (2007)
+35. Xu, W., Bhatkar, S., Sekar, R.: Taint-Enhanced Policy Enforcement: A Practical
+Approach to Defeat a Wide Range of Attacks. In: Proceedings of the USENIX
+Security Symposium. pp. 121–136 (2006)
+36. Yumerefendi, A.R., Mickle, B., Cox, L.P.: TightLip: Keeping Applications from
+Spilling the Beans. In: Proceedings of the USENIX Symposium on Network Sys-
+tems Design & Implementation. pp. 159–172 (2007)
+37. Zanarini, D., Jaskelioﬀ, M., Russo, A.: Precise enforcement of conﬁdentiality for re-
+active systems. In: Proc. of the IEEE Computer Security Foundations Symposium
+(CSF) (2013)
+

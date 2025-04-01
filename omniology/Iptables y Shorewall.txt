@@ -1,0 +1,1273 @@
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Iptables y Shorewall
+Copyright (c) 2008 Franky Almonte. Se concede permiso para copiar, distribuir y/o modificar este 
+documento bajo los  términos  de  la Licencia  de  Documentación  Libre  de  GNU,  Versión 1.2  o 
+cualquier  otra  versión  posterior  publicada  por  la  Free  Software  Foundation;  sin  Secciones 
+Invariantes ni Textos de Cubierta Delantera ni Textos de Cubierta Trasera. Una copia de la licencia 
+está incluida en la sección titulada GNU Free Documentation License.
+Objetivos: 
+1. Entender el funcionamiento de Netfilter/Iptables
+2. Configurar un filtro de paquetes con Iptables (scripts) y Shorewall 
+Requisitos:
+1. Conocimientos sobre GNU/Linux o Unix
+2. Programación en consola (shell scripting)
+3. Conocimientos sobre TCP/IP
+4. Como compilar tu propio núcleo (no indispensable).
+Introducción
+Iptables es un software que filtra paquetes o datagramas. Un filtro de paquetes 
+trabaja primordialmente en la capa 2 del modelo de referencia TCP/IP. Iptables 
+también tiene la habilidad de trabajar en la capa 3. Pero por definición un filtro de 
+paquetes trabaja principalmente en la capa 2.
+Si la implementación de un filtro de paquetes es llevada a cabo estrictamente en 
+su  definición,  este  podría,  en  otras  palabras,  ser  habil  para  filtrar  paquetes 
+basándose en sus cabeceras IP (Dirección de Origen y de Destino, TOS/DSCP/ECN, 
+TTL, Protocol, etc.). Además, puesto que la implementación de Iptables no es 
+estricta alrededor de esta definición, este también es hábil para filtrar paquetes 
+basadonse en otras cabeceras que vienen en lo interior del paquete (TCP, UDP, 
+etc.), y mas hacia abajo (Dirección MAC de origen).
+Iptables no “sigue” flujos de información junta. Iptables mantiene un rastreo de 
+los paquetes y vela porque esto sean del mismo flujo (mediante números de 
+secuencias, números de puertos, etc.) casi de la misma forma como la pila real 
+TCP/IP. Esto es llamado Rastreo de conexión, y gracias a esto podemos hacer 
+cosas como DNAT y SNAT, así como también aciertos del estado de los paquetes. 
+1
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Términos y expresiones en filtrado de paquetes
+Para entender el resto del contenido del documento existen algunos términos 
+generales que uno debe entender, incluyendo algunos detalles sobre TCP/IP. He 
+aquí de algunos términos usados en filtrado de paquetes:
+●
+Drop/Deny  –  Cuando  un  paquetes  es  denegado,  este  simplemente  es 
+borrado, y no son tomadas acciones futuras. No se responde al host emisor 
+que fue denegado, ni el host receptor del paquete es notificado en ninguna 
+forma.  El paquete simplemente desaparece.
+●
+Reject  –  Este  es  básicamente  los  mismo  que  una  política  u  objetivo 
+Drop/Deny,  excepto  que  solo  enviamos  una  respuesta  al  host  emisor 
+informándole que el paquete fue denegado.
+●
+State – Un estado especifico de un paquete en comparación a un flujo 
+completo on paquetes. Por ejemplo, si un paquete es el primero que el 
+cortafuegos ve o sabe acerca de el, este es considerado como nuevo (el 
+paquete SYN en una conexión TCP), o si este es parte de una conexión ya 
+establecida que el cortafuegos conoce, es considerada como establecida. 
+Los estados son conocidas a través del sistema de rastreo de conexiones, el 
+cual mantiene registros de todas las sesiones.
+●
+Chain – Una cadena contiene un lista de reglas que son aplicadas en los 
+paquetes  que  atraviesan  la  cadena.  Cada  cadena  tiene  un  propósito 
+especifico  (ejemplo:  a  cuales  tablas  este  esta  conectado,  las  cuales 
+especifican que puede hacer esta cadena), asi como tambien un area de 
+aplicación especifica (ejemplo: solo paquetes reenviados, o solo paquete 
+destinados a este host).
+●
+Table – Cada tabla tiene un proposito especifico, y en Iptables hay 4 tablas. 
+Las tablas son: raw, nat, mangle y filter. Por ejemplo, la tabla filter esta 
+espcialmente disenada para el filtrar paquetes, mientras que la tabla nat 
+esta  especialmente  disenada  para  paquetes  NAT  (Network  Address 
+Translation).
+●
+Match – Esta palabra puede tener dos significados diferentes cuando se 
+habla de filtrado IP. La primera significa un simple acierto que una regla dice 
+que esta cabecera debe contener 'esto' y 'esta' información. Por ejemplo, el 
+acierto --source nos dice que que la dirección fuente debe ser una red 
+especifica o una dirección de un host. El segundo significado es si toda una 
+regla es acertada. Si un paquete acierta toda la regla, las instrucciones 
+jump o target se llevaran a cabo (ejemplo: el paquete sera denegado).
+●
+Target – Generalmente hay un objetivo fijado para cada regla en un conjunto 
+2
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+de  reglas.  Si la  regla  ha  acertado  completamente, la  especificación  del 
+objetivo nos dice que hacer con el paquete. Por ejemplo, si deberíamos 
+denegarlo  o  aceptarlo,  o  NATearlo,  etc.  Cambien  hay  algo  llamado  la 
+especificación de salto (jump), la cual especifica a cual cadena debe saltar.
+●
+Rule – En la mayoría de las implementaciones de filtros IP, una regla es un 
+conjunto de un acierto o diversos aciertos juntos con un simple objetivo, 
+incluyendo la implementación Iptables. Existen algunas implementaciones 
+que te permiten usar diversos objetivos/acciones por regla.
+●
+Ruleset – Un conjunto de reglas es el conjunto completo de reglas  que se 
+colocan en la implementación del filtro IP en su conjunto. En el caso de 
+Iptables, estas incluyen todas las reglas puestas en las tablas filter, nat, raw 
+y mangle, y en todas las cadenas subsecuentes. La mayoría del tiempo, 
+estas son escritas abajo en el archivo de configuración.
+●
+Jump – La instrucción de salto esta estrechamente relacionada al objetivo 
+(target). Una instrucción de salto se escribe exactamente como un objetivo 
+(target) en Iptables, con la excepcion que en lugar de escribir el nombre del 
+ojbetivo (target), se escribe el nombre de otra cadena (chain). Si la regla 
+acierta,  el  paquete  sera,  por  lo  tanto,  enviado  a  esta  segunda  cadena 
+(chain) y sera procesado de forma usual en esta cadena.
+●
+Connection tracking – Un cortafuegos el cual implemente seguimiento de 
+conexiones es hábil de seguir conexiones/flujos. La habilidad de hacer eso 
+hace a menudo el impacto de mucho uso de procesador y memoria. Sin 
+embargo, el lado bueno es que el cortafuegos sera mucho mas seguro con 
+el seguimiento de conexiones apropiadamente usado por la implementador 
+de las políticas del cortafuegos.
+●
+Accept – Aceptar un paquete y dejarlo atravesar las reglas del cortafuegos. 
+Esto  es  lo  contrario  de  los  objetivos  Drop/Deny,  así  como  también  del 
+objetivo reject.
+●
+Policy – Existen dos tipos de políticas de las que hablamos la mayoría del 
+tiempo cuando se implementa un cortafuegos. Primero tenemos políticas de 
+cadenas,  las  cuales  le  dicen  a  la  implementación  del  cortafuego  el 
+comportamiento por defecto a tomar en un paquete si no acertó ninguna 
+regla. El segundo tipo de política es la política de seguridad que debemos 
+escribir en la documentación, por ejemplo para toda la empresa o para este 
+segmento de red en especifico. Las políticas de seguridad son muy buenos 
+documento  a  tener  bien  pensado  y  estudiar  apropiadamente  antes  de 
+empezar a implementar un cortafuegos.
+3
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Atravesando las tablas y cadenas
+Cuando un paquete entra en el cortafuegos alcanza el hardware y es procesado 
+en  el  núcleo  por  su  driver  correspondiente.  Después  el  paquete  empieza  a 
+recorrer una serie de etapas en el núcleo antes de ser enviado a la aplicación 
+adecuada (localmente), reenviada hacia otro host, o cualquier otra operación.
+Primero veremos cuando un paquete es destinado a nuestro porpio host local 
+(nuestro equipo).  Recorrerá  los  siguientes  pasos  antes de ser entregado a la 
+aplicación que lo requiere:
+Etapa
+Tabla
+Cadena
+Comentario
+1
+ 
+ 
+En los cables (por ejemplo Internet)
+2
+ 
+ 
+Llega a la interfaz de red (por ejemplo eth0)
+3
+mangle PREROUTING
+Esta cadena se usa normalmente para 
+modificar/"deformar" (mangle) paquetes, es decir, cambiar el TOS 
+y cosas así.
+4
+nat
+PREROUTING
+Esta cadena se usa principalmente para la traducción de 
+direcciones de red de destino (DNAT, Destination Network Address 
+Translation). Debes evitar filtrar en esta cadena ya que será 
+puenteada (bypassed) o esquivada en ciertos casos.
+5
+ 
+ 
+Decisión de enrutamiento, o sea, ¿está el paquete destinado a 
+nuestro host local o debe ser reenviado?, ¿hacia dónde?.
+6
+mangle INPUT
+En este punto se alcanza la cadena INPUT de la tabla mangle. 
+Usaremos esta cadena para modificar/"retocar" paquetes después 
+de que hayan sido enrutados, pero antes de que se envíen al 
+proceso de destino.
+7
+filter
+INPUT
+Aquí es donde filtraremos todo el tráfico entrante destinado a 
+nuestro host local. Ten en cuenta que todo el tráfico entrante pasa 
+a través de esta cadena, sin importar la interfaz por la que entre o 
+de dónde proceda.
+8
+ 
+ 
+Proceso/aplicación local (es decir, programa cliente/servidor)
+Tabla 1: Host local como destino
+4
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Ahora veremos el caso cuando los paquetes sales de nuestro host y las etapas por 
+las que pasan:
+Etapa
+Tabla
+Cadena
+Comentario
+1
+ 
+ 
+Proceso/aplicación local (es decir, programa cliente/servidor)
+2
+ 
+ 
+Decisión de enrutamiento. Qué dirección de origen usar, qué 
+interfaz de salida usar, y otra información que necesita ser 
+recopilada.
+3
+mangle OUTPUT
+Aquí es donde se modifican los paquetes; se sugiere que no 
+filtres en esta cadena porque pueden producirse efectos 
+secundarios.
+4
+nat
+OUTPUT
+Esta cadena puede ser usada para hacer NAT a los paquetes que 
+salen desde el host.
+5
+filter
+OUTPUT
+Aquí es donde filtramos los paquetes salientes de nuestro host 
+local.
+6
+mangle POSTROUTING
+La cadena POSTROUTING de la tabla mangle se usa 
+principalmente cuando queremos modificar los paquetes antes 
+de que dejen nuestro host, pero después de tomar las decisiones 
+de enrutamiento. Esta cadena será alcanzada tanto por los 
+paquetes que atraviesan el cortafuegos, como por los generados 
+por él mismo.
+7
+nat
+POSTROUTING
+Aquí es donde efectuamos la traducción de las direcciones de 
+red de origen (SNAT, Source Network Address Translation). Es 
+conveniente que no filtres en esta cadena ya que pueden 
+producirse efectos secundarios y determinados paquetes 
+podrían colarse incluso aunque se haya establecido la política 
+DROP (desechar) como política por defecto. 
+8
+ 
+ 
+Sale al exterior por alguna interfaz (por ejemplo, eth0)
+9
+ 
+ 
+En los cables (por ejemplo, Internet)
+Tabla 2: Host local como origen
+5
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Ahora se asume que el paquete esta destinados a otro host de otra red y necesita 
+ser reenviado. El paquete sigue los siguientes pasos:
+6
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Etapa
+Tabla
+Cadena
+Comentario
+1
+ 
+ 
+En los cables (por ejemplo, Internet)
+2
+ 
+ 
+Llega hasta la interfaz de red (por ejemplo, eth0)
+3
+mangle PREROUTING
+Esta cadena se usa normalmente para modificar paquetes, o 
+sea, para cambiar el TOS y acciones similares.
+4
+nat
+PREROUTING
+Esta cadena se usa principalmente para hacer DNAT (traducción 
+de dirección de destino). El SNAT (traducción de dirección de 
+origen) se realiza más adelante. Debes evitar filtrar en esta 
+cadena ya que en ciertos casos será puenteada o esquivada. 
+5
+ 
+ 
+Decisión de enrutamiento, o sea, ¿el paquete está destinado a 
+nuestro propio host local, o debe ser reenviado?, ¿hacia dónde?.
+6
+mangle FORWARD
+El paquete es enviado a la cadena FORWARD de la tabla mangle. 
+Ésto puede aprovecharse para necesidades muy específicas 
+dónde queremos modificar paquetes después de la decisión de 
+enrutamiento inicial, pero antes de la última decision de 
+enrutamiento, hecha justo antes de que el paquete sea enviado.
+7
+filter
+FORWARD
+El paquete es enrutado hacia la cadena FORWARD. Solamente 
+los paquetes reenviados pasan por aquí y es donde hacemos 
+todo el filtrado. Ten en cuenta que todos los paquetes reenviados 
+(en cualquier dirección) pasan por aquí, así que necesitarás 
+pensar en éllo cuando escribas tu conjunto de reglas.
+8
+mangle POSTROUTING
+Esta cadena se usa para efectuar los tipos específicos de 
+modificación de paquetes (packet mangling) que queramos 
+llevar a cabo después de que todos los tipos de decisiones de 
+enrutamiento se hayan tomado, pero estando el paquete aún en 
+esta máquina.
+9
+nat
+POSTROUTING
+Esta cadena debe ser usada principalmente y sobretodo para 
+efectuar SNAT. Debes evitar filtrar aquí ya que ciertos paquetes 
+podrían "pasar por delante" de la cadena sin ni siquiera rozarla. 
+Aquí es también dónde se realiza el enmascaramiento 
+(Masquerading).
+10
+ 
+ 
+Sale por la interfaz de salida (por ej. eth1).
+11
+ 
+ 
+En los cables de nuevo (por ejemplo, la red local).
+Tabla 3: Paquetes reenviados
+Toma  en  cuenta  que  no  hay  cadenas  o  tablas  específicas  para  interfases 
+diferentes ni nada por el estilo. La cadena FORWARD es siempre atravesada por 
+todos los paquetes que son reenviados a través del cortafuegos.
+Tabla mangle
+Esta  tabla  debe  ser  principalmente  usada  para  modificar  paquetes,  como  ya 
+7
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+hemos  dicho  antes.  En  otras  palabras,  aquí  puedes  usar  libremente  las 
+comparaciones de modificación para cambiar el campo TOS (Type Of Service), 
+entre otras cosas.
+Objetivos para los que únicamente se destina la tabla mangle: 
+●
+TOS
+●
+TTL
+●
+MARK
+Tabla nat
+Esta tabla debe ser usada sólo para hacer NAT (Network Address Translation) a los 
+diferentes  paquetes.  En  otras  palabras,  debe  ser  empleada  solamente  para 
+traducir el campo origen del paquete o el campo destino. Ten en cuenta que tal 
+como  hemos  dicho  antes,  sólo  el  primer  paquete  de  un  flujo  alcanzará  esta 
+cadena. Después, al resto de paquetes del mismo flujo de datos se les aplicará la 
+misma acción que al primero. Los objetivos que hacen este tipo de cosas son: 
+●
+DNAT
+●
+SNAT
+●
+MASQUERADE
+El  objetivo  DNAT  (Destination  Network  Address  Translation)  se  emplea 
+principalmente en los casos donde se tiene una IP pública y se quiere redirigir los 
+accesos al firewall hacia algún otro host (en una "zona desmilitarizada", DMZ, por 
+ejemplo). Dicho de otro modo, cambiamos la dirección de destino del paquete y lo 
+re-enrutamos a otro host.
+SNAT (Source Network Address Translation) es principalmente usada para cambiar 
+la dirección de origen de los paquetes. La mayoría de las veces querrás esconder 
+tus redes locales, DMZ, etc. Un ejemplo muy bueno podría ser cuando queremos 
+sustituir las direcciones IP de la red local que está tras el cortafuegos, por la 
+dirección IP del propio cortafuegos, que posee una IP pública hacia fuera. Con este 
+objetivo el firewall automáticamente hará SNAT y de-SNAT sobre los paquetes, lo 
+cual hace posible que las conexiones provenientes de la LAN salgan a Internet.
+El objetivo MASQUERADE se usa exactamente para lo mismo que SNAT, pero 
+8
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+MASQUERADE requiere un poquito más de trabajo del procesador. La razón es que 
+cada  vez  que  llega  un  paquete  al  objetivo  MASQUERADE,  automáticamente 
+chequea qué dirección IP debe asignarle, en lugar de hacer como SNAT, que 
+simplemente utiliza la dirección IP configurada.
+Tabla filter
+La  tabla  filter  se  usa  principalmente  para  el  filtrado  de  paquetes:  podemos 
+comparar y filtrar paquetes de la forma que queramos. Se trata del lugar en que 
+miramos  el  contenido  de  los  paquetes  y  tomamos  la  determinación  de 
+desecharlos (DROP) o aceptarlos (ACCEPT). Por supuesto, podemos hacer filtrado 
+antes,  pero  esta  tabla  en  particular  fue  diseñada  para  realizar  todas  las 
+operaciones de filtrado. 
+La maquina de estados
+La máquina de estados es una parte especial de iptables que no debería llamarse 
+así  ("máquina  de  estados"),  puesto  que  en  realidad  es  una  máquina  de 
+seguimiento de conexiones. Sin embargo, mucha gente la conoce por el primer 
+nombre.  El  seguimiento  de  conexiones  se  efectúa  para  que  la  estructura  de 
+Netfilter sepa cuál es el estado de cada conexión específica. Los cortafuegos que 
+trabajan  de  esta  manera  normalmente  se  denominan  "stateful 
+firewalls"  (cortafuegos  que  consideran  las  peticiones  y  respuestas  de  una 
+máquina  como  una  única  conexión  de  un  mismo  flujo  de  datos;  podríamos 
+traducirlo como "cortafuegos de flujos"), mientras que los que no lo hacen se 
+denominan  "non-stateful  firewalls"  (cada  petición  es  independiente,  aunque 
+provenga  de  la  misma  máquina;  podríamos  traducirlo  como  "cortafuegos  de 
+conexiones"). Los cortafuegos de tipo "stateful" son mucho más seguros, pues nos 
+permiten elaborar conjuntos de reglas mucho más precisos.
+En Iptables los paquetes se pueden relacionar con las conexiones mediante cuatro 
+"estados"  diferentes:  NEW  (nuevo),  ESTABLISHED  (establecido),  RELATED 
+(relacionado) e INVALID (inválido o no válido). Mediante la comparación --state 
+podemos  controlar  fácilmente  qué  o  quién  tiene  permiso  para  iniciar  nuevas 
+sesiones.
+Todo  el  seguimiento  de  las  conexiones  la  realiza  una  estructura  especial  del 
+núcleo llamada "conntrack". El "conntrack" puede cargarse como módulo o como 
+una parte más del núcleo.
+9
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Todo el seguimiento de conexiones se efectúa en la cadena PREROUTING, excepto 
+los paquetes generados localmente, que son controlados en la cadena OUTPUT. 
+Ésto significa que Iptables realizará todo el recalculo de estados en estas dos 
+cadenas de la tabla nat: si somos nosotros los que enviamos el paquete inicial del 
+flujo, su estado se establece como NEW (nuevo) en la cadena OUTPUT, mientras 
+que al recibir el paquete de retorno (el que "contesta" al paquete inicial) el estado 
+del flujo se cambia a ESTABLISHED (establecido) en la cadena PREROUTING. Por el 
+contrario, si el primer paquete no lo hemos originado nosotros, el estado NEW se 
+establece en la cadena PREROUTING.
+Cómo se escribe una regla
+Cada regla es una línea que lee el núcleo para saber qué hacer con un paquete. Si 
+todos  los  criterios  (o  comparaciones)  se  cumplen,  entonces  se  ejecuta  la 
+instrucción objetivo (o salto). Normalmente deberías escribir tus reglas con una 
+estructura similar a ésta:
+iptables [-t tabla] comando [comparación (match)] [objetivo/salto (target/jump)]
+La tabla por defecto es la tabla filter, asi que si deseas utilizar otra tabla debe 
+usar la opcion [-t tabla] para indicarla.
+Debes tener en cuenta que el comando debería ser siempre lo primero, o a lo 
+sumo justo detrás de la especificación de la tabla. Se emplea el "comando" para 
+decirle al programa qué hacer, como por ejemplo insertar o añadir una regla al 
+final de una cadena, o borrar una regla.
+La  comparación  es  la  parte  de  la  regla  enviada  al  núcleo  que  especifica  el 
+carácter concreto del paquete, lo cual lo diferencia de todos los demás paquetes. 
+Aquí es dónde se puede determinar de qué dirección IP viene el paquete, de qué 
+interfaz de red, la IP destino, el puerto, el protocolo, etc.
+Por  último  tenemos  el  objetivo  del  paquete.  Si  todas  las  comparaciones  se 
+cumplen para un paquete, le decimos al núcleo qué hacer con él. Por ejemplo, 
+podemos hacer que envíe el paquete a otra cadena que hayamos creado y que es 
+parte de esta tabla. Podemos hacer que deseche el paquete y no haga nada más 
+con él, o podemos enviar una respuesta específica al remitente.
+10
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Tablas
+La opción -t especifica qué tabla utilizar. Por defecto se emplea la tabla filter, 
+aunque se puede usar cualquiera de las siguientes tablas
+Tabla
+Descripción
+nat
+La tabla nat se emplea principalmente para la traducción de direcciones de red 
+(Network Address Translation). Los paquetes que son filtrados por esta tabla acaban 
+con sus IPs modificadas, de acuerdo con nuestras reglas (las de la tabla). De todos los 
+paquetes de un mismo flujo, sólo el primero pasa por esta tabla: asumiendo que se 
+permite el paso del primer paquete de un flujo, al resto de paquetes del ese flujo se 
+les aplican automáticamente las mismas acciones realizadas con el primer paquete 
+(sus IPs son "NAT-eadas" o filtradas por la tabla NAT; o se enmascaran).
+mangle
+Esta tabla se emplea principalmente para "retocar" paquetes. Entre otras cosas, se 
+puede cambiar el contenido de diferentes paquetes y el de sus cabeceras. Por 
+ejemplo, se pueden cambiar los campos TTL, TOS o MARK.
+filter
+La tabla filter se debería emplear exclusivamente para filtrar paquetes. Por ejemplo, 
+se pueden desechar (DROP), añadir a un registro de sucesos (LOG ), aceptar (ACCEPT) 
+o rechazar (REJECT) paquetes sin problemas, igual que en el resto de tablas. Tenemos 
+tres cadenas en esta tabla: la primera, FORWARD, se usa para todos los paquetes que 
+no se generan localmente y que no están destinados a nuestra máquina. INPUT se 
+emplea en todos los paquetes que se destinan a nuestra máquina (el cortafuegos), 
+mientras que OUTPUT se emplea para todos los paquetes generados localmente.
+Table 4: Tablas de Iptables
+Comandos
+Un comando le indica a iptables qué hacer con el resto de la regla que enviamos 
+al  analizador.  Normalmente  desearemos  añadir  o  eliminar  algo  en  una  tabla 
+determinada.  En  la  siguiente  tabla  se  muestran  algunos  de  los  comandos 
+disponibles en Iptables:
+11
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Comando
+-A, --append
+Ejemplo
+iptables -A INPUT ...
+Descripción
+Este comando añade la regla al final de la cadena. La regla siempre se pondrá la 
+última en el conjunto de reglas y lógicamente se comprobará la última, a no ser 
+que posteriormente añadas más reglas con este mismo comando.
+Comando
+-D, --delete
+Ejemplo
+iptables -D INPUT --dport 80 -j DROP, iptables -D INPUT 1 
+Descripción
+Este comando borra una regla de la cadena. Esto puede hacerse de dos maneras: 
+bien introduciendo la regla completa a comparar (como en el ejemplo anterior), 
+bien especificando el número de regla que deseas eliminar. Si empleas el primer 
+método, deberás escribir exactamente lo mismo que haya en la cadena a borrar. Si 
+empleas el segundo método, deberás señalar el número exacto que tiene la regla 
+en la cadena: las reglas están numeradas progresivamente desde la primera, 
+empezando con el número 1.
+Comando
+-R, --replace
+Ejemplo
+iptables -R INPUT 1 -s 192.168.0.1 -j DROP
+Descripción
+Este comando sustituye la entrada existente en la línea especificada. Funciona de 
+la misma forma que el comando --delete, pero en lugar de eliminar completamente 
+la entrada, la sustituye por una nueva. El uso más habitual de este comando 
+puede ser la experimentación con iptables.
+Comando
+-I, --insert
+Ejemplo
+iptables -I INPUT 1 --dport 80 -j ACCEPT
+Descripción
+Se inserta una regla en la posición de la cadena que especifiquemos. En el ejemplo 
+anterior se insertará en la posición nº 1 en la cadena INPUT, por lo que a partir de 
+entonces será la primera regla en esa cadena.
+Comando
+-L, --list
+Ejemplo
+iptables -L INPUT
+Descripción
+Este comando ofrece una lista de todas las entradas de la cadena especificada.
+Comando
+-F, --flush
+Ejemplo
+iptables -F INPUT
+Descripción
+Este comando elimina todas las reglas de una cadena, comenzando desde la que 
+se ha especificado. Es equivalente a borrar cada regla una a una, pero bastante 
+más rápido. Se puede emplear sin opciones, con lo que borrará todas las reglas de 
+todas las cadenas en la tabla especificada.
+Comando
+-Z, --zero
+Ejemplo
+iptables -Z INPUT
+Descripción
+Este comando obliga a comenzar desde cero a todos los contadores de una cadena 
+especificada, o de todas las cadenas de una tabla. Si has utilizado la opción -v del 
+12
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+comando -L, probablemente habrás visto el contador de paquetes al principio de 
+cada campo. Para "poner a cero" este contador, utiliza la opción -Z. Esta función 
+hace lo mismo que -L, salvo que -Z no hace ningún listado de las reglas. Si se 
+emplean juntas -L y -Z (lo cual es correcto), las cadenas serán listadas primero y 
+luego los contadores se reiniciarán (se pondrán a cero).
+Comando
+-N, --new-chain
+Ejemplo
+iptables -N allowed
+Descripción
+Este comando hace que el núcleo cree una nueva cadena con el nombre 
+especificado en la cadena especificada. En el ejemplo anterior se crea una cadena 
+llamada allowed. Ten en cuenta que no puede haber ninguna cadena ni ningún 
+objetivo con el mismo nombre.
+Comando
+-X, --delete-chain
+Ejemplo
+iptables -X allowed
+Descripción
+Este comando borra de la tabla la cadena especificada. Para que funcione, no debe 
+haber ninguna regla que esté relacionada con la cadena que se va a borrar. En 
+otras palabras, deberás borrar o cambiar todas las reglas que tengan algún vínculo 
+con esa cadena antes de borrarla. 
+Comando
+-P, --policy
+Ejemplo
+iptables -P INPUT DROP
+Descripción
+Este comando hace que el núcleo establezca la política u objetivo por defecto en 
+una cadena. Todos los paquetes que no coincidan con ninguna regla emplearán 
+esa política de la cadena. Los objetivos permitidos son: DROP y ACCEPT (pueden 
+haber más; envíame un correo si es así). 
+Comando
+-E, --rename-chain
+Ejemplo
+iptables -E allowed disallowed
+Descripción
+El comando -E hace que iptables cambie el nombre de una cadena del primer al 
+segundo nombre. En el ejemplo anterior cambiaríamos el nombre de la cadena de 
+allowed (permitido) a disallowed (no permitido). Ten en cuenta que ésto no 
+afecta a la forma de actuar de la tabla, sino que es simplemente un cambio 
+cosmético.
+Table 5: Comandos de Iptables
+Opciones
+Ahora  mostraremos  unas  cuantas  opciones  que  pueden  usarse  con  varios 
+comandos:
+Opción
+-v, --verbose
+13
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Comandos con 
+los que se 
+emplea
+--list, --append, --insert, --delete, --replace
+Descripción
+Este comando ofrece una salida detallada (completa, descriptiva) y se emplea 
+principalmente con el comando --list. En este caso se mostrará la dirección de la 
+interfaz, las opciones de la regla y las máscaras TOS. Asímismo, también se 
+incluyen los contadores de bytes y paquetes para cada regla. Estos contadores 
+emplean las abreviaturas K (x1,000), M (x1,000,000) y G (x1,000,000,000).
+Opción
+-x, --exact
+Comandos con 
+los que se 
+emplea
+--list
+Descripción
+Esta opción expande las numeraciones, o sea, no se emplean los múltiplos K, M 
+o G, si no que se ven los paquetes y bytes exactos de los contadores de la regla 
+en cuestión. Esta opción sólo es útil con el comando --list y no tiene ningún 
+interés en los demás comandos.
+Opción
+-n, --numeric
+Comandos con 
+los que se 
+emplea
+--list
+Descripción
+Esta opción muestra valores numéricos: las direcciones IP y los puertos se 
+listarán con sus números y no con sus nombres de servidor, red o aplicación. 
+Sólo se utiliza con --list e ignora la opción por defecto de traducir todos los 
+valores numéricos a servidores y nombres (donde sea posible).
+Opción
+--line-numbers
+Comandos con 
+los que se 
+emplea
+--list
+Descripción
+Empleando esta opción con --list, cada regla se listará con su número de línea. 
+Puede ser conveniente saber qué número tiene cada regla al insertar reglas. 
+Esta opción sólo tiene efecto con el comando --list.
+Opción
+-c, --set-counters
+Comandos con 
+los que se 
+emplea
+--insert, --append, --replace
+Descripción
+Esta opción se usa cuando se crea o modifica una regla de forma que se 
+reinicializan sus contadores de paquetes y bytes. La sintaxis sería algo así: --set-
+counters 20 4000, lo cual le diría al núcleo que fijara el contador de paquetes a 
+20 y el contador de bytes a 4000.
+Opción
+--modprobe
+14
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Comandos con 
+los que se 
+emplea
+Todos
+Descripción
+Esta opción se emplea para indicarle a iptables qué módulo utilizar al probar 
+módulos o al añadirlos al núcleo. Se puede usar por ejemplo cuando el comando 
+modprobe no está en ningún directorio de la ruta de búsqueda. De esta forma el 
+programa sabrá qué hacer si se necesita un módulo que no se ha cargado 
+previamente. Esta opción se puede utilizar con todos los comandos
+Comparaciones (matches)
+En esta sección hablaremos sobre las comparaciones. No se presentan todas las 
+comparaciones y de deja al lector/estudiante la investigacion de las ausentes. Se 
+presentan  las  comparaciones  genericas,  comparaciones  TCP  y  comparaciones 
+UDP.
+Comparaciones genericas
+-p, --protocol
+Ejemplo
+iptables -A INPUT -p tcp
+Descripción
+Esta comparación se emplea para comprobar la presencia de los siguientes 
+protocolos: TCP, UDP, ICMP o sus respectivos valores numéricos, tal como se 
+especifican en el archivo '/etc/protocols'. Si no puede identificar uno de éllos 
+devolverá un error. El protocolo puede corresponder a uno de los tres 
+mencionados, aunque también puede corresponder a TODOS (ALL). "ALL" 
+significa que se corresponde con todos los protocolos (TCP, UDP e ICMP).
+Comparación
+-s, --src, --source
+Ejemplo
+iptables -A INPUT -s 192.168.1.1
+Descripción
+Esta es la comparación del origen, que se basa en la dirección IP de origen de los 
+paquetes. El uso genérico compara direcciones IP únicas, como 192.168.1.1. Sin 
+embargo también acepta máscaras de red en un formato de "bit" CIDR.
+Comparación
+-d, --dst, --destination
+Ejemplo
+iptables -A INPUT -d 192.168.1.1
+Descripción
+La comparación --destination (destino) se usa en función de la 
+dirección/direcciones de destino de los paquetes. Se emplea casi igual que la 
+comparación --source y tiene la misma sintaxis, excepto que se basa en saber a 
+dónde se dirijen los paquetes.
+Comparación
+-i, --in-interface
+Ejemplo
+iptables -A INPUT -i eth0
+15
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Descripción
+Esta comparación la emplearemos para reconocer a través de qué interfaz 
+proviene un paquete entrante. Esta opción sólo es válida en las cadenas INPUT, 
+FORWARD y PREROUTING, devolviendo un error si se usa en cualquier otro sitio. 
+Si no especificamos una interfaz concreta, por defecto se asume el valor +, que 
+se emplea para comparar una cadena de letras y números; o sea que por defecto 
+el núcleo comparará todos los paquetes sin importarle a través de qué interfaz 
+vienen. El símbolo + también puede añadirse al tipo de interfaz, de forma que 
+eth+ revisará los paquetes que entren por cualquier tarjeta de red Ethernet.
+Comparación
+-o, --out-interface
+Ejemplo
+iptables -A FORWARD -o eth0
+Explicación
+Esta comparación se emplea con los paquetes que están a punto de abandonar 
+la interfaz de salida. Ten en cuenta que esta comparación sólo está disponible en 
+las cadenas OUTPUT, FORWARD y POSTROUTING, de hecho son justo las 
+opuestas a las de la comparación --in-interface. Aparte de ésto, ambas funcionan 
+prácticamente igual. La extensión + implica comparar todas las tarjetas del 
+mismo tipo, es decir eth+ controlará todas las tarjetas eth y de forma similar los 
+demás casos.
+Comparación
+-f, --fragment
+Ejemplo
+iptables -A INPUT -f
+Descripción
+Esta comparación se emplea para chequear la segunda y la tercera partes de un 
+paquete fragmentado. La razón de ello es que cuando existen paquetes 
+fragmentados no hay manera de saber ni las direcciones de origen/destino de los 
+paquetes, ni los tipos ICMP, ni otros tantos detalles necesarios.
+Comparaciones TCP
+Comparación
+--sport, --source-port
+Ejemplo
+iptables -A INPUT -p tcp --sport 22
+Descripción
+Esta comparación se emplea para comparar paquetes basándose en su puerto 
+de origen. Si no se indica nada se comparan todos los puertos origen. La 
+comparación puede tener un nombre de servicio o bien el número de un puerto. 
+Si especificas un nombre de servicio, éste debe existir en el fichero /etc/services, 
+puesto que iptables emplea este archivo para interpretar los nombres de los 
+servicios.
+Comparación
+--dport, --destination-port
+Ejemplo
+iptables -A INPUT -p tcp --dport 22
+Descripción
+Esta comparación busca paquetes TCP basándose en el puerto de destino. Utiliza 
+la misma sintaxis que la comparación --source-port, por lo que acepta puertos, 
+rangos de puertos e inversiones. También "corrije" el orden de los rangos de 
+16
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+puertos (80:22 se leerá 22:80) y se asumen los valores 0 y 65535 en caso de no 
+indicar el primer o el último puerto, respectivamente (:80 y 22: , 
+respectivamente). Esta comparación tampoco acepta puertos o rangos múltiples 
+separados por comas (para eso está la extensión de comparación multipuerto).
+Comparación
+--tcp-flags
+Ejemplo
+iptables -p tcp --tcp-flags SYN,FIN,ACK SYN
+Descripción
+Esta comparación busca en las banderas (flags) de los paquetes TCP. Para 
+empezar la comparación lee una lista de banderas para comparar (una máscara) 
+y después lee una lista de banderas que deben estar establecidas con el valor 1, 
+o sea estar activadas. Ambas listas deben estar delimitadas por comas. La 
+comparación reconoce las banderas SYN, ACK, FIN, RST, URG y PSH, además de 
+interpretar las palabras ALL (todas) y NONE (ninguna).
+Comparación
+--syn
+Ejemplo
+iptables -p tcp --syn
+Descripción
+Se puede decir que la comparación --syn es una reliquia de los días de ipchains y 
+que permanece para garantizar la compatibilidad con viejas reglas y para 
+facilitar la transición de ipchains a iptables. Se usa para comparar paquetes que 
+tengan activado el bit SYN y que no tengan activados los bits ACK y RST.
+Comparación
+--tcp-option
+Ejemplo
+iptables -p tcp --tcp-option 16
+Descripción
+Esta comparación se emplea para filtrar paquetes dependiendo de sus opciones 
+TCP. Una Opción TCP (TCP Option) es una parte específica de la cabecera de cada 
+paquete que consta de 3 campos diferentes. El primero tiene un tamaño de 8 
+bits y nos dice qué Opciones se emplean en el flujo. El segundo también es de 8 
+bits y nos dice qué tamaño tiene el campo de opciones. La razón para que exista 
+este campo indicando el tamaño es que las Opciones TCP son, valga la 
+redundancia, opcionales.
+Comparaciones UDP
+Comparación
+--sport, --source-port
+Ejemplo
+iptables -A INPUT -p udp --sport 53
+Descripción
+Esta comparación trabaja exactamente igual que su homónima en TCP y se 
+emplea para hacer comparaciones basadas en los puertos UDP de origen.
+Comparación
+--dport, --destination-port
+Ejemplo
+iptables -A INPUT -p udp --dport 53
+Descripción
+Podemos decir lo mismo en ésta y en la comparación anterior. Es exactamente lo 
+mismo que su homónima en TCP, a excepción que aquí se comparan puertos 
+UDP: compara paquetes basados en su puerto UDP de destino.
+17
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Comparaciones ICMP
+Comparación
+--icmp-type
+Ejemplo
+iptables -A INPUT -p icmp --icmp-type 8
+Descripción
+Esta comparación se usa para especificar el tipo ICMP a comparar. Los tipos 
+ICMP se pueden especificar por su valor numérico o por su nombre. Los valores 
+numéricos están definidos en el RFC 792. Para obtener un listado completo de 
+los nombres ICMP, ejecuta iptables --protocol icmp --help en la línea de 
+comandos o mira en el apéndice Tipos ICMP.
+Obejetivos/Saltos (Targets/Jumps)
+Cuando la comparación de una regla encuentra un paquete que coincide con las 
+condiciones que impone, se recurre al objetivo/salto dónde se le indica a la regla 
+qué debe hacer con ese paquete.
+Obejetivo ACCEPT
+Este objetivo no necesita ninguna opción adicional. En cuanto la especificación de 
+la comparación es satisfecha por un paquete y se indica ACCEPT (aceptar) como 
+objetivo, la regla se acepta y el paquete no continúa atravesando ni la cadena 
+actual, ni cualquier otra de la misma tabla.
+Objetivo DROP
+El objetivo DROP (desechar) hace precisamente éso: desechar o "tirar" paquetes y 
+no gastar ni ún segundo más de trabajo del procesador en éllos. Un paquete que 
+llegue  a  una  regla,  coincida  exactamente  con  el  patrón  de  búsqueda  de  la 
+comparación y sea desechado, será inmediatamente bloqueado.
+Objetivo DNAT
+El objetivo DNAT se emplea para efectuar traducciones de direcciones de red de 
+destino (Destination Network Address Translation), que significa que se emplea 
+para reescribir la dirección IP de destino de un paquete. Con este objetivo en la 
+18
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+regla, en cuanto un paquete coincide con la comparación, él y todos los paquetes 
+pertenecientes  a ese  mismo flujo de datos verán modificada su dirección de 
+destino y serán redirigidos a la red/host/dispositivo adecuado.
+Opción
+--to-destination
+Ejemplo
+iptables -t nat -A PREROUTING -p tcp -d 15.45.23.67 --dport 80 -j DNAT --to-
+destination 192.168.1.1-192.168.1.10 
+Descripción
+La opción --to-destination le indica al mecanismo DNAT qué IP de Destino 
+establecer en la cabecera IP y dónde enviar los paquetes que concuerden con el 
+filtro.
+Objetivo SNAT
+El objetivo SNAT se emplea para efectuar las traducciones de dirección de red de 
+origen (Source Network Address Translation), lo cual implica que este objetivo 
+reescribirá  la  dirección  IP  de  origen  en  la  cabecera  IP  del  paquete  (ésto  es 
+deseable cuando varios hosts tienen que compartir una conexión a Internet). Así 
+pues, podemos activar el reenvío de paquetes IP a nivel de núcleo y escribir una 
+regla SNAT que cambiará la dirección IP de origen de todos los paquetes que 
+salgan de la red local, por la dirección IP de origen de nuestra conexión a Internet. 
+El  objetivo  SNAT  sólo  es  válido  en  la  tabla  nat  y  dentro  de  la  cadena 
+POSTROUTING. 
+Opción
+--to-source
+Ejemplo
+iptables -t nat -A POSTROUTING -p tcp -o eth0 -j SNAT --to-source 
+194.236.50.155-194.236.50.160:1024-32000 
+Descripción
+La opción --to-source se emplea para especificar qué dirección origen debe utilizar 
+el paquete. La forma más simple de usar esta opción es indicar la dirección IP que 
+deseamos utilizar como dirección IP de origen en las cabeceras IP. Si desearamos 
+balancear la carga entre varias direcciones IP, podemos utilizar un rango separado 
+por un guión.
+Objetivo REDIRECT
+El objetivo REDIRECT sirve para redirigir paquetes y flujos hacia la máquina. Ésto 
+quiere decir que podemos redirigir todos los paquetes destinados a los puertos 
+HTTP hacia un caché HTTP como Squid, o hacia nuestro host. Los paquetes 
+generados localmente son "mapeados" a la dirección 127.0.0.1, o lo que es lo 
+19
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+mismo, se reescribe la dirección de destino con la de nuestro host en los paquetes 
+que son reenviados o acciones similares.
+Opción
+--to-ports
+Ejemplo
+iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-ports 8080
+Descripción
+La opción --to-ports especifica el puerto o rango de puertos de destino que se debe 
+usar. Sin esta opción, el puerto de destino nunca se modifica. Si deseamos 
+especificar un solo puerto, escribiremos --to-ports 8080, mientras que si deseamos 
+un rango de puertos escribiremos --to-ports 8080-8090.
+Los demás objetivos se dejan a investigación por parte del estudiante.
+Shoreline Firewall (Shorewall)
+Shroewall es una herramienta de alto nivel para la configuración de Netfilter. Se 
+describen los requerimientos del cortafuegos usando entradas en un conjunto de 
+archivos de configuración. Shorewall lee los archivos de configuración y con la 
+ayuda de la utilidad Iptables, Shorewall configura Netfilter para que coincida con 
+nuestras necesidades.
+Shorewall no es un demonio (daemon). Una vez que Shorewall ha configurado 
+Netfilter, su trabajo esta completado. 
+Conceptos de Shorewall
+Los archivos de configuración están ubicados en /etc/shorewall (por lo general). 
+Para configuraciones simples, solo se necesita trabajar una parte de ellos.
+Shorewall ve la red donde el se esta ejecutando como un conjunto de zonas. Las 
+zonas son declaradas asignándoles un tipo en el archivo /etc/shorewall/zones. He 
+aquí un ejemplo simple:
+20
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+#ZONE   TYPE    OPTIONS          
+IN                   OUT
+#                                       OPTIONS                 OPTIONS
+fw      firewall
+net     ipv4
+loc     ipv4
+#LAST LINE ­ ADD YOUR ENTRIES ABOVE THIS ONE ­ DO NOT REMOVE
+Nótese que Shorewall reconoce el cortafuegos como su propia zona. El nombre de 
+la zona designando el mismo cortafuegos es almacenada en la variable $FW la 
+cual puede ser usada en los archivos de configuración para referirse a esta zona.
+La menera mas simple de definir los hosts en una zona es asociar la zona con la 
+interfase de red usando el archivo /etc/shorewall/interfaces. En una configuración 
+simple pude verse asi:
+#ZONE      INTERFACE     BROADCAST     OPTIONS
+net        eth0          detect        dhcp,routefilter,norfc1918
+loc        eth1          detect
+El archivo de arriba define la zona net como todos los hosts Ipv4 interconectados 
+con el cortafuegos a través de la interfase eth0, la zona loc como todos los hosts 
+interconectados con a través de la interfase eth1. Es importante recordar que la 
+composición  de  una  zona  esta  definida  en  términos  de  una  combinación  de 
+direcciones e interfases.
+La reglas sobre que trafico permitir y que trafico denegar son expresadas en 
+términos de zonas.
+●
+Se expresa la politiza por defecto para las conexiones de una zona a otra en 
+el archivo /etc/shorewall/policy. Las opciones básicas para una política son:
+○
+ACCEPT – Acepta la conexión.
+○
+DROP – Deshecha la conexión.
+○
+REJECT – Rechaza  la conexión.
+●
+Las  excepciones  a  las  políticas  por  defecto  de  definen  en  el  archivo 
+/etc/shorewall/rules.
+●
+Solo  necesitas  preocuparte  por  las  solicitudes  de  conexiones.  No  es 
+necesario  definir  las  reglas  para  como  el  trafico  que  es  parte  de  una 
+conexión establecida es manejado y en la mayoría de los casos no tendrás 
+que  preocuparte  sobre  como  las  conexiones  relacionadas  (related)  son 
+manejadas.
+21
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Para cada solicitud de conexión que llegue al cortafuegos, la solicitud es primero 
+comprobada contra el archivo /etc/shorewall/rules. Si ninguna regla en ese archivo 
+comprueba  la  solicitud  de  conexión  entonces  la  primera  política  en 
+/etc/shorewall/policy que comprueba la solicitud es aplicada.
+En un escenario simple, el archivo /etc/shorewall/policy puede verse asi:
+#SOURCE    DEST        POLICY      LOG LEVEL    LIMIT:BURST
+loc        net         ACCEPT
+net        all         DROP        info
+all        all         REJECT      info
+#LAST LINE ­­ ADD YOUR ENTRIES ABOVE THIS LINE ­­ DO NOT REMOVE
+Si desea que el cortafuegos tenga acceso completo a Internet:
+#SOURCE    DEST        POLICY      LOG LEVEL    LIMIT:BURST
+$FW        net         ACCEPT
+#LAST LINE ­­ ADD YOUR ENTRIES ABOVE THIS LINE ­­ DO NOT REMOVE
+Ahora se muestra como las reglas proveen excepciones a las políticas, suponiendo 
+que se aplican las políticas listadas mas arriba, pero deseamos conectarnos desde 
+Internet hacia el cortafuegos usando SSH (SSH usa el protocolo TCP con el puerto 
+22):
+#ACTION    SOURCE        DEST      PROTO      DEST
+#                                             PORT(S)
+ACCEPT     net           $FW       tcp        22
+Instalación y configuración de Shorewall
+Instalación
+Para instalar Shorewall en una distribucion tipo Debian (ejemplo: Ubuntu):
+$ sudo apt­get install shorewall
+Debes editar el archivo  /etc/default/shorewall y cambiar el valor de la variable 
+startup a 1 para que Shorewall sea activado y pueda iniciar junto con el sistema 
+22
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+en el nivel de ejecucion deseado:
+$ sudo vim /etc/default/shorewall
+startup = 1
+Para instalar Shorewall en una distibucion tipo Red Hat (ejemplo: CentOS) primero 
+descargue el paquete rpm del la seccion de descargas de la web de Shorewall:
+$ wget 
+http://shorewall.infohiiway.com/pub/shorewall/3.4/shorewall­3.4.8/shorewall­
+lite­3.4.8­1.noarch.rpm
+$ su
+# rpm ­ivh shorewall­lite­3.4.8­1.noarch.rpm
+Si utilizas una distro que no dispone de administrador de paquetes RPM ni DEB, 
+entonces  debes  descargar  el  paquete  fuente  de  Shorewall,  descomprimirlo  y 
+ejecutar el script instalador:
+$ wget 
+http://shorewall.infohiiway.com/pub/shorewall/3.4/shorewall­3.4.8/shorewall­
+3.4.8.tar.bz2
+$ tar jxvf shorewall­3.4.8.tar.bz2
+$ cd shorewall­3.4.8/
+$ su
+# ./install.sh
+Para  habilitar  Shorewall,  en  cualquier  distribución,  debe  cambiar  la  variable 
+STARTUP_ENABLED a Yes en el archivo /etc/shorewall/shorewall.conf.
+Ahora vamos a editar los archivos de configuración para que encajen en nuestro 
+escenario de prueba, el cual se muestra en la siguiente figura:
+23
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Primero configuramos el archivo /etc/shorewall/zones:
+# vim /etc/shorewall/zones
+#ZONE   TYPE     OPTIONS                 IN                      OUT
+#                                        OPTIONS                 OPTIONS
+fw      firewall
+net     ipv4
+loc     ipv4
+#LAST LINE ­­ ADD YOUR ENTRIES ABOVE THIS LINE ­­ DO NOT REMOVE
+Como se puede apreciar, se declaran 3 zonas. La zona interna, que es el mismo 
+cortaguegos, fw; la zona de Internet le designamos solo net; y por ultimo la zona 
+24
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+local como loc. Nótese que la zona fw es de tipo firewall y las demás de tipo ipv4.
+Las reglas sobre que trafico permitir y que trafico denegar son expresadas en 
+términos de zonas:
+●
+Las politicas por defecto entre una zona y otra se definen en el archivo 
+/etc/shorewall/policy.
+●
+Las  excepciones  a  las  políticas  por  defectos  se  definen  en 
+/etc/shorewall/rules.
+Para nuestro caso, estas son nuestra políticas por defectos entre las zonas:
+# vim /etc/shorewall/policy
+#SOURCE         DEST            POLICY          LOG             LIMIT:BURST
+#                                               LEVEL
+loc             net             ACCEPT
+net             loc             DROP            info
+all             all             REJECT          info
+#LAST LINE ­­ ADD YOUR ENTRIES ABOVE THIS LINE ­­ DO NOT REMOVE
+Si se desea que el cortafuegos tenga acceso completo a internet agregue una 
+politica ACCEPT desde la zona $FW a la zona net.
+Las políticas configuradas mas arriba harán:
+●
+Permitir el trafico desde la zona loc (Red local) a la zona net (Internet).
+●
+Desechar el trafico desde la zona net hacia la zona loc.
+●
+Denegar todas las demás conexiones
+Es importante recordar que las políticas de Shroewall (y las reglas) se refiere a 
+conexiones y no flujo de paquetes. Con las políticas definidas mas arriba en el 
+archivo /etc/shorewall/policy, las conexiones desde la zona loc hacia la zona net 
+son permitidas pero conexiones desde la zona loc hacia el cortafuegos ($FW) no 
+están permitidas.
+Enmascaramiento IP (SNAT)
+El enmascaramiento IP se configura en el archivo /etc/shorewall/masq. Para lograr 
+el enmascaramiento necesitamos modificar este archivo:
+25
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+#INTERFACE              SOURCE          ADDRESS         PROTO   PORT(S) 
+IPSEC
+eth0                    eth1
+#LAST LINE ­­ ADD YOUR ENTRIES ABOVE THIS LINE ­­ DO NOT REMOVE
+Este es para el caso de que la interfase externa (eth1) adquiere su dirección IP 
+mediante  DHCP.  Pero si utiliza  una dirección IP estática, debe  introducir esta 
+después de la interfase eth1 indicada mas arriba:
+#INTERFACE              SOURCE          ADDRESS         PROTO   PORT(S) 
+IPSEC
+eth0                    eth1            200.89.93.150
+#LAST LINE ­­ ADD YOUR ENTRIES ABOVE THIS LINE ­­ DO NOT REMOVE
+Si esta usando una distribucion tipo Debian, debe asegurarse de que la variable 
+IP_FORWARDING sea igual a On en el archivo /etc/shorewall/shorewall.conf:
+# vim /etc/shroewall/shorewall.conf
+IP_FORWARDING=On
+Reenvío de puertos (DNAT)
+La  forma  general  de  una  regla  simple  de  reenvío  de  puertos  en  el  archivo 
+/etc/shroewall/rules es:
+#ACTION   SOURCE    DEST                                          PROTO      DEST 
+PORT(S)
+DNAT      net       loc:<dirección ip servidor local>[:<puerto servidor>] 
+<protocolo> <puerto>
+Ejemplos:
+Servidor Web
+Si un servidor web se esta ejecutando en la computadora PC2 y se desea reenviar 
+las conexiones del puerto TCP 80 a ese sistema, asumiendo que PC2 tiene la 
+dirección IP 192.168.1.100:
+26
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+#ACTION   SOURCE    DEST             PROTO     DEST PORT(S)
+DNAT      net       loc:192.168.1.100 tcp
+    80,443
+Servidor SMTP
+#ACTION   SOURCE    DEST             PROTO     DEST PORT(S)
+DNAT      net       loc:192.168.1.100 tcp
+    25
+Algunas reglas comunes en configuraciones simples:
+#ACTION   SOURCE    DEST             PROTO     DEST PORT(S)
+ACCEPT    loc       $FW
+     tcp
+    22
+# SSH
+ACCEPT    loc
+    net
+     udp       53
+# DNS
+ACCEPT    loc
+    net
+     tcp       5222
+# Google Talk
+ACCEPT    loc
+    net
+     tcp       21
+# FTP
+Para iniciar Shorewall ejecutamos el siguiente comando, como root:
+# shorewall start
+Si todo sale bien durante la verificación de los archivos y ejecuta:
+# shorewall status
+Podra ver algo similar a:
+Shorewall­3.4.8 Status at <nombre del host> ­ Tue Apr  1 01:16:17 AST 2008
+Shorewall is running
+State:Started (Mon Mar 31 16:59:11 AST 2008)
+Para confirmar que Shorewall ha creado las cadenas correspondiens en Netfilter 
+con Iptables, ejecute:
+# iptables ­L ­n
+Para detener y reiniciar Shorewall:
+# shroewall stop
+# shorewall restart
+27
+
+FUNDACION CODIGO LIBRE DOMINICANA
+DIVISION  DE INGENIERIA Y PROYECTOS
+www.codigolibre.org
+Servicio:            Cortafuegos
+Autor:                Franky Almonte <franky@codigolibre.org>
+Version:            1.0
+Referencias:
+Tutorial de Iptables
+http://iptables-tutorial.frozentux.net/
+Netfilter
+http://www.netfilter.org/
+Cortafuegos
+http://es.wikipedia.org/wiki/Cortafuegos_%28inform%C3%A1tica%29
+Shorewall
+http://www.shorewall.net/
+28
+
