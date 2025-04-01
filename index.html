@@ -3,156 +3,224 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>File Visualizer</title>
+    <title>Quadrivium - Interactive Parsing Tree Visualizer</title>
     <style>
         body, html {
             height: 100%;
             margin: 0;
             font-family: Arial, sans-serif;
             background-color: #f4f4f4;
-            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
         }
 
         #container {
-            width: 100vw;
-            height: 100vh;
-            overflow: auto;
-            display: flex;
-            justify-content: center;
-            align-items: start;
-            background: #f4f4f4;
-            position: relative;
-        }
-
-        #output {
-            padding: 20px;
+            width: 80vw;
+            height: 80vh;
             background: white;
             border: 2px solid #333;
             border-radius: 8px;
-            min-width: 800px;
-            min-height: 600px;
-            max-width: 95%;
-            max-height: 95%;
-            overflow: auto;
-            position: relative;
-            user-select: none;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: auto; /* Enable scrollbars */
         }
 
-        .folder {
-            font-weight: bold;
-            color: #333;
-            margin-left: 20px;
-            margin-top: 5px;
+        #title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
         }
 
-        .file {
-            color: #555;
-            margin-left: 40px;
-            margin-top: 5px;
+        #input-section {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
         }
 
-        /* Custom scrollbars for desktop */
-        #container::-webkit-scrollbar {
-            width: 12px;
-            height: 12px;
+        #sentence-input {
+            padding: 10px;
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            border-radius: 4px;
         }
 
-        #container::-webkit-scrollbar-thumb {
-            background: #aaa;
-            border-radius: 6px;
+        #visualize-btn {
+            padding: 10px 20px;
+            background: #333;
+            color: white;
+            border: none;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background 0.3s;
         }
 
-        #container::-webkit-scrollbar-track {
-            background: #f4f4f4;
+        #visualize-btn:hover {
+            background: #555;
+        }
+
+        #output {
+            width: 100%;
+            height: calc(100% - 60px);
+            overflow: auto; /* Enable scrollbars */
+        }
+
+        .link {
+            fill: none;
+            stroke: #555;
+            stroke-width: 1.5px;
+        }
+
+        .node circle {
+            fill: #fff;
+            stroke: #333;
+            stroke-width: 1.5px;
+        }
+
+        .node text {
+            font-size: 12px;
         }
     </style>
 </head>
 <body>
 
+<header>
+    <h1>Quadrivium</h1>
+</header>
+
 <div id="container">
-    <div id="output">Loading...</div>
+    <div id="title">Interactive Parsing Tree Visualizer</div>
+    <div id="input-section">
+        <input type="text" id="sentence-input" placeholder="Enter a sentence (e.g., The cat chased the mouse)">
+        <button id="visualize-btn" onclick="generateTree()">Visualize</button>
+    </div>
+    <div id="output"></div>
+</div>
+<div id="footer">
+    This page is open source and can be edited <a href="https://github.com/standardgalactic/quadrivium/blob/main/index.html">here</a>.
 </div>
 
+<script src="https://d3js.org/d3.v6.min.js"></script>
 <script>
-    async function fetchData() {
-        try {
-            const response = await fetch("./structure.json");
-            if (!response.ok) {
-                throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error("Error loading file:", error.message);
-            document.getElementById("output").textContent = `Error loading file structure: ${error.message}`;
+    async function generateTree() {
+        const input = document.getElementById("sentence-input").value.trim();
+        if (!input) {
+            alert("Please enter a sentence.");
+            return;
         }
+
+        const data = parseSentenceToAST(input);
+        renderTree(data);
     }
 
-    function renderFolder(folder, parent) {
-        const folderEl = document.createElement("div");
-        folderEl.className = "folder";
-        folderEl.textContent = `📁 ${folder.name}`;
-        parent.appendChild(folderEl);
+    function parseSentenceToAST(sentence) {
+        try {
+            const words = sentence.split(/\s+/);
+            const ast = {
+                name: "Statement",
+                children: []
+            };
 
-        if (folder.contents) {
-            folder.contents.forEach(item => {
-                if (item.type === "directory") {
-                    renderFolder(item, folderEl);
-                } else {
-                    const fileEl = document.createElement("div");
-                    fileEl.className = "file";
-                    fileEl.textContent = `📄 ${item.name}`;
-                    folderEl.appendChild(fileEl);
+            let currentNode = ast;
+            let hasSubject = false;
+            let hasVerb = false;
+
+            words.forEach((word, index) => {
+                const lowerWord = word.toLowerCase();
+
+                if (["the", "a", "an"].includes(lowerWord) && !hasSubject) {
+                    currentNode.children.push({
+                        name: "Determiner",
+                        children: [{ name: word }]
+                    });
+                }
+                else if (!hasSubject && !["is", "was", "were"].includes(lowerWord)) {
+                    currentNode.children.push({
+                        name: "Subject",
+                        children: [{ name: "NounPhrase", children: [{ name: word }] }]
+                    });
+                    hasSubject = true;
+                }
+                else if (hasSubject && !hasVerb) {
+                    currentNode.children.push({
+                        name: "Predicate",
+                        children: [{ name: "Verb", children: [{ name: word }] }]
+                    });
+                    hasVerb = true;
+                }
+                else if (hasVerb) {
+                    const lastPredicate = currentNode.children.find(c => c.name === "Predicate");
+                    if (!lastPredicate.children.some(c => c.name === "Object")) {
+                        lastPredicate.children.push({
+                            name: "Object",
+                            children: [{ name: "NounPhrase", children: [{ name: word }] }]
+                        });
+                    } else {
+                        lastPredicate.children.find(c => c.name === "Object")
+                            .children[0].children.push({ name: word });
+                    }
                 }
             });
+
+            return ast.children.length > 0 ? ast : {
+                name: "Error",
+                children: [{ name: "Empty sentence" }]
+            };
+        } catch (e) {
+            return {
+                name: "Error",
+                children: [{ name: "Parsing failed" }]
+            };
         }
     }
 
-    async function init() {
-        const data = await fetchData();
-        if (data && data.length > 0) {
-            const output = document.getElementById("output");
-            output.textContent = "";
-            renderFolder(data[0], output);
-        }
-    }
+    function renderTree(data) {
+        const output = document.getElementById("output");
+        output.innerHTML = "";
 
-    init();
+        const width = output.clientWidth;
+        const height = output.clientHeight;
 
-    const container = document.getElementById("container");
+        const svg = d3.select("#output")
+            .append("svg")
+            .attr("width", width)
+            .attr("height", height)
+            .append("g")
+            .attr("transform", "translate(120,50)");
 
-    // Detect mobile device
-    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+        const tree = d3.tree().size([height - 100, width - 240]); // Adjusted width to ensure rightmost words are visible
+        const root = d3.hierarchy(data);
 
-    if (isMobile) {
-        let isDragging = false;
-        let startX, startY, scrollLeft, scrollTop;
+        tree(root);
 
-        container.addEventListener("touchstart", (e) => {
-            isDragging = true;
-            const touch = e.touches[0];
-            startX = touch.pageX;
-            startY = touch.pageY;
-            scrollLeft = container.scrollLeft;
-            scrollTop = container.scrollTop;
-        });
+        // Use straight lines instead of curves
+        const link = svg.selectAll(".link")
+            .data(root.descendants().slice(1))
+            .enter().append("line")
+            .attr("class", "link")
+            .attr("x1", d => d.y)
+            .attr("y1", d => d.x)
+            .attr("x2", d => d.parent.y)
+            .attr("y2", d => d.parent.x);
 
-        container.addEventListener("touchmove", (e) => {
-            if (!isDragging) return;
-            e.preventDefault();  // Prevent mobile scroll
-            const touch = e.touches[0];
-            const dx = startX - touch.pageX;
-            const dy = startY - touch.pageY;
-            container.scrollLeft = scrollLeft + dx;
-            container.scrollTop = scrollTop + dy;
-        });
+        const node = svg.selectAll(".node")
+            .data(root.descendants())
+            .enter().append("g")
+            .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf"))
+            .attr("transform", d => `translate(${d.y},${d.x})`);
 
-        container.addEventListener("touchend", () => {
-            isDragging = false;
-        });
-    } else {
-        // Enable native scrollbars on desktop
-        container.style.overflow = "auto";
+        node.append("circle")
+            .attr("r", 10)
+            .attr("fill", d => d.data.name === "Error" ? "#ff4444" : "#fff");
+
+        node.append("text")
+            .attr("dy", 3)
+            .attr("x", d => d.children ? -15 : 15)
+            .style("text-anchor", d => d.children ? "end" : "start")
+            .text(d => d.data.name);
     }
 </script>
 
