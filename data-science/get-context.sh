@@ -2,7 +2,7 @@
 
 # Define progress and summary files
 progress_file="progress.log"
-summary_file="data-science.txt"
+summary_file="data-science-methods.txt"
 main_dir=$(pwd)
 
 # Function to check if a file is already processed
@@ -52,7 +52,7 @@ process_files() {
                 echo "Temporary directory created: $temp_dir" >> "$main_dir/$progress_file"
 
                 # Split the file into chunks of 100 lines each
-                split -l 100 "$file" "$temp_dir/chunk_"
+                split -l 2000 "$file" "$temp_dir/chunk_"
                 echo "File split into chunks: $(find "$temp_dir" -type f)" >> "$main_dir/$progress_file"
 
 		# Summarize each chunk and append to the summary file
