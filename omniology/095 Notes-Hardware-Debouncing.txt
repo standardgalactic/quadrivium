@@ -1,271 +1,0 @@
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-Hardware debouncing 
-In cases where you need to use a push button, relays or switch (or anything mechanical 
-used to close a circuit), like we saw in Lectures 15 and 28, we have a situation where metal 
-comes in contact with metal in order to close the circuit. These contacts are never perfect, 
-and as a result instead of getting one clean connection, you get multiple ones.  
-Have a look at the oscilloscope screenshot below (I took this from Wikipedia): 
-The vertical lines in the centre of the measurement shows that this switch made contact 
-and lost it several times within the space of a couple of milliseconds. If your Arduino was 
-connected to this switch via a hardware interrupt pin, then the interrupt service routine 
-would have been called multiple times.  
-In many cases, like when we just want to switch on an LED, this doesn’t really matter. In 
-other cases, like when we use a 4x4 keypad to enter a password, it does. Any number key 
-that you press on the keypad will generate several logical key-presses and this will make it 
-hard for the Arduino to determine what keys you actually pressed. 
-This phenomenon is called “bouncing”, as the voltage of the sampling pin of your switch 
-bounces from one state to the other before it eventually settles. 
-In this lecture, we will look at how we can achieve “de-bouncing”, which means how to get 
-contacts to output a clean signal when they are closing or opening. 
-!
-"1
-
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-Software debouncing for the Arduino 
-It is possible to write a software de-bouncer that will do the job. It is not my preferred 
-option since it is tying up the Arduino doing house-hold maintenance and adds un-
-necessary complexity to your sketch. I am mentioning it here for the sake of completeness 
-and because the relevant sketch comes with the IDE. 
-You can ﬁnd it at File —> Examples —> Digital —> Debounce. It looks like this: 
-const int buttonPin = 2;    
-const int ledPin = 13;     
-int ledState = HIGH;      
-int buttonState;         
-int lastButtonState = LOW; 
-long lastDebounceTime = 0; 
-long debounceDelay = 50;  
-void setup() { 
-  pinMode(buttonPin, INPUT); 
-  pinMode(ledPin, OUTPUT); 
-  digitalWrite(ledPin, ledState); 
-} 
-void loop() { 
- int reading = digitalRead(buttonPin); 
- if (reading != lastButtonState) { 
-   lastDebounceTime = millis(); 
-  }  
-  if ((millis() - lastDebounceTime) > debounceDelay) { 
-   if (reading != buttonState) { 
-      buttonState = reading; 
-      if (buttonState == HIGH) { 
-        ledState = !ledState; 
-      } 
-    } 
-  } 
-  digitalWrite(ledPin, ledState); 
-  lastButtonState = reading; 
-} 
-Inside the loop, there is continuous sampling of the value of pin 2. The sketch waits for a 
-period of time after the last bounce was detected, and if it exceeds a certain amount of 
-time (debounceDelay), then the button is interpreted as pressed.  
-To implement this software solution we had to add four variables and 8 lines of code that 
-operate in the loop, and this is far less than ideal. 
-"2
-
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-Let’s have a look at a simple hardware solution. 
-A simple capacitor-based de-bouncer 
-You can build a simple de-bouncer by inserting a small capacitor in parallel to the button or 
-switch. 
-In this example, you can see the switch (S1) in 
-parallel to a 100nF capacitor. The Vout is connected 
-to the Arduino sampling digital pin. 
-The capacitor will start charging as soon as the 
-switch is closed, and while it is charging Vout will 
-be LOW (as it is connected to GND via the pull 
-down resistor). Once the capacitor is ﬁnally fully 
-charged, Vout will be 5V and the Arduino will detect 
-this as HIGH. The mechanical switch will still be 
-bouncing, but the capacitor is now shielding Vout 
-from the eﬀects of this bouncing.  
-This is a much better solution than the software de-
-bouncing we saw already. However, if the button is 
-connected to digital electronics like a micro-
-controller, the smooth transition that the capacitor 
-creates between LOW and HIGH is problematic.  
-In digital electronics, such transitions are bad: 
-!
-But sudden, clean transitions are good:  
-!
-This is not to say that you can’t use such a simple debouncing circuit with your Arduino, of 
-course. You could. But it is possible to improve and create a clean transition between LOW 
-and HIGH without much extra eﬀort. 
-What I would like to show you next is a cost-eﬀective solution that takes care of de-
-bouncing without adding complexity.  
-Introducing, the Schmitt Trigger. 
-!
-"3
-
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-Schmitt Trigger as a de-bouncer 
-A Schmitt Trigger device is designed for removing noise in digital circuits. They are 
-commonly found in applications where bouncing from mechanical switches is a problem. 
-Logically, a Schmitt Trigger will invert an input signal.  
-The following schematic (taken from Wikipedia), shows the function of the Schmitt Trigger. 
-!
-!
-!
-!
-!
-!
-!
-!
-!
-!
-“U” is the original, unconditioned (noisy) signal. “B” is the output of the Schmitt signal, a 
-nice digital signal without bouncing. In the red boxed area, notice how B is HIGH when U is 
-above the top dotted green line and stays HIGH until U falls below the bottom green line.  
-In the green box area, notice how the same happens even though the U waveform bounces 
-up and down signiﬁcantly, however it does not fall below the bottom green line. That’s 
-exactly what the Schmitt trigger does.  
-These two green dotted lines mark the high and low thresholds levels.  
-The “A” waveform is the  waveform that comes out of a component of the Schmitt trigger 
-called a comparator. The comparator is very simple, a kind of binary ampliﬁer, that just 
-outputs HIGH when its input voltage goes above a certain threshold (represented by the red 
-line) and LOW when it falls below that same threshold. That, on its own, is not very useful. 
-As you can see from its waveform, it doesn’t do much to debounce the original noisy signal. 
-!
-"4
-
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-To achieve the 2 green threshold levels that we need for a proper de-bouncer, we create a 
-positive feedback (B - which is also the output of the Schmitt Trigger) which reinforces the 
-input to the comparator (A), like is shown in the schematic below (also from Wikipedia). 
-!
-To recap, a Schmitt trigger is a device that provides de-bouncing by conditioning the 
-original noisy signal. The output of the Schmitt Trigger depends on the upper and lower 
-threshold levels. Usually, the upper threshold level is 66% of the rail voltage (in the case of 
-the Arduino, that is 66% of 5V) and the lower threshold level is 33% of the rail voltage. 
-The 74HC14 Schmitt Trigger IC 
-A commonly used Schmitt Trigger IC is the the 74HC14. It contains 6 Schmitt Triggers. We 
-will use this IC to debounce a push button in this demo. 
-!
-"5
-
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-Demo - Using the 74HC14 to de-bounce a button 
-In this demo we will de-bounce a push button using one of the 6 Schmitt Triggers in the 
-74HC14 IC.  
-The schematic is provided below. 
-We’ll use the Schmitt Trigger to debounce the push button. When the button is pressed, the 
-LED will turn on. 
-Connect the IC like this: 
-!
-!
-!
-!
-!
-!
-!
-For the button: 
-!
- 
-!
-!
-!
-!
-Last, connect the red LED to pin 1 to 3 via a 
-protective 220Ω resistor. 
-!
-"6
-IC Pin
-Connects to…
-14
-5V
-7
-GND
-1
-To button via a 100Ω 
-resistor (or without the 
-resistor)
-2
-To Arduino pin 2
-All unused 
-inputs
-Connect unused inputs 
-to 5V or GND to avoid 
-unwanted oscillation
-Button pin
-Connects to…
-1
-To 74HC14 pin 1 via 
-100Ω resistor (or 
-without the resistor)
-1
-To 5V via 10kΩ resistor
-2
-To ground
-1-2
-Optional: a 20uF 
-capacitor between the 
-two pin of the button
-
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-Here is the sketch, it is similar to the one from the lecture on interrupts. 
-const int ledPin = 13;  
-const int inputPin = 2; 
-volatile boolean ledState = LOW; 
-void setup() {  
-  pinMode(ledPin, OUTPUT); 
-  attachInterrupt(0,buttonPressed,FALLING); 
-} 
-void loop() 
-  {    }  
-void buttonPressed() 
-{ 
-  if (ledState==LOW) 
-  { 
-    ledState=HIGH; 
-    digitalWrite(ledPin,HIGH);  
-  } else 
-  { 
-     ledState=LOW; 
-     digitalWrite(ledPin,LOW);  
-  } 
-} 
-Load the sketch from the Interrupts lecture and press the button. Press the button slowly at 
-ﬁrst to make sure it works, then increase your press rate to see if you can reach it’s limit of 
-reliability. 
-Try the same things with various buttons and switches that you may have at hand. I ﬁnd in 
-my experiments that diﬀerent buttons behave very diﬀerently to one another. The capacitor 
-and pull up resistor of the button can be tweaked in order to ﬁnd their optimal values for 
-each particular button. There is an amazing article in the Ganslee Group blog that analyses 
-contact de-bouncing in great detail and that I strongly recommend you read at some point. 
-The article covers the causes and eﬀects of bouncing and provides alternative de-bouncing 
-techniques that work well in the real world. You will not think of wires and switches the 
-same way again once you read this article! 
-!
-"7
-
-Peter Dalmaris
-Hardware Debouncing
-Arduino Step by Step
-In conclusion 
-De-bouncing switches has an element of art because every switch has its own analog 
-characteristics and imperfections. Using Schmitt Triggers is one of several techniques 
-available to us. The Schmitt Trigger is a common way of conditioning (cleaning) the signal 
-going into a digital circuit. In this lecture, we saw how to use a Schmitt Trigger to de-
-bounce a button, without having to make any software changes to our sketches. 
-I suspect that because of the large variation between the buttons that I use and those that 
-you will use, your results will be diﬀerent to mine. Spent a bit of time tweaking your circuit 
-to get a feel of its behaviour. Start with large changes, like for example, try to remove the 
-capacitor and see what the eﬀect on the reliability of the switch is. Try to go for a larger or 
-smaller capacitor, or increase/decrease the value of the pull-up resistor. Those two 
-components can be used to calibrate the sensitivity of the Schmitt Trigger inside the IC for 
-the particular characteristics of your button.
-"8
-
